@@ -1,0 +1,100 @@
+# OS Generated Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# IDE and Editor Files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# Temporary Files
+*.tmp
+*.temp
+*.log
+*.cache
+tmp/
+temp/
+
+# Backup Files
+*.bak
+*.backup
+*_backup.*
+backup/
+backups/
+
+# Personal Notes and Scratch Files
+personal/
+private/
+scratch/
+notes.txt
+todo.txt
+
+# API Keys and Secrets
+.env
+.env.local
+.env.*.local
+secrets/
+credentials/
+*.key
+*.pem
+
+# Build Outputs
+dist/
+build/
+out/
+
+# Node.js (for VS Code extensions)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python (for scripts)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+
+# Test Coverage
+coverage/
+*.cover
+.coverage
+
+# Database Files
+*.db
+*.sqlite
+*.sqlite3
+
+# Large Data Files
+*.csv
+*.dat
+*.data
+
+# Archive Files
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Custom Project Ignores
+cursor-memory-bank/
+servers-archived/
+# Uncomment if needed:
+# working/testing/
+# *.pine.bak
+# experimental/ 
