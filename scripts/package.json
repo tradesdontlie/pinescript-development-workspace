@@ -1,0 +1,24 @@
+{
+  "name": "pine-script-automation",
+  "version": "1.0.0",
+  "description": "Automation scripts for Pine Script development and TradingView integration",
+  "main": "paste_to_pine_editor.js",
+  "scripts": {
+    "paste-file": "node paste_to_pine_editor.js paste-file",
+    "paste-clipboard": "node paste_to_pine_editor.js paste-clipboard",
+    "screenshot": "node paste_to_pine_editor.js screenshot",
+    "install-deps": "npm install puppeteer"
+  },
+  "dependencies": {
+    "puppeteer": "^21.0.0"
+  },
+  "devDependencies": {},
+  "keywords": [
+    "pine-script",
+    "tradingview",
+    "automation",
+    "puppeteer"
+  ],
+  "author": "Pine Script Development Team",
+  "license": "MIT"
+}

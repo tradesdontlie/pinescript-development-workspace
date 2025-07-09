@@ -1,0 +1,798 @@
+//@version=5
+
+//  
+//  ██████   ██   ██    ██████    ██████   ████████       ██    ██    ██████    ██      
+// ██        ██   ██   ██    ██  ██           ██          ██    ██   ██    ██   ██      
+// ██  ███   ██   ██   ██    ██  ██           ██          ██    ██   ██    ██   ██      
+// ██   ██   ███████   ██    ██   ██████      ██          ██    ██   ██    ██   ██      
+// ██   ██   ██   ██   ██    ██        ██     ██           ██  ██    ██    ██   ██      
+// ██   ██   ██   ██   ██    ██        ██     ██            ████     ██    ██   ██      
+//  ██████   ██   ██    ██████    ██████      ██             ██       ██████    ████████ 
+//  
+// ██ ███    ██ ████████ ███████ ██      ██      ██  ██████  ███████ ███    ██  ██████ ███████ 
+// ██ ████   ██    ██    ██      ██      ██      ██ ██       ██      ████   ██ ██      ██      
+// ██ ██ ██  ██    ██    █████   ██      ██      ██ ██   ███ █████   ██ ██  ██ ██      █████   
+// ██ ██  ██ ██    ██    ██      ██      ██      ██ ██    ██ ██      ██  ██ ██ ██      ██      
+// ██ ██   ████    ██    ███████ ███████ ███████ ██  ██████  ███████ ██   ████  ██████ ███████ 
+
+import Trades-Dont-Lie/GhostMMXM_Core/9 as core
+
+indicator("Ghost Volume Intelligence Pro", shorttitle="Ghost Vol Intel Pro", overlay=true, max_boxes_count=500, max_labels_count=500, max_lines_count=500)
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// 🏗️ GHOST VOLUME INTELLIGENCE PRO - INSTITUTIONAL GRADE VOLUME ANALYSIS
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// 📋 ENHANCED TYPE DEFINITIONS FOR VOLUME ANALYSIS
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+type SessionVolumeProfile
+    string session_name
+    float baseline_volume
+    float session_multiplier
+    float current_volume_ratio
+    float institutional_ratio
+    float smart_money_index
+    float volume_acceleration
+    string flow_direction
+    bool is_accumulation
+    bool is_distribution
+    float conviction_level
+    float risk_level
+    bool session_active
+
+type VolumeSignal
+    bool is_valid
+    float score
+    string quality_level
+    float confidence_level
+    string risk_assessment
+    bool smart_money_detected
+    bool institutional_activity
+    bool accumulation_detected
+    string dominant_session
+
+type SmartMoneyDetection
+    float volume_to_price_ratio
+    float stealth_index
+    float institutional_pressure
+    bool large_block_activity
+    bool dark_pool_activity
+    string activity_type
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// ⚙️ VOLUME INTELLIGENCE INPUT CONFIGURATION
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+// Core Volume Analysis Settings
+group_volume_core = "🧠 Core Volume Intelligence"
+enable_volume_analysis = input.bool(true, "Enable Volume Analysis", group=group_volume_core, tooltip="Master toggle for all volume analysis features")
+volume_baseline_period = input.int(20, "Volume Baseline Period", minval=10, maxval=50, group=group_volume_core, tooltip="Period for calculating baseline institutional volume")
+global_volume_multiplier = input.float(1.2, "Global Volume Multiplier", minval=0.5, maxval=5.0, step=0.1, group=group_volume_core, tooltip="Base volume multiplier before session adjustments")
+
+// Smart Money Detection Settings
+group_smart_money = "🏦 Smart Money Detection"
+smart_money_threshold = input.float(1.5, "Smart Money Threshold", minval=1.0, maxval=5.0, step=0.1, group=group_smart_money, tooltip="Minimum index value to flag smart money activity")
+accumulation_sensitivity = input.float(2.0, "Accumulation Sensitivity", minval=1.0, maxval=5.0, step=0.1, group=group_smart_money, tooltip="Sensitivity for detecting institutional accumulation/distribution")
+stealth_detection_sensitivity = input.float(1.8, "Stealth Detection Sensitivity", minval=1.0, maxval=3.0, step=0.1, group=group_smart_money, tooltip="Sensitivity for detecting stealth institutional activity")
+volume_flow_period = input.int(14, "Volume Flow Period", minval=5, maxval=30, group=group_smart_money, tooltip="Period for analyzing volume flow and momentum")
+
+// Session-Specific Volume Settings
+group_session_volume = "📊 Session Volume Analysis"
+asian_session_multiplier = input.float(0.8, "Asian Session Multiplier", minval=0.3, maxval=2.0, step=0.1, group=group_session_volume, tooltip="Volume expectation multiplier for Asian sessions")
+london_session_multiplier = input.float(1.5, "London Session Multiplier", minval=0.5, maxval=3.0, step=0.1, group=group_session_volume, tooltip="Volume expectation multiplier for London sessions")
+ny_session_multiplier = input.float(2.0, "NY Session Multiplier", minval=0.5, maxval=4.0, step=0.1, group=group_session_volume, tooltip="Volume expectation multiplier for NY sessions")
+overlap_session_multiplier = input.float(2.5, "Overlap Session Multiplier", minval=1.0, maxval=5.0, step=0.1, group=group_session_volume, tooltip="Volume expectation multiplier for session overlaps")
+
+// Advanced Volume Analytics
+group_advanced_volume = "🔬 Advanced Volume Analytics"
+enable_dark_pool_detection = input.bool(true, "Enable Dark Pool Detection", group=group_advanced_volume, tooltip="Attempts to identify potential dark pool activity based on volume patterns")
+enable_block_trade_detection = input.bool(true, "Enable Block Trade Detection", group=group_advanced_volume, tooltip="Identifies potential institutional block trades")
+institutional_pressure_threshold = input.float(2.5, "Institutional Pressure Threshold", minval=1.5, maxval=5.0, step=0.1, group=group_advanced_volume, tooltip="Threshold for detecting heavy institutional pressure")
+volume_divergence_detection = input.bool(true, "Volume Divergence Detection", group=group_advanced_volume, tooltip="Detects when volume behavior diverges from typical patterns")
+
+// Visual Settings
+group_visual = "🎨 Visual Settings"
+show_session_volume_profiles = input.bool(true, "Show Session Volume Profiles", group=group_visual, tooltip="Display volume profile information for each active session")
+show_smart_money_signals = input.bool(true, "Show Smart Money Signals", group=group_visual, tooltip="Display smart money detection signals on chart")
+show_accumulation_zones = input.bool(true, "Show Accumulation Zones", group=group_visual, tooltip="Highlight areas of institutional accumulation/distribution")
+show_volume_heatmap = input.bool(true, "Show Volume Heatmap", group=group_visual, tooltip="Color bars based on institutional volume intensity")
+show_info_panel = input.bool(true, "Show Information Panel", group=group_visual, tooltip="Display comprehensive volume analysis information panel")
+signal_opacity = input.int(20, "Signal Opacity", minval=10, maxval=50, group=group_visual, tooltip="Transparency of volume signal overlays")
+
+// Color Scheme
+group_colors = "🎨 Color Scheme"
+smart_money_color = input.color(color.new(color.yellow, 0), "Smart Money Color", group=group_colors)
+institutional_buy_color = input.color(color.new(color.green, 0), "Institutional Buying", group=group_colors)
+institutional_sell_color = input.color(color.new(color.red, 0), "Institutional Selling", group=group_colors)
+accumulation_color = input.color(color.new(color.blue, 0), "Accumulation Color", group=group_colors)
+distribution_color = input.color(color.new(color.orange, 0), "Distribution Color", group=group_colors)
+dark_pool_color = input.color(color.new(color.purple, 0), "Dark Pool Color", group=group_colors)
+
+// Professional projection settings (from Oracle Alliance)
+group_projections = "🎯 Price Projections"
+enable_projections = input.bool(true, "Enable High/Low Projections", group=group_projections, tooltip="Projects potential High or Low targets from high-quality volume signals, based on dynamic ATR and institutional conviction.")
+atr_period = input.int(14, "ATR Period for Projections", minval=5, maxval=50, group=group_projections, tooltip="The lookback period for the Average True Range (ATR) calculation used in projections.")
+atr_multiplier = input.float(1.5, "ATR Multiplier", minval=0.5, maxval=5.0, step=0.1, group=group_projections, tooltip="The multiplier applied to the ATR to determine the projection distance. Higher values result in more aggressive targets.")
+projection_bars = input.int(5, "Projection Duration (Bars)", minval=1, maxval=20, group=group_projections, tooltip="How many bars forward to extend the projection lines.")
+projection_min_quality = input.string("HIGH", "Minimum Quality for Projections", options=["ELITE", "PREMIUM", "HIGH", "GOOD", "ACCEPTABLE"], group=group_projections, tooltip="Minimum volume signal quality required to trigger projections.")
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// 🏗️ SESSION CONFIGURATION INPUTS (FROM GHOST OPTIMIZED)
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+// Session Toggle Groups
+SessionToggleGrp = "🕐 Session Toggles"
+
+// Main session toggles
+ShowDaily      = input.bool(false,  title = "Daily",    group = SessionToggleGrp, inline = "htf1")
+ShowWeekly     = input.bool(false,  title = "Weekly",   group = SessionToggleGrp, inline = "htf1")
+ShowMonthly    = input.bool(false,  title = "Monthly",  group = SessionToggleGrp, inline = "htf1")
+
+ShowADR        = input.bool(false,  title = "ADR",      group = SessionToggleGrp, inline = "dr1")
+ShowODR        = input.bool(false,  title = "ODR",      group = SessionToggleGrp, inline = "dr1")
+ShowRDR        = input.bool(false,  title = "RDR",      group = SessionToggleGrp, inline = "dr1")
+
+ShowHTF1       = input.bool(false,  title = "Kilo",     group = SessionToggleGrp, inline = "htf2")
+ShowHTF2       = input.bool(false,  title = "Lima",     group = SessionToggleGrp, inline = "htf2")
+
+// Intraday session toggles
+ShowADRQ1 = input.bool(false, title = "Alpha",   group = SessionToggleGrp, inline = "i1")
+ShowADRQ2 = input.bool(false, title = "Bravo",   group = SessionToggleGrp, inline = "i1")
+ShowADRQ3 = input.bool(false, title = "Charlie", group = SessionToggleGrp, inline = "i1")
+ShowADRQ4 = input.bool(false, title = "Delta",   group = SessionToggleGrp, inline = "i1")
+
+ShowODRQ1 = input.bool(false, title = "Echo",    group = SessionToggleGrp, inline = "i2")
+ShowODRQ2 = input.bool(false, title = "Foxtrot", group = SessionToggleGrp, inline = "i2")
+
+ShowRDRQ1 = input.bool(false, title = "Golf",    group = SessionToggleGrp, inline = "i3")
+ShowRDRQ2 = input.bool(false, title = "Hotel",   group = SessionToggleGrp, inline = "i3")
+ShowRDRQ3 = input.bool(false, title = "India",   group = SessionToggleGrp, inline = "i3")
+ShowRDRQ4 = input.bool(false, title = "Juliet",  group = SessionToggleGrp, inline = "i3")
+
+ShowAllIntraday = input.bool(false, title = "Show All Intraday", group = SessionToggleGrp)
+
+// Session end time constants (from Ghost optimized)
+s1_ADRQ1_END_HOUR_CONST = 21
+s1_ADRQ1_END_MINUTE_CONST = 15
+s2_ADR_END_HOUR_CONST = 2
+s2_ADR_END_MINUTE_CONST = 0
+s3_ADRQ2_END_HOUR_CONST = 0
+s3_ADRQ2_END_MINUTE_CONST = 0
+s4_ADRQ3_END_HOUR_CONST = 2
+s4_ADRQ3_END_MINUTE_CONST = 45
+s5_ADRQ4_END_HOUR_CONST = 2
+s5_ADRQ4_END_MINUTE_CONST = 45
+s6_ODRQ1_END_HOUR_CONST = 5
+s6_ODRQ1_END_MINUTE_CONST = 45
+s7_ODR_END_HOUR_CONST = 8
+s7_ODR_END_MINUTE_CONST = 30
+s8_HTF1_END_HOUR_CONST = 16
+s8_HTF1_END_MINUTE_CONST = 0
+s9_ODRQ2_END_HOUR_CONST = 8
+s9_ODRQ2_END_MINUTE_CONST = 15
+s10_RDRQ1_END_HOUR_CONST = 11
+s10_RDRQ1_END_MINUTE_CONST = 15
+s11_RDR_END_HOUR_CONST = 16
+s11_RDR_END_MINUTE_CONST = 0
+s12_RDRQ2_END_HOUR_CONST = 14
+s12_RDRQ2_END_MINUTE_CONST = 0
+s13_RDRQ3_END_HOUR_CONST = 14
+s13_RDRQ3_END_MINUTE_CONST = 45
+s14_HTF2_END_HOUR_CONST = 16
+s14_HTF2_END_MINUTE_CONST = 45
+s15_RDRQ4_END_HOUR_CONST = 16
+s15_RDRQ4_END_MINUTE_CONST = 45
+s16_DAILY_END_HOUR_CONST = 18
+s16_DAILY_END_MINUTE_CONST = 0
+s17_WEEKLY_END_HOUR_CONST = 18
+s17_WEEKLY_END_MINUTE_CONST = 0
+s18_MONTHLY_END_HOUR_CONST = 18
+s18_MONTHLY_END_MINUTE_CONST = 0
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// 🧮 SESSION CONFIGURATION AND INITIALIZATION
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+// Session Setup
+var array<core.SessionConfig> SESSION_CFGS = array.new<core.SessionConfig>()
+var array<core.SessionState> SESSION_STATES = array.new<core.SessionState>()
+var array<SessionVolumeProfile> VOLUME_PROFILES = array.new<SessionVolumeProfile>()
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// 🛡️ SAFE ARRAY ACCESS FUNCTIONS  
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+// Safe array access for volume profiles - prevents out of bounds errors
+f_safe_get_volume_profile(int index) =>
+    if array.size(VOLUME_PROFILES) > 0 and index >= 0 and index < array.size(VOLUME_PROFILES)
+        array.get(VOLUME_PROFILES, index)
+    else
+        na
+
+// Get safe volume profiles count
+f_safe_volume_profiles_count() =>
+    math.max(0, array.size(VOLUME_PROFILES))
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// 🎯 PROJECTION CALCULATION FUNCTIONS (FROM ORACLE ALLIANCE)
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+// Professional ATR calculation for projections
+f_calculate_atr() =>
+    ta.atr(atr_period)
+
+// Advanced projection calculation based on volume conviction
+f_calculate_projections(volume_signal, smart_money_idx, inst_pressure) =>
+    if not enable_projections or na(volume_signal) or not volume_signal.is_valid
+        [na, na, false]
+    else
+        // Check if signal quality meets minimum threshold (Oracle Alliance uses ELITE, PREMIUM+, EXCEPTIONAL)
+        quality_threshold_met = switch projection_min_quality
+            "ELITE" => volume_signal.quality_level == "ELITE"
+            "PREMIUM" => volume_signal.quality_level == "ELITE" or volume_signal.quality_level == "PREMIUM"
+            "HIGH" => volume_signal.quality_level == "ELITE" or volume_signal.quality_level == "PREMIUM" or volume_signal.quality_level == "HIGH"
+            "GOOD" => volume_signal.quality_level != "LOW" and volume_signal.quality_level != "ACCEPTABLE"
+            "ACCEPTABLE" => volume_signal.quality_level != "LOW"
+            => false
+        
+        if quality_threshold_met and barstate.isconfirmed
+            // Oracle Alliance style conviction ATR calculation
+            base_atr = f_calculate_atr()
+            
+            // Match Oracle Alliance conviction multiplier formula exactly:
+            // conviction_atr = atr_value * atr_multiplier * (1 + (conviction_level / 200) + (volume_profile.smart_money_index / 10))
+            conviction_multiplier = 1 + (volume_signal.confidence_level / 200) + (smart_money_idx / 10)
+            conviction_atr = base_atr * atr_multiplier * conviction_multiplier
+            
+            // Determine direction based on volume flow (Oracle Alliance style)
+            is_bullish_signal = close > open
+            
+            // Oracle Alliance projection logic - only project in ONE direction
+            var float projected_high = na
+            var float projected_low = na
+            
+            if is_bullish_signal
+                projected_high := high + conviction_atr
+                // projected_low stays na - Oracle Alliance doesn't project bearish target on bullish signal
+            else
+                projected_low := low - conviction_atr
+                // projected_high stays na - Oracle Alliance doesn't project bullish target on bearish signal
+            
+            [projected_high, projected_low, true]
+        else
+            [na, na, false]
+
+// Volume tracking arrays
+var array<float> session_baseline_volumes = array.new<float>()
+var array<float> session_current_volumes = array.new<float>()
+var array<float> smart_money_indices = array.new<float>()
+var array<bool> accumulation_flags = array.new<bool>()
+var array<string> volume_flow_directions = array.new<string>()
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// 🧮 ENHANCED VOLUME CALCULATION FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+// Session-based volume expectation calculation
+f_get_session_volume_multiplier(string session_name) =>
+    switch session_name
+        // Asian sessions (lower institutional activity)
+        "Alpha" => asian_session_multiplier
+        "Bravo" => asian_session_multiplier
+        
+        // London sessions (moderate to high institutional activity)
+        "Echo" => london_session_multiplier
+        "Foxtrot" => london_session_multiplier
+        
+        // NY sessions (peak institutional activity)
+        "Golf" => ny_session_multiplier
+        "Hotel" => ny_session_multiplier
+        "India" => ny_session_multiplier
+        "Juliet" => ny_session_multiplier
+        
+        // Overlap sessions (maximum institutional activity)
+        "ADR" => overlap_session_multiplier
+        "ODR" => overlap_session_multiplier
+        "RDR" => overlap_session_multiplier
+        
+        // HTF sessions (sustained institutional activity)
+        "Kilo" => london_session_multiplier * 1.2
+        "Lima" => london_session_multiplier * 1.2
+        "Charlie" => london_session_multiplier * 1.2
+        
+        // Parent sessions (higher timeframe institutional activity)
+        "Daily" => overlap_session_multiplier * 1.5
+        "Weekly" => overlap_session_multiplier * 1.5
+        "Monthly" => overlap_session_multiplier * 1.5
+        
+        => 1.0 // Default multiplier
+
+// Enhanced smart money detection algorithm
+f_enhanced_smart_money_detection() =>
+    // Always calculate SMAs at function scope
+    baseline_vol = ta.sma(volume, volume_baseline_period)
+    recent_vol_avg = ta.sma(volume, 3)
+    historical_vol_avg = ta.sma(volume, volume_flow_period)
+    
+    if not enable_volume_analysis or bar_index < volume_flow_period
+        [0.5, 0.0, 0.0, false, false, "None"]
+    else
+        current_vol = volume
+        vol_ratio = baseline_vol > 0 ? current_vol / baseline_vol : 1.0
+        
+        // Enhanced price change calculation
+        price_change = math.abs(close - open) / open * 100
+        price_range = (high - low) / open * 100
+        
+        // Volume to price ratio (core smart money metric)
+        volume_to_price_ratio = vol_ratio / (price_change + 0.001)
+        smart_money_index = math.min(volume_to_price_ratio / 10, 5.0)
+        
+        // Stealth detection (high volume, minimal price movement)
+        stealth_index = vol_ratio / (price_range + 0.001)
+        
+        // Institutional pressure calculation (using pre-calculated SMAs)
+        institutional_pressure = historical_vol_avg > 0 ? recent_vol_avg / historical_vol_avg : 1.0
+        
+        // Large block activity detection
+        volume_spike = vol_ratio >= 3.0 and price_change < 1.0
+        large_block_activity = volume_spike and institutional_pressure >= 1.5
+        
+        // Dark pool activity detection (if enabled)
+        dark_pool_activity = false
+        if enable_dark_pool_detection
+            dark_pool_activity := vol_ratio >= 2.0 and price_change < 0.3 and stealth_index >= stealth_detection_sensitivity
+        
+        // Activity type classification
+        activity_type = volume_spike ? (close > open ? "Institutional Buying" : "Institutional Selling") : 
+                       dark_pool_activity ? "Dark Pool Activity" : 
+                       large_block_activity ? "Block Trade" : "Regular Flow"
+        
+        [smart_money_index, stealth_index, institutional_pressure, large_block_activity, dark_pool_activity, activity_type]
+
+// Advanced volume profile analysis for active sessions
+f_session_volume_analysis(core.SessionState session_state, string session_name) =>
+    // Always calculate baseline at function scope
+    baseline_vol = ta.sma(volume, volume_baseline_period)
+    past_avg_calc = ta.sma(volume, volume_flow_period)
+    
+    if not enable_volume_analysis
+        na
+    else
+        // Get session-specific volume multiplier
+        session_mult = f_get_session_volume_multiplier(session_name)
+        
+        // Calculate current metrics
+        current_vol = volume
+        vol_ratio = baseline_vol > 0 ? current_vol / baseline_vol : 1.0
+        
+        // Session-adjusted institutional ratio
+        institutional_expected = baseline_vol * global_volume_multiplier * session_mult
+        institutional_ratio = institutional_expected > 0 ? current_vol / institutional_expected : 1.0
+        
+        // Enhanced smart money detection
+        [smart_money, stealth_idx, inst_pressure, large_block, dark_pool, activity_type] = f_enhanced_smart_money_detection()
+        
+        // Volume acceleration
+        vol_acceleration = 1.0
+        if bar_index >= 3
+            recent_avg = (volume + volume[1] + volume[2]) / 3
+            past_avg = past_avg_calc[3]
+            if past_avg > 0
+                vol_acceleration := recent_avg / past_avg
+        
+        // Flow direction
+        flow_direction = close > open ? "Bullish" : close < open ? "Bearish" : "Neutral"
+        
+        // Accumulation/Distribution detection
+        price_change = math.abs(close - open) / open * 100
+        is_accumulation = vol_ratio >= accumulation_sensitivity and price_change < 0.5 and smart_money >= smart_money_threshold
+        is_distribution = vol_ratio >= accumulation_sensitivity and price_change < 0.5 and close < open
+        
+        // Conviction level (0-100)
+        conviction_factors = 0
+        if institutional_ratio >= 1.0
+            conviction_factors += 1
+        if smart_money >= smart_money_threshold
+            conviction_factors += 1
+        if vol_acceleration >= 1.2
+            conviction_factors += 1
+        if large_block or dark_pool
+            conviction_factors += 1
+        if is_accumulation or is_distribution
+            conviction_factors += 1
+        
+        conviction_level = conviction_factors / 5.0 * 100
+        
+        // Risk level calculation
+        risk_level = conviction_level >= 80 ? 10 : conviction_level >= 60 ? 30 : conviction_level >= 40 ? 50 : 80
+        
+        // Create session volume profile
+        profile = SessionVolumeProfile.new(
+             session_name,
+             baseline_vol,
+             session_mult,
+             vol_ratio,
+             institutional_ratio,
+             smart_money,
+             vol_acceleration,
+             flow_direction,
+             is_accumulation,
+             is_distribution,
+             conviction_level,
+             risk_level,
+             session_state.isActive
+         )
+        
+        profile
+
+// Master volume signal generation
+f_generate_volume_signal() =>
+    if not enable_volume_analysis
+        na
+    else
+        // Check if we have any volume profiles to analyze
+        if array.size(VOLUME_PROFILES) == 0
+            na
+        else
+            // Analyze all active sessions
+            total_score = 0.0
+            active_sessions = 0
+            max_conviction = 0.0
+            dominant_session = "None"
+            combined_smart_money = 0.0
+            combined_institutional = 0.0
+            total_accumulation = false
+            
+            // Iterate through all volume profiles for active sessions using safe access
+            profiles_count = f_safe_volume_profiles_count()
+            for i = 0 to profiles_count - 1
+                profile = f_safe_get_volume_profile(i)
+                if not na(profile) and profile.session_active
+                    active_sessions += 1
+                
+                // Session contribution to overall score
+                session_score = 0.0
+                
+                if profile.institutional_ratio >= 1.0
+                    session_score += 30
+                if profile.smart_money_index >= smart_money_threshold
+                    session_score += 25
+                if profile.volume_acceleration >= 1.2
+                    session_score += 20
+                if profile.is_accumulation
+                    session_score += 15
+                    total_accumulation := true
+                if profile.conviction_level >= 70
+                    session_score += 10
+                
+                total_score += session_score
+                combined_smart_money := math.max(combined_smart_money, profile.smart_money_index)
+                combined_institutional := math.max(combined_institutional, profile.institutional_ratio)
+                
+                if profile.conviction_level > max_conviction
+                    max_conviction := profile.conviction_level
+                    dominant_session := profile.session_name
+        
+            // Calculate final signal metrics
+            avg_score = active_sessions > 0 ? total_score / active_sessions : 0.0
+            final_score = math.round(avg_score)
+            
+            // Quality level assessment
+            quality_level = switch
+                final_score >= 90 => "ELITE"
+                final_score >= 75 => "PREMIUM"
+                final_score >= 60 => "HIGH"
+                final_score >= 45 => "GOOD"
+                final_score >= 30 => "ACCEPTABLE"
+                => "LOW"
+            
+            // Confidence level
+            confidence_level = max_conviction
+            
+            // Risk assessment
+            risk_assessment = switch
+                confidence_level >= 80 => "MINIMAL"
+                confidence_level >= 60 => "LOW"
+                confidence_level >= 40 => "MODERATE"
+                confidence_level >= 20 => "HIGH"
+                => "EXTREME"
+            
+            // Generate signal
+            signal = VolumeSignal.new(
+                 final_score >= 30,
+                 final_score,
+                 quality_level,
+                 confidence_level,
+                 risk_assessment,
+                 combined_smart_money >= smart_money_threshold,
+                 combined_institutional >= 1.0,
+                 total_accumulation,
+                 dominant_session
+             )
+            
+            signal
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// 📊 SESSION SETUP AND MAIN EXECUTION
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+if barstate.isfirst
+    // Initialize all session configurations (same as Ghost optimized)
+    array.push(SESSION_CFGS, core.newSessionConfig('Alpha', '18:45-21:15', ShowADRQ1 or ShowAllIntraday, s1_ADRQ1_END_HOUR_CONST, s1_ADRQ1_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('Bravo', '21:30-00:00', ShowADRQ2 or ShowAllIntraday, s3_ADRQ2_END_HOUR_CONST, s3_ADRQ2_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('ADR', '19:30-02:00', ShowADR, s2_ADR_END_HOUR_CONST, s2_ADR_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('Charlie', '21:30-02:45', ShowADRQ3, s4_ADRQ3_END_HOUR_CONST, s4_ADRQ3_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('Delta', '00:15-02:45', ShowADRQ4 or ShowAllIntraday, s5_ADRQ4_END_HOUR_CONST, s5_ADRQ4_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('Echo', '02:45-05:45', ShowODRQ1 or ShowAllIntraday, s6_ODRQ1_END_HOUR_CONST, s6_ODRQ1_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('ODR', '02:45-08:30', ShowODR, s7_ODR_END_HOUR_CONST, s7_ODR_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('Kilo', '03:00-16:00', ShowHTF1, s8_HTF1_END_HOUR_CONST, s8_HTF1_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('Foxtrot', '06:00-08:15', ShowODRQ2 or ShowAllIntraday, s9_ODRQ2_END_HOUR_CONST, s9_ODRQ2_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('Golf', '08:30-11:15', ShowRDRQ1 or ShowAllIntraday, s10_RDRQ1_END_HOUR_CONST, s10_RDRQ1_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('RDR', '08:30-16:00', ShowRDR, s11_RDR_END_HOUR_CONST, s11_RDR_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('Hotel', '11:30-14:00', ShowRDRQ2 or ShowAllIntraday, s12_RDRQ2_END_HOUR_CONST, s12_RDRQ2_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('India', '12:00-14:45', ShowRDRQ3 or ShowAllIntraday, s13_RDRQ3_END_HOUR_CONST, s13_RDRQ3_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('Lima', '14:00-16:45', ShowHTF2, s14_HTF2_END_HOUR_CONST, s14_HTF2_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('Juliet', '15:30-16:45', ShowRDRQ4 or ShowAllIntraday, s15_RDRQ4_END_HOUR_CONST, s15_RDRQ4_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('Daily', '17:00-18:00', ShowDaily, s16_DAILY_END_HOUR_CONST, s16_DAILY_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('Weekly', '17:00-18:00', ShowWeekly, s17_WEEKLY_END_HOUR_CONST, s17_WEEKLY_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('Monthly', '17:00-18:00', ShowMonthly, s18_MONTHLY_END_HOUR_CONST, s18_MONTHLY_END_MINUTE_CONST))
+    
+    // Initialize session states to match session configs
+    for _ = 0 to array.size(SESSION_CFGS) - 1
+        array.push(SESSION_STATES, core.newSessionState())
+
+// Update session states and generate volume profiles
+// Process each session individually
+has_active_sessions = false
+for idx = 0 to array.size(SESSION_CFGS) - 1
+    cfg = array.get(SESSION_CFGS, idx)
+    
+    // Skip disabled sessions
+    if not cfg.enabled
+        continue
+    
+    st = array.get(SESSION_STATES, idx)
+    
+    // Update session state using library function
+    updatedState = core.updateSession(st, cfg, 'America/New_York')
+    array.set(SESSION_STATES, idx, updatedState)
+    
+    // Check if we have any active sessions
+    if updatedState.isActive
+        has_active_sessions := true
+
+// Clear and rebuild volume profiles only when we have confirmed bar and active sessions
+if barstate.isconfirmed and has_active_sessions
+    array.clear(VOLUME_PROFILES)
+    
+    // Generate volume profiles for active sessions
+    for idx = 0 to array.size(SESSION_CFGS) - 1
+        cfg = array.get(SESSION_CFGS, idx)
+        
+        if cfg.enabled
+            st = array.get(SESSION_STATES, idx)
+            
+            if st.isActive
+                volume_profile = f_session_volume_analysis(st, cfg.name)
+                if not na(volume_profile)
+                    array.push(VOLUME_PROFILES, volume_profile)
+
+// Generate master volume signal
+volume_signal = f_generate_volume_signal()
+
+// Safety: Create default signal if na to prevent runtime errors
+if na(volume_signal)
+    volume_signal := VolumeSignal.new(
+         false,           // is_valid
+         0,               // score  
+         "LOW",           // quality_level
+         0.0,             // confidence_level
+         "EXTREME",       // risk_assessment
+         false,           // smart_money_detected
+         false,           // institutional_activity
+         false,           // accumulation_detected
+         "None"           // dominant_session
+     )
+
+
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// 🎨 PROFESSIONAL VISUAL RENDERING
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+// Volume Heatmap (Bar Coloring) - Calculate color at global scope with proper na handling
+var color heatmap_color = na
+heatmap_color := na
+if show_volume_heatmap and not na(volume_signal) and volume_signal.is_valid
+    heatmap_color := switch volume_signal.quality_level
+        "ELITE" => color.new(color.yellow, 20)
+        "PREMIUM" => color.new(color.lime, 30)
+        "HIGH" => color.new(color.green, 40)
+        "GOOD" => color.new(color.blue, 50)
+        "ACCEPTABLE" => color.new(color.orange, 60)
+        => color.new(color.gray, 70)
+
+barcolor(heatmap_color)
+
+// Smart Money Signals - Use conditional expression for plotshape
+plotshape(show_smart_money_signals and not na(volume_signal) and volume_signal.smart_money_detected and barstate.isconfirmed, 
+          title="Smart Money Detected", location=location.belowbar, style=shape.diamond, color=smart_money_color, size=size.small)
+
+// Accumulation Zones
+if show_accumulation_zones and not na(volume_signal) and volume_signal.accumulation_detected and barstate.isconfirmed
+    accumulation_box_color = close > open ? accumulation_color : distribution_color
+    box.new(bar_index, high, bar_index + 1, low, bgcolor=color.new(accumulation_box_color, signal_opacity), border_color=accumulation_box_color, border_width=1)
+
+// Enhanced Smart Money Detection Signals
+[smart_money_idx, stealth_idx, inst_pressure, large_block, dark_pool, activity_type] = f_enhanced_smart_money_detection()
+
+// Calculate professional projections based on volume conviction
+[projected_high, projected_low, has_projections] = f_calculate_projections(volume_signal, smart_money_idx, inst_pressure)
+
+// Professional High/Low Projections (Oracle Alliance Style)
+if has_projections and barstate.isconfirmed
+    is_bullish_signal = close > open
+    
+    // Oracle Alliance style - only show the relevant direction
+    if is_bullish_signal and not na(projected_high)
+        // Bullish projection - only show upside target
+        line.new(bar_index, projected_high, bar_index + projection_bars, projected_high, 
+                 color=color.new(color.green, 20), style=line.style_dashed, width=2)
+        label.new(bar_index + projection_bars, projected_high, 
+                  "🎯 Projected High: " + str.tostring(projected_high, format.mintick), 
+                  color=color.new(color.green, 20), textcolor=color.white, 
+                  style=label.style_label_left, size=size.small)
+    
+    if not is_bullish_signal and not na(projected_low)
+        // Bearish projection - only show downside target  
+        line.new(bar_index, projected_low, bar_index + projection_bars, projected_low, 
+                 color=color.new(color.red, 20), style=line.style_dashed, width=2)
+        label.new(bar_index + projection_bars, projected_low, 
+                  "🎯 Projected Low: " + str.tostring(projected_low, format.mintick), 
+                  color=color.new(color.red, 20), textcolor=color.white, 
+                  style=label.style_label_left, size=size.small)
+
+if show_smart_money_signals and large_block and barstate.isconfirmed
+    label.new(bar_index, high, text="🏦 BLOCK", style=label.style_label_down, color=institutional_buy_color, textcolor=color.white, size=size.tiny)
+
+if show_smart_money_signals and dark_pool and enable_dark_pool_detection and barstate.isconfirmed
+    label.new(bar_index, low, text="🌐 DARK", style=label.style_label_up, color=dark_pool_color, textcolor=color.white, size=size.tiny)
+
+// Session Volume Profile Visualization
+if show_session_volume_profiles and not na(volume_signal) and array.size(VOLUME_PROFILES) > 0
+    for i = 0 to array.size(VOLUME_PROFILES) - 1
+        profile = array.get(VOLUME_PROFILES, i)
+        if profile.session_active and profile.conviction_level >= 50
+            // Create session-specific volume indicator
+            session_height = high + (high - low) * 0.05 * (i + 1)
+            session_color = profile.is_accumulation ? institutional_buy_color : 
+                           profile.is_distribution ? institutional_sell_color : color.gray
+            
+            line.new(bar_index, session_height, bar_index, session_height + (high - low) * 0.02 * profile.conviction_level / 100,
+                     color=session_color, width=2)
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// 📋 COMPREHENSIVE INFORMATION PANEL
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+if show_info_panel and barstate.islast and not na(volume_signal)
+    var table info_table = table.new(position.top_right, 3, 15, bgcolor=color.new(color.black, 85), border_width=2, frame_color=color.navy, frame_width=2)
+    
+    // Header
+    table.cell(info_table, 0, 0, "Ghost Volume Intelligence", bgcolor=color.new(color.navy, 60), text_color=color.white, text_size=size.small)
+    table.cell(info_table, 1, 0, "Professional Grade", bgcolor=color.new(color.navy, 60), text_color=color.white, text_size=size.small)
+    table.cell(info_table, 2, 0, "Multi-Session", bgcolor=color.new(color.navy, 60), text_color=color.white, text_size=size.small)
+    
+    // Master Volume Signal
+    signal_color = volume_signal.quality_level == "ELITE" ? color.yellow : 
+                   volume_signal.quality_level == "PREMIUM" ? color.lime : 
+                   volume_signal.quality_level == "HIGH" ? color.green : 
+                   volume_signal.quality_level == "GOOD" ? color.blue : 
+                   volume_signal.quality_level == "ACCEPTABLE" ? color.orange : color.red
+    
+    table.cell(info_table, 0, 1, "Volume Score", text_size=size.tiny, text_color=color.white)
+    table.cell(info_table, 1, 1, str.tostring(volume_signal.score) + "/100", text_color=signal_color, text_size=size.tiny)
+    table.cell(info_table, 2, 1, volume_signal.quality_level, text_color=signal_color, text_size=size.tiny)
+    
+    table.cell(info_table, 0, 2, "Confidence", text_size=size.tiny, text_color=color.white)
+    table.cell(info_table, 1, 2, str.tostring(math.round(volume_signal.confidence_level)) + "%", text_size=size.tiny)
+    table.cell(info_table, 2, 2, volume_signal.risk_assessment, text_size=size.tiny)
+    
+    table.cell(info_table, 0, 3, "Smart Money", text_size=size.tiny, text_color=color.white)
+    table.cell(info_table, 1, 3, str.tostring(math.round(smart_money_idx, 2)), text_color=smart_money_idx >= smart_money_threshold ? color.green : color.gray, text_size=size.tiny)
+    table.cell(info_table, 2, 3, volume_signal.smart_money_detected ? "DETECTED" : "None", text_size=size.tiny)
+    
+    table.cell(info_table, 0, 4, "Institutional", text_size=size.tiny, text_color=color.white)
+    table.cell(info_table, 1, 4, volume_signal.institutional_activity ? "ACTIVE" : "Quiet", text_color=volume_signal.institutional_activity ? color.green : color.gray, text_size=size.tiny)
+    table.cell(info_table, 2, 4, volume_signal.accumulation_detected ? "ACCUM" : "Normal", text_size=size.tiny)
+    
+    table.cell(info_table, 0, 5, "Dominant Session", text_size=size.tiny, text_color=color.white)
+    table.cell(info_table, 1, 5, volume_signal.dominant_session, text_size=size.tiny)
+    table.cell(info_table, 2, 5, activity_type, text_size=size.tiny)
+    
+    // Projection Information
+    if enable_projections
+        projection_color = has_projections ? color.green : color.gray
+        table.cell(info_table, 0, 6, "Projections", text_size=size.tiny, text_color=color.white)
+        table.cell(info_table, 1, 6, has_projections ? "ACTIVE" : "Inactive", text_color=projection_color, text_size=size.tiny)
+        
+        if has_projections
+            is_bullish_proj = close > open
+            if is_bullish_proj and not na(projected_high)
+                table.cell(info_table, 2, 6, "↑" + str.tostring(projected_high, "#.####"), text_size=size.tiny)
+            else if not is_bullish_proj and not na(projected_low)
+                table.cell(info_table, 2, 6, "↓" + str.tostring(projected_low, "#.####"), text_size=size.tiny)
+            else
+                table.cell(info_table, 2, 6, "Calculating...", text_size=size.tiny)
+        else
+            table.cell(info_table, 2, 6, "None", text_size=size.tiny)
+    
+    // Active Sessions Summary - with bounds checking
+    active_count = 0
+    if array.size(VOLUME_PROFILES) > 0
+        for i = 0 to array.size(VOLUME_PROFILES) - 1
+            profile = array.get(VOLUME_PROFILES, i)
+            if profile.session_active
+                active_count += 1
+    
+    sessions_row = enable_projections ? 7 : 6
+    table.cell(info_table, 0, sessions_row, "Active Sessions", text_size=size.tiny, text_color=color.white)
+    table.cell(info_table, 1, sessions_row, str.tostring(active_count), text_size=size.tiny)
+    table.cell(info_table, 2, sessions_row, "Sessions", text_size=size.tiny)
+    
+    // Top Session Details (if any active)
+    if array.size(VOLUME_PROFILES) > 0
+        row = sessions_row + 1
+        displayed_sessions = 0
+        for i = 0 to math.min(array.size(VOLUME_PROFILES) - 1, 7) // Show up to 8 sessions
+            profile = array.get(VOLUME_PROFILES, i)
+            if profile.session_active and displayed_sessions < 8
+                session_color = profile.conviction_level >= 70 ? color.green : profile.conviction_level >= 50 ? color.blue : color.orange
+                
+                table.cell(info_table, 0, row, profile.session_name, text_size=size.tiny, text_color=color.white)
+                table.cell(info_table, 1, row, str.tostring(math.round(profile.conviction_level)) + "%", text_color=session_color, text_size=size.tiny)
+                table.cell(info_table, 2, row, profile.flow_direction, text_size=size.tiny)
+                
+                row += 1
+                displayed_sessions += 1
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// 🚨 PROFESSIONAL ALERT SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+alertcondition(not na(volume_signal) and volume_signal.quality_level == "ELITE", title="🏆 Elite Volume Signal", 
+               message="ELITE Ghost Volume Intelligence signal detected! Maximum institutional conviction across multiple sessions.")
+
+alertcondition(not na(volume_signal) and volume_signal.smart_money_detected and large_block, title="🏦 Smart Money Block Trade", 
+               message="Smart Money BLOCK TRADE detected! Significant institutional activity identified.")
+
+alertcondition(not na(volume_signal) and dark_pool and enable_dark_pool_detection, title="🌐 Dark Pool Activity", 
+               message="DARK POOL activity detected! Stealth institutional positioning identified.")
+
+alertcondition(not na(volume_signal) and volume_signal.accumulation_detected, title="📈 Institutional Accumulation", 
+               message="INSTITUTIONAL ACCUMULATION detected! Smart money positioning identified.")
+
+alertcondition(has_projections and (not na(projected_high) or not na(projected_low)), title="🎯 Price Projection", 
+               message="PRICE PROJECTION activated! High-conviction volume signal with institutional target level.")
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// 📈 DATA PLOTS FOR EXTERNAL ACCESS
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+plot(not na(volume_signal) ? volume_signal.score : na, title="Volume Intelligence Score", display=display.none)
+plot(not na(volume_signal) ? volume_signal.confidence_level : na, title="Volume Confidence", display=display.none)
+plot(smart_money_idx, title="Smart Money Index", display=display.none)
+plot(inst_pressure, title="Institutional Pressure", display=display.none)
+plot(stealth_idx, title="Stealth Index", display=display.none)
+plot(not na(volume_signal) and volume_signal.is_valid ? 1 : 0, title="Volume Signal Valid", display=display.none)
+plot(not na(volume_signal) and volume_signal.smart_money_detected ? 1 : 0, title="Smart Money Detected", display=display.none)
+plot(not na(volume_signal) and volume_signal.institutional_activity ? 1 : 0, title="Institutional Activity", display=display.none)
+plot(not na(volume_signal) and volume_signal.accumulation_detected ? 1 : 0, title="Accumulation Detected", display=display.none)
+plot(large_block ? 1 : 0, title="Block Trade Detected", display=display.none)
+plot(dark_pool ? 1 : 0, title="Dark Pool Activity", display=display.none)
+plot(has_projections ? projected_high : na, title="Projected High", display=display.none)
+plot(has_projections ? projected_low : na, title="Projected Low", display=display.none)
+plot(has_projections ? 1 : 0, title="Projections Active", display=display.none)

@@ -1,0 +1,1630 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// ©quantum_warrior369
+
+
+//@version=6
+indicator(("TBR M7 2.0∞"), overlay=true,max_lines_count = 500,max_labels_count = 500, max_boxes_count = 500)
+
+import quantum_warrior369/LibraryQuantumWarrior369v6/1 as Quant
+Quant.BaseData BaseData = Quant.BaseData.new(Quant.GetTimezone(),Quant.GetTickerNameString(syminfo.ticker),Quant.CalculateTimeOffset(syminfo.ticker),Quant.CalculateTimeOffset(syminfo.ticker)*3600000)
+string Timezone = BaseData.Timezone
+string CurrentTicker = BaseData.CurrentTicker
+int TickerHourOffset = BaseData.TickerHourOffset
+int TickerTimeOffset = BaseData.TickerTimeOffset
+int ONE_SECOND = BaseData.ONE_SECOND
+int ONE_MINUTE = BaseData.ONE_MINUTE
+int ONE_HOUR = BaseData.ONE_HOUR
+int ONE_DAY = BaseData.ONE_DAY
+int ONE_WEEK = BaseData.ONE_WEEK
+
+ShowSessions_Group = "Show Sessions"
+ShowAdr = input.bool(title="After", defval=true, group=ShowSessions_Group, inline="1")
+ShowOdr = input.bool(title="Overnight", defval=true, group=ShowSessions_Group, inline="1")
+ShowRdr = input.bool(title="Regular", defval=true, group=ShowSessions_Group, inline="1")
+ShowDays = input.string(defval = "All", title = "Show Days:", options = [ "All","Mon","Tue","Wed","Thu","Fri"], inline = "1", group = ShowSessions_Group)
+
+ShowDaily = input.bool(title='Show Daily', defval=true, group = ShowSessions_Group, inline = "2")
+ShowWeekly = input.bool(title='Show Weekly', defval=true, group = ShowSessions_Group, inline = "2")
+ShowMonthly = input.bool(title='Show Monthly', defval=true, group = ShowSessions_Group, inline = "2")
+ShowConfirmationDirection = input.bool(title="Show Confirmation Direction", defval=true, group=ShowSessions_Group, inline="3")
+ShowBoxLabels = input.bool(title="Show Box Labels", defval=true, group=ShowSessions_Group, inline="3")
+ShowLineLabels = input.bool(title="Show Line Labels", defval=true, group=ShowSessions_Group, inline="3")
+
+
+ShowLast_Group = "Show Last"
+NumberOfIntradaySessions = input.int(3, title="Intraday:", minval=1, inline = "1", group = ShowLast_Group, tooltip = "Do not use to high number. If Max Lines limit is reached you might get unexpected results.")
+NumberOfDailySessions = input.int(1, title="Daily:", minval=1, inline = "2", group = ShowLast_Group)
+NumberOfWeeklySessions = input.int(5, title="Weekly:", minval=1, inline = "2", group = ShowLast_Group)
+NumberOfMonthlySessions = input.int(2, title="Monthly:", minval=1, inline = "2", group = ShowLast_Group)
+
+
+LineAndBoxExtension_Group = "Line And Box Extension"
+ExtendAdr = input.bool(title="Extend After", defval=false, group=LineAndBoxExtension_Group, inline="1")
+ExtendOdr = input.bool(title="Overnight", defval=false, group=LineAndBoxExtension_Group, inline="1")
+ExtendRdr = input.bool(title="Regular", defval=false, group=LineAndBoxExtension_Group, inline="1")
+SessionExtendType = input.string(defval = "OneDay", title = "", options = ["EndOfSession","Realtime","OneDay","OneWeek"], inline = "1", group = LineAndBoxExtension_Group)
+
+
+DailyExtendType = input.string(defval = "Realtime", title = "Extend Daily:", options = ["EndOfSession","Realtime","ShiftRight"], inline = "2", group = LineAndBoxExtension_Group)
+WeeklyExtendType = input.string(defval = "ShiftRight", title = "Extend Weekly:", options = ["EndOfSession","Realtime","ShiftRight"], inline = "3", group = LineAndBoxExtension_Group)
+MonthlyExtendType = input.string(defval = "ShiftRight", title = "Extend Monthly:", options = ["EndOfSession","Realtime","ShiftRight"], inline = "4", group = LineAndBoxExtension_Group)
+
+
+StandardDeviations_Group = "Standard Deviations"
+ShowStDevs = input.bool(title='Show Standard Deviations', defval=true, group = StandardDeviations_Group, inline = "1")
+ShowRetracementGrid = input.bool(title='Show Retracement Grid', defval=false, group = StandardDeviations_Group, inline = "1")
+ShowDailyStDevs = input.bool(title='Show Daily', defval=true, group = StandardDeviations_Group, inline = "2")
+ShowWeeklyStDevs = input.bool(title='Show Weekly', defval=true, group = StandardDeviations_Group, inline = "2")
+ShowMonthlyStDevs = input.bool(title='Show Monthly', defval=true, group = StandardDeviations_Group, inline = "2")
+OffsetWeeklyAndMonthlyStdevs = input.bool(title='Offset Weekly And Monthly Labels', defval=false, group = StandardDeviations_Group, inline = "2")
+
+AdditionalStdevs_Group = "Additonal Standard Deviations"
+AdditionalStDevsAdr = input.string("", inline="1", group=AdditionalStdevs_Group, title = "After:")
+AdditionalStDevsOdr = input.string("", inline="1", group=AdditionalStdevs_Group, title = "Overnight:")
+AdditionalStDevsRdr = input.string("", inline="1", group=AdditionalStdevs_Group, title = "Regular:")
+AdditionalStDevsDaily = input.string("", inline="2", group=AdditionalStdevs_Group, title = "Daily:")
+AdditionalStDevsWeekly = input.string("", inline="2", group=AdditionalStdevs_Group, title = "Weekly:")
+AdditionalStDevsMonthly = input.string("", inline="2", group=AdditionalStdevs_Group, title = "Monthly:")
+
+LineSettings_Group = "Line and Box Settings"
+ShowIdrLines= input.bool(title='IDR Lines', defval=true, group = LineSettings_Group, inline = "1")
+ShowDrLines = input.bool(title='DR Lines ', defval=true, group = LineSettings_Group, inline = "1")
+ShowIdrBox = input.bool(title='Idr Box ', defval=true, group = LineSettings_Group, inline = "1")
+ShowOpenLine = input.bool(title='Open Line', defval=false, group = LineSettings_Group, inline = "1")
+ShowCloseLine = input.bool(title='Close Line', defval=false, group = LineSettings_Group, inline = "1")
+ShowDrMidpoint = input.bool(title='DR Midpoint', defval=false, group = LineSettings_Group, inline = "1")
+ShowIdrMidpoint = input.bool(title='IDR Midpoint', defval=true, group = LineSettings_Group, inline = "1")
+ShowSessionClusters = input.bool(title='Session Clusters', defval=false, group = LineSettings_Group, inline = "1")
+ShowIdrDrAsCluster = input.bool(title='IDR/DR as Cluster', defval=true, group = LineSettings_Group, inline = "1")
+ShowRetracementClusters = input.bool(title='Retracement Clusters', defval=false, group = LineSettings_Group, inline = "1")
+
+
+DailySettings_Group = "Daily Settings"
+ShowDailyClusters = input.bool(title='Show Daily Clusters', defval=true, group = DailySettings_Group, inline = "1")
+ShowDailyIdrMidpoint = input.bool(title='Show Daily IDR', defval=true, group = DailySettings_Group, inline = "1")
+ShowDailyBox = input.bool(title='Show Daily Box', defval=true, group = DailySettings_Group, inline = "1")
+
+WeeklySettings_Group = "Weekly Settings"
+ShowWeeklyClusters = input.bool(title='Show Weekly Clusters', defval=true, group = WeeklySettings_Group, inline = "1")
+ShowWeeklyIdrMidpoint = input.bool(title='Show Weekly IDR', defval=true, group = WeeklySettings_Group, inline = "1")
+ShowWeeklyBox = input.bool(title='Show Weekly Box', defval=true, group = WeeklySettings_Group, inline = "1")
+
+MonthlySettings_Group = "Monthly Settings"
+ShowMonthlyClusters = input.bool(title='Show Monthly Clusters', defval=true, group = MonthlySettings_Group, inline = "1")
+ShowMonthlyIdrMidpoint = input.bool(title='Show Monthly IDR', defval=true, group = MonthlySettings_Group, inline = "1")
+ShowMonthlyBox = input.bool(title='Show Monthly Box', defval=true, group = MonthlySettings_Group, inline = "1")
+
+
+
+DrSesions_Group = "DR Session Colors"
+IdrUpBoxColor = input.color(color.new(color.green, 80), title="IDR Box Up", inline = "1", group = DrSesions_Group)
+IdrDownBoxColor = input.color(color.new(color.red,80), title="IDR Box Down", inline = "1", group = DrSesions_Group)
+IdrNeutralBoxColor = input.color(color.new(color.gray, 80), title="IDR Box Neutral", inline = "1", group = DrSesions_Group)
+IdrHighLowLineColor = input.color(color.new(color.red, 0), title="IDR High/Low Line", inline = "2", group = DrSesions_Group)
+IdrHighLowLineStyleRaw = input.string(defval = "Dashed", title = "IDR Line Style", options = ["Solid", "Dotted", "Dashed"], inline = "2", group = DrSesions_Group)
+DrHighLowLineColor = input.color(color.new(color.gray, 0), title="DR High/Low Line", inline = "2", group = DrSesions_Group)
+DrHighLowLineStyleRaw = input.string(defval = "Solid", title = "DR Line Style", options = ["Solid", "Dotted", "Dashed"], inline = "2", group = DrSesions_Group)
+SessionUpConfirmationColor = input.color(color.new(color.green, 0), title="Bull Confirmation", inline = "3", group = DrSesions_Group)
+SessionDownConfirmationColor = input.color(color.new(color.red, 0), title="Bear Confirmation", inline = "3", group = DrSesions_Group)
+
+
+OpenLineColor = input.color(color.new(color.green, 0), title="Open Line", inline = "4", group = DrSesions_Group)
+OpenLineStyleRaw = input.string(defval = "Solid", title = "", options = ["Solid", "Dotted", "Dashed"], inline = "4", group = DrSesions_Group)
+CloseLineColor = input.color(color.new(color.red, 0), title="Close Line", inline = "4", group = DrSesions_Group)
+CloseLineStyleRaw = input.string(defval = "Solid", title = "", options = ["Solid", "Dotted", "Dashed"], inline = "4", group = DrSesions_Group)
+IdrMidpointLineColor = input.color(color.new(color.gray, 0), title="IDR Midpoint", inline = "5", group = DrSesions_Group)
+IdrMidpointLineStyleRaw = input.string(defval = "Dotted", title = "", options = ["Solid", "Dotted", "Dashed"], inline = "5", group = DrSesions_Group)
+DrMidpointLineColor = input.color(color.new(color.gray, 0), title="DR Midpoint", inline = "5", group = DrSesions_Group)
+DrMidpointLineStyleRaw = input.string(defval = "Solid", title = "", options = ["Solid", "Dotted", "Dashed"], inline = "5", group = DrSesions_Group)
+
+DrSesionsStDevs_Group = "Standard Deviation Colors"
+StandardDeviationLinesColor = input.color(color.new(color.gray, 50), title="Session", inline = "1", group = DrSesionsStDevs_Group)
+StandardDeviationLinesStyleRaw = input.string(defval = "Dotted", title = "Style", options = ["Solid", "Dotted", "Dashed"], inline = "1", group = DrSesionsStDevs_Group)
+
+RetracementCluster0204BoxColor = input.color(color.new(color.blue, 80), title="Retracement Cluster 0.2-0.4", inline = "1", group = DrSesions_Group)
+RetracementCluster0608BoxColor = input.color(color.new(color.red,80), title="Retracement Cluster 0.6-0.8", inline = "1", group = DrSesions_Group)
+
+
+
+DailyStandardDeviationsColor = input.color(color.new(color.teal, 20), title="Daily", inline = "1", group = DrSesionsStDevs_Group)
+DailyStandardDeviationLinesStyleRaw = input.string(defval = "Dotted", title = "Style", options = ["Solid", "Dotted", "Dashed"], inline = "1", group = DrSesionsStDevs_Group)
+WeeklyStandardDeviationsColor = input.color(color.new(color.aqua, 0), title="Weekly", inline = "2", group = DrSesionsStDevs_Group)
+WeeklyStandardDeviationLinesStyleRaw = input.string(defval = "Solid", title = "Style", options = ["Solid", "Dotted", "Dashed"], inline = "2", group = DrSesionsStDevs_Group)
+MonthlyStandardDeviationsColor = input.color(color.new(color.maroon, 0), title="Monthly", inline = "2", group = DrSesionsStDevs_Group)
+MonthlyStandardDeviationLinesStyleRaw = input.string(defval = "Solid", title = "Style", options = ["Solid", "Dotted", "Dashed"], inline = "2", group = DrSesionsStDevs_Group)
+
+DrSesionsStDevs25_50_75_Group = "Standard Deviation 2.5 5.0 7.5"
+IntradayStdev25_Color = input.color(color.new(color.gray, 50), title="Session 2.5", inline = "1", group = DrSesionsStDevs25_50_75_Group)
+IntradayStdev50_Color = input.color(color.new(color.gray, 50), title="5.0", inline = "1", group = DrSesionsStDevs25_50_75_Group)
+IntradayStdev75_Color = input.color(color.new(color.gray, 50), title="7.5", inline = "1", group = DrSesionsStDevs25_50_75_Group)
+IntradayStdev25_50_75_LinesStyleRaw = input.string(defval = "Dotted", title = "Style", options = ["Solid", "Dotted", "Dashed"], inline = "1", group = DrSesionsStDevs25_50_75_Group)
+
+DailyStdev25_Color = input.color(color.new(color.teal, 20), title="Daily 2.5", inline = "2", group = DrSesionsStDevs25_50_75_Group)
+DailyStdev50_Color = input.color(color.new(color.teal, 20), title="5.0", inline = "2", group = DrSesionsStDevs25_50_75_Group)
+DailyStdev75_Color = input.color(color.new(color.teal, 20), title="7.5", inline = "2", group = DrSesionsStDevs25_50_75_Group)
+DailyStdev25_50_75_LinesStyleRaw = input.string(defval = "Solid", title = "Style", options = ["Solid", "Dotted", "Dashed"], inline = "2", group = DrSesionsStDevs25_50_75_Group)
+
+WeeklyStdev25_Color = input.color(color.new(color.aqua, 0), title="Weekly 2.5", inline = "3", group = DrSesionsStDevs25_50_75_Group)
+WeeklyStdev50_Color = input.color(color.new(color.aqua, 0), title="5.0", inline = "3", group = DrSesionsStDevs25_50_75_Group)
+WeeklyStdev75_Color = input.color(color.new(color.aqua, 0), title="7.5", inline = "3", group = DrSesionsStDevs25_50_75_Group)
+WeeklyStdev25_50_75_LinesStyleRaw = input.string(defval = "Solid", title = "Style", options = ["Solid", "Dotted", "Dashed"], inline = "3", group = DrSesionsStDevs25_50_75_Group)
+
+MonthlyStdev25_Color = input.color(color.new(color.maroon, 0), title="Monthly 2.5", inline = "4", group = DrSesionsStDevs25_50_75_Group)
+MonthlyStdev50_Color = input.color(color.new(color.maroon, 0), title="5.0", inline = "4", group = DrSesionsStDevs25_50_75_Group)
+MonthlyStdev75_Color = input.color(color.new(color.maroon, 0), title="7.5", inline = "4", group = DrSesionsStDevs25_50_75_Group)
+MonthlyStdev25_50_75_LinesStyleRaw = input.string(defval = "Solid", title = "Style", options = ["Solid", "Dotted", "Dashed"], inline = "4", group = DrSesionsStDevs25_50_75_Group)
+
+
+
+DailyColors_Group = "Daily Colors"
+DailyClusterHighBoxColor = input.color(color.new(color.blue, 90), title="Cluster High", inline = "1", group = DailyColors_Group)
+DailyClusterHighBoxBorderColor = input.color(color.new(color.blue, 70), title="Border", inline = "1", group = DailyColors_Group)
+DailyClusterLowBoxColor = input.color(color.new(color.red, 90), title="Cluster Low", inline = "1", group = DailyColors_Group)
+DailyClusterLowBoxBorderColor = input.color(color.new(color.red, 70), title="Border", inline = "1", group = DailyColors_Group)
+IdrBoxDailyColor = input.color(color.new(color.teal, 90), title="IDR Box", inline = "2", group = DailyColors_Group)
+IdrBoxDailyBorderColor = input.color(color.new(color.teal, 70), title="Border", inline = "2", group = DailyColors_Group)
+IdrDailyLineColor = input.color(color.new(color.teal, 0), title="IDR Line", inline = "2", group = DailyColors_Group)
+IdrDailyLineStyleRaw = input.string(defval = "Solid", title = "Style", options = ["Solid", "Dotted", "Dashed"], inline = "2", group = DailyColors_Group)
+
+ClusterColors_Group = "Cluster Colors"
+ClusterHighBoxColor = input.color(color.new(color.green, 80), title="Cluster High", inline = "1", group = ClusterColors_Group)
+ClusterHighBoxBorderColor = input.color(color.new(color.green, 20), title="Border", inline = "1", group = ClusterColors_Group)
+ClusterLowBoxColor = input.color(color.new(color.red, 80), title=" Cluster Low", inline = "1", group = ClusterColors_Group)
+ClusterLowBoxBorderColor = input.color(color.new(color.red, 20), title="Border", inline = "1", group = ClusterColors_Group)
+IdrDrClusterBoxColor = input.color(color.new(color.gray, 80), title="IDR/DR Cluster Box", inline = "1", group = ClusterColors_Group)
+IdrDrClusterBoxBorderColor = input.color(color.new(color.gray, 20), title="IDR/DR Cluster Box Border", inline = "1", group = ClusterColors_Group)
+
+
+WeeklyColors_Group = "Weekly Colors"
+WeeklyClusterHighBoxColor = input.color(color.new(color.navy, 90), title="Cluster High", inline = "1", group = WeeklyColors_Group)
+WeeklyClusterHighBoxBorderColor = input.color(color.new(color.navy, 70), title="Border", inline = "1", group = WeeklyColors_Group)
+WeeklyClusterLowBoxColor = input.color(color.new(color.maroon, 90), title="Cluster Low", inline = "1", group = WeeklyColors_Group)
+WeeklyClusterLowBoxBorderColor = input.color(color.new(color.maroon, 70), title="Border", inline = "1", group = WeeklyColors_Group)
+IdrBoxWeeklyColor = input.color(color.new(color.aqua, 90), title="IDR Box", inline = "2", group = WeeklyColors_Group)
+IdrBoxWeeklyBorderColor = input.color(color.new(color.aqua, 70), title="Border", inline = "2", group = WeeklyColors_Group)
+IdrWeeklyLineColor = input.color(color.new(color.aqua, 0), title="IDR Line", inline = "2", group = WeeklyColors_Group)
+IdrWeeklyLineStyleRaw = input.string(defval = "Solid", title = "Style", options = ["Solid", "Dotted", "Dashed"], inline = "2", group = WeeklyColors_Group)
+
+MonthlyColors_Group = "Monthly Colors"
+MonthlyClusterHighBoxColor = input.color(color.new(color.blue, 90), title="Cluster High", inline = "1", group = MonthlyColors_Group)
+MonthlyClusterHighBoxBorderColor = input.color(color.new(color.navy, 70), title="Border", inline = "1", group = MonthlyColors_Group)
+MonthlyClusterLowBoxColor = input.color(color.new(color.maroon, 85), title="Cluster Low", inline = "1", group = MonthlyColors_Group)
+MonthlyClusterLowBoxBorderColor = input.color(color.new(color.maroon, 50), title="Border", inline = "1", group = MonthlyColors_Group)
+IdrBoxMonthlyColor = input.color(color.new(color.maroon, 90), title="IDR Box", inline = "2", group = MonthlyColors_Group)
+IdrBoxMonthlyBorderColor = input.color(color.new(color.maroon, 70), title="Border", inline = "2", group = MonthlyColors_Group)
+IdrMonthlyLineColor = input.color(color.new(color.maroon, 0), title="IDR Line", inline = "2", group = MonthlyColors_Group)
+IdrMonthlyLineStyleRaw = input.string(defval = "Solid", title = "Style", options = ["Solid", "Dotted", "Dashed"], inline = "2", group = MonthlyColors_Group)
+
+
+Alerting_Group = "Alerting"
+EnableAlerting = input.bool(title="Enable Alerting", defval=true, group = Alerting_Group, inline = "1")
+EnableRejectionAlerting = input.bool(title="Rejections", defval=true, group = Alerting_Group, inline = "1")
+AlertOnlyOnFreshStdevs = input.bool(title="Fresh", defval=true, group = Alerting_Group, inline = "1")
+EnablePurgeAlerting = input.bool(title="Purges", defval=false, group = Alerting_Group, inline = "1", tooltip = "If the closing price exceeds the positive standard deviation, it indicates a purge. Conversely, if it closes below the negative standard deviation, the same principle applies in the opposite direction.")
+MinimumConcurenStdevsRequired = input.int(1, title="Minimum Concurent Trigger:", minval=1, inline = "2", group = Alerting_Group, tooltip = "Alert Only if N of Fresh Stdevs is Hit Concurently")
+ShowStdevSignal = input.bool(title="Show Signal", defval=false, group = Alerting_Group, inline = "3")
+ShowStdevSignalLabel = input.bool(title="Show Signal Label", defval=false, group = Alerting_Group, inline = "3")
+
+EnableAdrAlerting = input.bool(title="ADR", defval=true, group = Alerting_Group, inline = "4")
+EnableAdrAlerting25 = input.bool(title="2.5", defval=false, group = Alerting_Group, inline = "4")
+EnableAdrAlerting50 = input.bool(title="5.0", defval=true, group = Alerting_Group, inline = "4")
+EnableAdrAlerting75 = input.bool(title="7.5", defval=true, group = Alerting_Group, inline = "4")
+
+EnableOdrAlerting = input.bool(title="ODR", defval=true, group = Alerting_Group, inline = "5")
+EnableOdrAlerting25 = input.bool(title="2.5", defval=false, group = Alerting_Group, inline = "5")
+EnableOdrAlerting50 = input.bool(title="5.0", defval=true, group = Alerting_Group, inline = "5")
+EnableOdrAlerting75 = input.bool(title="7.5", defval=true, group = Alerting_Group, inline = "5")
+
+EnableRdrAlerting = input.bool(title="RDR", defval=true, group = Alerting_Group, inline = "6")
+EnableRdrAlerting25 = input.bool(title="2.5", defval=false, group = Alerting_Group, inline = "6")
+EnableRdrAlerting50 = input.bool(title="5.0", defval=true, group = Alerting_Group, inline = "6")
+EnableRdrAlerting75 = input.bool(title="7.5", defval=true, group = Alerting_Group, inline = "6")
+
+EnableDailyAlerting = input.bool(title="Daily", defval=true, group = Alerting_Group, inline = "7")
+EnableDailyAlerting25 = input.bool(title="2.5", defval=true, group = Alerting_Group, inline = "7")
+EnableDailyAlerting50 = input.bool(title="5.0", defval=true, group = Alerting_Group, inline = "7")
+EnableDailyAlerting75 = input.bool(title="7.5", defval=true, group = Alerting_Group, inline = "7")
+
+EnableWeeklyAlerting = input.bool(title="Weekly", defval=true, group = Alerting_Group, inline = "8")
+EnableWeeklyAlerting25 = input.bool(title="2.5", defval=true, group = Alerting_Group, inline = "8")
+EnableWeeklyAlerting50 = input.bool(title="5.0", defval=true, group = Alerting_Group, inline = "8")
+EnableWeeklyAlerting75 = input.bool(title="7.5", defval=true, group = Alerting_Group, inline = "8")
+
+EnableMonthlyAlerting = input.bool(title="Monthly", defval=true, group = Alerting_Group, inline = "9")
+EnableMonthlyAlerting25 = input.bool(title="2.5", defval=true, group = Alerting_Group, inline = "9")
+EnableMonthlyAlerting50 = input.bool(title="5.0", defval=true, group = Alerting_Group, inline = "9")
+EnableMonthlyAlerting75 = input.bool(title="7.5", defval=true, group = Alerting_Group, inline = "9")
+
+
+
+// Table
+AlertTable_Group = "Alert Table"
+ShowAlertTable = input.bool(title="Show Alert Table", defval=false, group = AlertTable_Group, inline = "8")
+NumberOfPastAlerts = input.int(3, title="Number of Past Alerts", inline = "8", group = AlertTable_Group)
+TableBackgroundColor = input.color(color.new(#888a8a, 100), title="Background Color", group = AlertTable_Group)
+TableTextColor = input.color(color.new(color.gray, 0), title="Text Color", group = AlertTable_Group)
+TableFrameColor = input.color(color.new(color.gray, 75), title="Frame Color", group = AlertTable_Group)
+TableBorderColor = input.color(color.new(color.gray, 75), title="Frame Color", group = AlertTable_Group)
+TableBorderWidth = input.int(1, title="Table Border Width", minval=0, group =AlertTable_Group)
+TableFrameWidth = input.int(1, title="Table Frame Width", minval=0, group = AlertTable_Group)
+TableTextSizeOptions = input.string(defval="Tiny", title="Font Size", options=['Auto', 'Tiny', 'Small', 'Normal', 'Large', 'HUGE'], tooltip="Select Analysis Table Font Size", inline="3", group=AlertTable_Group)
+TableTextSize = TableTextSizeOptions == "Auto" ? size.auto : TableTextSizeOptions == "Tiny" ? size.tiny : TableTextSizeOptions == "Small" ? size.small : TableTextSizeOptions == "Normal" ? size.normal : TableTextSizeOptions == "Large" ? size.large : TableTextSizeOptions == "HUGE" ? size.huge :"End"
+TablePositionRaw = input.string("Bottom Right", options=["Top Left", "Top Center", "Top Right","Middle Left","Middle Center","Middle Right","Bottom Left","Bottom Center","Bottom Right"], inline="3", group=AlertTable_Group, title = "Position")
+TablePosition = TablePositionRaw=="Top Left" ? position.top_left : TablePositionRaw=="Top Center" ? position.top_center : TablePositionRaw=="Top Right" ? position.top_right: TablePositionRaw=="Middle Left" ? position.middle_left : TablePositionRaw=="Middle Center" ? position.middle_center : TablePositionRaw=="Middle Right" ? position.middle_right : TablePositionRaw=="Bottom Left" ? position.bottom_left : TablePositionRaw=="Bottom Center" ? position.bottom_center : position.bottom_right
+
+var Table = table.new(columns = 10, rows = 20, bgcolor = TableBackgroundColor,frame_color = TableFrameColor, border_width = TableBorderWidth, position = TablePosition, frame_width = TableFrameWidth, border_color = TableBorderColor)
+// END Table
+
+var string TradeByDay = na
+var string CurrentDay = na
+
+var sessionOpenPricePrice = 0.0
+var sessionHighCandlePrice = 0.0
+var sessionLowCandlePrice = 0.0
+var SessionRange = 0.0
+var sessionHighPrice = 0.0
+var sessionLowPrice = 0.0
+
+var string ConfirmationDirection = na
+var bool AlreadyConfirmed = false
+
+var int ConfirmationTime = na
+// var string ConfirmationBucket = na
+
+// START Table
+ShowDebugTable = true
+DebugTableBackgroundColor = color.new(color.black, 0)
+DebugTableTextColor = color.new(color.white, 0)
+DebugTableFrameColor = color.new(color.black, 0)
+DebugTableBorderColor = color.new(color.black, 0)
+DebugTableBorderWidth = 1
+DebugTableFrameWidth = 1
+DebugTableTextSize = size.auto
+DebugTablePosition = position.middle_left
+var DebugTable = table.new(columns=15, rows=50, bgcolor=DebugTableBackgroundColor,frame_color=DebugTableFrameColor, border_width=DebugTableBorderWidth, position =  DebugTablePosition, frame_width = DebugTableFrameWidth, border_color = DebugTableBorderColor)
+// END Table
+
+AdrStdevs = array.from(0.5,1.0,2.5,5.0,7.5,8.0,10.0,13.0,17.5,-1.5,-2.0,-3.5,-6.0,-8.5,-9.0,-11.0,-14.0,-18.5)
+OdrStdevs = array.from(0.5,1.0,2.5,5.0,7.5,8.0,10.0,13.0,17.5,-1.5,-2.0,-3.5,-6.0,-8.5,-9.0,-11.0,-14.0,-18.5)
+RdrStdevs = array.from(0.5,1.0,2.5,5.0,7.5,8.0,10.0,13.0,17.5,-1.5,-2.0,-3.5,-6.0,-8.5,-9.0,-11.0,-14.0,-18.5)
+DailyStdevs = array.from(0.5,1.0,2.5,5.0,7.5,8.0,10.0,13.0,17.5,-1.5,-2.0,-3.5,-6.0,-8.5,-9.0,-11.0,-14.0,-18.5)
+WeeklyStdevs = array.from(0.5,1.0,2.5,5.0,7.5,8.0,10.0,13.0,17.5,-1.5,-2.0,-3.5,-6.0,-8.5,-9.0,-11.0,-14.0,-18.5)
+MonthlyStdevs = array.from(0.5,1.0,2.5,5.0,7.5,8.0,10.0,13.0,17.5,-1.5,-2.0,-3.5,-6.0,-8.5,-9.0,-11.0,-14.0,-18.5)
+
+RetracementGrid = array.from(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9)
+
+
+var string IdrHighLowLineStyle = Quant.LineStyle(IdrHighLowLineStyleRaw)
+var string DrHighLowLineStyle = Quant.LineStyle(DrHighLowLineStyleRaw)
+var string StandardDeviationLinesStyle = Quant.LineStyle(StandardDeviationLinesStyleRaw)
+
+var string OpenLineStyle = Quant.LineStyle(OpenLineStyleRaw)
+var string CloseLineStyle = Quant.LineStyle(CloseLineStyleRaw)
+var string IdrMidpointLineStyle = Quant.LineStyle(IdrMidpointLineStyleRaw)
+var string DrMidpointLineStyle = Quant.LineStyle(DrMidpointLineStyleRaw)
+
+var string IdrDailyLineStyle = Quant.LineStyle(IdrDailyLineStyleRaw)
+var string IdrWeeklyLineStyle = Quant.LineStyle(IdrWeeklyLineStyleRaw)
+var string IdrMonthlyLineStyle = Quant.LineStyle(IdrMonthlyLineStyleRaw)
+
+var string DailyStandardDeviationLinesStyle = Quant.LineStyle(DailyStandardDeviationLinesStyleRaw)
+var string MonthlyStandardDeviationLinesStyle = Quant.LineStyle(MonthlyStandardDeviationLinesStyleRaw)
+var string WeeklyStandardDeviationLinesStyle = Quant.LineStyle(WeeklyStandardDeviationLinesStyleRaw)
+
+IntradayStdev25_50_75_LinesStyle = Quant.LineStyle(IntradayStdev25_50_75_LinesStyleRaw)
+DailyStdev25_50_75_LinesStyle = Quant.LineStyle(DailyStdev25_50_75_LinesStyleRaw)
+WeeklyStdev25_50_75_LinesStyle = Quant.LineStyle(WeeklyStdev25_50_75_LinesStyleRaw)
+MonthlyStdev25_50_75_LinesStyle = Quant.LineStyle(MonthlyStdev25_50_75_LinesStyleRaw)
+
+var int NumberOfSessionsToShow = 0
+
+
+var string Session = na
+var string MonitorConfirmation = na
+
+type SessionDataObject
+    string Name
+    string SessionString
+    string SessionConfirmation
+    string SessionState
+    float Open
+    float High
+    float Low
+    float Close
+    float CloseHigh
+    float CloseLow
+    int OpenTime
+    int CloseTime
+    string ConfirmedDirection
+    bool FractalDrawn
+    bool SessionConfirmed
+	string ConfirmationDirection
+    bool ShowMatrixProjections
+    array<Quant.CandleDataObject> ArraySecurity
+
+
+var array<SessionDataObject> ArrayOfSessionDataObjects = array.new<SessionDataObject>()
+var array<Quant.CandleDataObject> ArrayOfEmptyCandleDataObject = array.new<Quant.CandleDataObject>()
+var array<box> ArrayEmptyBox = array.new<box>()
+
+if barstate.isfirst
+    if ShowAdr or ShowDaily
+        array.push(ArrayOfSessionDataObjects, SessionDataObject.new("Adr","1930-2035","2030-0200","NotInSession",na,na,na,na,na,na,na,na,"NA",false,false,na,true,ArrayOfEmptyCandleDataObject)),NumberOfSessionsToShow := NumberOfSessionsToShow+1
+    if ShowOdr
+        array.push(ArrayOfSessionDataObjects, SessionDataObject.new("Odr","0300-0405","0400-0830","NotInSession",na,na,na,na,na,na,na,na,"NA",false,false,na,true,ArrayOfEmptyCandleDataObject)),NumberOfSessionsToShow := NumberOfSessionsToShow+1
+    if ShowRdr or ShowWeekly or ShowMonthly
+        array.push(ArrayOfSessionDataObjects, SessionDataObject.new("Rdr","0930-1035","1030-1600","NotInSession",na,na,na,na,na,na,na,na,"NA",false,false,na,true,ArrayOfEmptyCandleDataObject)),NumberOfSessionsToShow := NumberOfSessionsToShow+1
+
+
+
+type Dr
+    string SessionName
+    line DrHigh
+    line IdrHigh
+    line Open
+    line Close
+    line IdrEq
+    line IdrLow
+    line DrLow
+    box Idr
+    line Midpoint
+    array<Quant.LineLabel> ArrayStdevs
+    array<Quant.LineLabel> ArrayRetracementGrid
+    Quant.BoxWithLine ClusterHigh
+    Quant.BoxWithLine ClusterLow
+    box DrIdrCluster
+    int OpenTime
+    label ConfirmationLabel
+    array<box> ArrayRetracementClusters
+
+var array<Dr> ArrayOfDrs = array.new<Dr>()
+var array<Dr> ArrayOfDailyDrs = array.new<Dr>()
+var array<Dr> ArrayOfWeeklyDrs = array.new<Dr>()
+var array<Dr> ArrayOfMonthlyDrs = array.new<Dr>()
+
+var line DrHighLine = na
+var line IdrHighLine = na
+var line OpenLine = na
+var line CloseLine = na
+var line IdrEqLine = na
+var line IdrLowLine = na
+var line DrLowLine = na
+var box IdrBox = na
+var line MidpointLine = na
+var string SessionBoxDirection = "NA"
+var bool RetracementGridDrawn = false
+var Quant.BoxWithLine ClusterHigh = na
+var Quant.BoxWithLine ClusterLow = na
+
+var Quant.BoxWithLine ClusterHighDaily = na
+var Quant.BoxWithLine ClusterLowDaily = na
+var Quant.BoxWithLine ClusterHighWeekly = na
+var Quant.BoxWithLine ClusterLowWeekly = na
+var Quant.BoxWithLine ClusterHighMonthly = na
+var Quant.BoxWithLine ClusterLowMonthly = na
+var line IdrEqLineDaily = na
+var line IdrEqLineWeekly = na
+var line IdrEqLineMonthly = na
+var box IdrDrBox = na
+var box IdrBoxDaily = na
+var box IdrBoxWeekly = na
+var box IdrBoxMonthly = na
+var int MonthlyOpenTime = na
+var int MonthlyCloseTime = na
+
+var int FirstTimeInLoop = na
+
+
+var bool ShouldProcessDay = false
+
+AdrDay = switch ShowDays
+    "Mon" => "Sun"
+    "Tue" => "Mon"
+    "Wed" => "Tue"
+    "Thu" => "Wed"
+    "Fri" => "Thu"
+    => "All"
+
+
+
+GetAproximatedStartTimeBasedOnTf(int _StartTime, string _Tf) =>
+    int StartTime = na
+    if StartTime % Quant.GetTimeframeInMilliSeconds(_Tf) == 0
+        StartTime := _StartTime
+    else
+        StartTime :=  _StartTime-Quant.GetTimeframeInMilliSeconds(_Tf)
+    StartTime
+
+GetAproximatedEndTimeBasedOnTf(int _EndTime, string _Tf) =>
+    int EndTime = na
+    if EndTime % Quant.GetTimeframeInMilliSeconds(_Tf) == 0
+        EndTime := _EndTime
+    else
+        EndTime := _EndTime+Quant.GetTimeframeInMilliSeconds(_Tf)
+    EndTime
+
+
+
+var bool DST = false
+int HourNY = hour(time, "America/New_York")
+int HourUTC = hour(time, "UTC")
+DST := HourUTC - HourUTC == 5 ? false : true
+DST := HourUTC - HourNY == 5 or HourUTC - HourNY == -19 ? false : HourUTC - HourNY == 4 or HourUTC - HourNY == -20 ? true : false
+
+
+var int TimeOffset = 0
+var int TimeOffsetStart = 0
+
+type MitigationCount
+    int Time
+    bool BelowAbove
+    string Type // "Fresh", "Closed Above/Below"
+
+type ImportantStdevs
+    string SessionName
+    float StdevValue
+    float PriceValue
+    int TimeCreated
+    string Mitigated // "Fresh"
+    array<MitigationCount> MitigationCount
+
+type ImportantStdevsArray
+    array<ImportantStdevs> ArrayStdevs
+
+var array<ImportantStdevsArray> ArrayOfAdrImportantStdevs = array.new<ImportantStdevsArray>()
+var array<ImportantStdevsArray> ArrayOfOdrImportantStdevs = array.new<ImportantStdevsArray>()
+var array<ImportantStdevsArray> ArrayOfRdrImportantStdevs = array.new<ImportantStdevsArray>()
+var array<ImportantStdevsArray> ArrayOfDailyImportantStdevs = array.new<ImportantStdevsArray>()
+var array<ImportantStdevsArray> ArrayOfWeeklyImportantStdevs = array.new<ImportantStdevsArray>()
+var array<ImportantStdevsArray> ArrayOfMonthlyImportantStdevs = array.new<ImportantStdevsArray>()
+
+for i = 0 to ArrayOfSessionDataObjects.size()-1
+    CurrentArtefact = ArrayOfSessionDataObjects.get(i)
+    if CurrentArtefact.Name == "Adr"
+        if syminfo.type == "crypto"
+            if not DST 
+                TimeOffsetStart := -ONE_DAY
+                TimeOffset := -ONE_DAY
+
+            else 
+                TimeOffsetStart := 0 //-ONE_DAY
+                TimeOffset := -ONE_DAY //+ONE_HOUR
+
+
+    else
+        TimeOffsetStart := 0
+        TimeOffset := 0
+
+
+    // table.cell(DebugTable, 0, 5, "DST: " + str.tostring(DST), text_color = DebugTableTextColor, text_size = DebugTableTextSize,text_halign =  text.align_left)
+
+
+    SessionOpenTime = Quant.GetSessionTimes(CurrentArtefact.SessionString, true)+TimeOffsetStart
+    SessionCloseTime = Quant.GetSessionTimes(CurrentArtefact.SessionString, false)+TimeOffset
+    SessionMonitorStartTime = Quant.GetSessionTimes(CurrentArtefact.SessionConfirmation, true)+TimeOffset
+    SessionMonitorEndTime = Quant.GetSessionTimes(CurrentArtefact.SessionConfirmation, false)+TimeOffset
+
+    if CurrentArtefact.Name == "Adr" // and not (syminfo.type == "crypto") and not DST
+        SessionMonitorEndTime := SessionMonitorEndTime+ONE_DAY
+
+        if (syminfo.type == "crypto") and DST
+            if hour(time) < 20 and hour(time) <= 0  
+                SessionOpenTime := SessionOpenTime-ONE_DAY
+
+    // if CurrentArtefact.Name == "Adr"
+    //     table.cell(DebugTable, 0, 0, "StartTime: " + str.format_time(SessionOpenTime, "d-M-yy HH:mm"), text_color = DebugTableTextColor, text_size = DebugTableTextSize,text_halign =  text.align_left)
+    //     table.cell(DebugTable, 0, 1, "SessionCloseTime: " + str.format_time(SessionCloseTime, "d-M-yy HH:mm"), text_color = DebugTableTextColor, text_size = DebugTableTextSize,text_halign =  text.align_left)
+    //     table.cell(DebugTable, 0, 2, "SessionMonitorStartTime: " + str.format_time(SessionMonitorStartTime, "d-M-yy HH:mm"), text_color = DebugTableTextColor, text_size = DebugTableTextSize,text_halign =  text.align_left)
+    //     table.cell(DebugTable, 0, 3, "SessionMonitorEndTime: " + str.format_time(SessionMonitorEndTime, "d-M-yy HH:mm"), text_color = DebugTableTextColor, text_size = DebugTableTextSize,text_halign =  text.align_left)
+
+    //     table.cell(DebugTable, 0, 4, "Time: " + str.format_time(time, "d-M-yy HH:mm"), text_color = DebugTableTextColor, text_size = DebugTableTextSize,text_halign =  text.align_left)
+
+
+    if ShowDays == "All" 
+        ShouldProcessDay := true
+    else if CurrentArtefact.Name == "Adr" and Quant.IsDay(AdrDay)
+        ShouldProcessDay := true
+    else if (CurrentArtefact.Name == "Odr" or CurrentArtefact.Name == "Rdr") and Quant.IsDay(ShowDays)
+        ShouldProcessDay := true
+    else
+        ShouldProcessDay := false
+
+    if time >=GetAproximatedStartTimeBasedOnTf(SessionOpenTime+TimeOffset, timeframe.period) and time <= GetAproximatedEndTimeBasedOnTf(SessionMonitorEndTime-TimeOffset, timeframe.period)
+        CurrentArtefact.ArraySecurity := Quant.GetSecurityCandleData(CurrentArtefact.ArraySecurity, syminfo.tickerid, "5")
+
+
+        if CurrentArtefact.ArraySecurity.size() > 0
+            for j = 0 to CurrentArtefact.ArraySecurity.size()-1
+
+                Obj = CurrentArtefact.ArraySecurity.get(j)
+
+                if Obj.OpenTime == SessionOpenTime
+                    DrHighLine := na
+                    OpenLine := na
+                    IdrEqLine := na
+                    DrLowLine := na
+                    IdrHighLine := na
+                    IdrLowLine := na
+                    MidpointLine := na
+                    IdrBox := na
+                    CurrentArtefact.FractalDrawn := false
+                    CurrentArtefact.SessionConfirmed := false
+                    CurrentArtefact.ConfirmedDirection := "NA"
+                    CurrentArtefact.OpenTime := Obj.OpenTime
+                    CurrentArtefact.Open := Obj.Open
+                    CurrentArtefact.CloseHigh := Obj.Close
+                    CurrentArtefact.CloseLow := Obj.Close
+                    CurrentArtefact.High := Obj.High
+                    CurrentArtefact.Low := Obj.Low
+                    CurrentArtefact.ConfirmationDirection := na
+                    CurrentArtefact.SessionConfirmed := false
+                    ConfirmationTime := na
+                    RetracementGridDrawn := false
+                else if Obj.OpenTime > SessionOpenTime and Obj.CloseTime < SessionCloseTime
+
+                    FirstTimeInLoop := FirstTimeInLoop+1
+                    CurrentArtefact.Close := Obj.Close   
+                    if (CurrentArtefact.CloseHigh < CurrentArtefact.Close)
+                        CurrentArtefact.CloseHigh := CurrentArtefact.Close
+                    if (CurrentArtefact.CloseLow > CurrentArtefact.Close)
+                        CurrentArtefact.CloseLow := CurrentArtefact.Close
+
+                    if (CurrentArtefact.High < Obj.High)
+                        CurrentArtefact.High := Obj.High
+                    if (CurrentArtefact.Low > Obj.Low)
+                        CurrentArtefact.Low := Obj.Low
+
+                    SessionRange := CurrentArtefact.CloseHigh-CurrentArtefact.CloseLow
+
+
+                    if ShouldProcessDay
+                        if FirstTimeInLoop == 1
+                            0
+                        else
+                            line.delete(DrHighLine)
+                            line.delete(OpenLine)
+                            line.delete(IdrEqLine) 
+                            line.delete(DrLowLine)
+                            line.delete(IdrHighLine)
+                            line.delete(IdrLowLine)
+                            line.delete(MidpointLine)
+                            box.delete(IdrBox)
+
+                        int EndTime = SessionMonitorEndTime
+
+                        if SessionExtendType == "OneDay"
+                            if ExtendAdr and CurrentArtefact.Name == "Adr"
+                                EndTime := CurrentArtefact.OpenTime+BaseData.ONE_DAY
+                            else if ExtendOdr and CurrentArtefact.Name == "Odr"
+                                EndTime := CurrentArtefact.OpenTime+BaseData.ONE_DAY
+                            else if ExtendRdr and CurrentArtefact.Name == "Rdr"
+                                EndTime := CurrentArtefact.OpenTime+BaseData.ONE_DAY
+                        else if SessionExtendType == "OneWeek"
+                            if ExtendAdr and CurrentArtefact.Name == "Adr"
+                                EndTime := CurrentArtefact.OpenTime+BaseData.ONE_WEEK
+                            else if ExtendOdr and CurrentArtefact.Name == "Odr"
+                                EndTime := CurrentArtefact.OpenTime+BaseData.ONE_WEEK
+                            else if ExtendRdr and CurrentArtefact.Name == "Rdr"
+                                EndTime := CurrentArtefact.OpenTime+BaseData.ONE_WEEK
+
+                        if ShowIdrLines
+                            IdrHighLine := line.new(CurrentArtefact.OpenTime, CurrentArtefact.CloseHigh,EndTime, CurrentArtefact.CloseHigh,color = IdrHighLowLineColor ,style = IdrHighLowLineStyle, width = 1, xloc = xloc.bar_time)
+                            IdrLowLine := line.new(CurrentArtefact.OpenTime, CurrentArtefact.CloseLow,EndTime, CurrentArtefact.CloseLow,color = IdrHighLowLineColor ,style = IdrHighLowLineStyle, width = 1, xloc = xloc.bar_time)
+                        if ShowDrLines
+                            DrHighLine := line.new(CurrentArtefact.OpenTime, CurrentArtefact.High,EndTime, CurrentArtefact.High,color = DrHighLowLineColor ,style = DrHighLowLineStyle, width = 1, xloc = xloc.bar_time)
+                            DrLowLine := line.new(CurrentArtefact.OpenTime, CurrentArtefact.Low,EndTime, CurrentArtefact.Low,color = DrHighLowLineColor ,style = DrHighLowLineStyle, width = 1, xloc = xloc.bar_time)
+                        if ShowOpenLine
+                            OpenLine := line.new(CurrentArtefact.OpenTime, CurrentArtefact.Open,EndTime, CurrentArtefact.Open,color =  OpenLineColor,style = OpenLineStyle, width = 1, xloc = xloc.bar_time)
+                        if ShowIdrMidpoint
+                            IdrEqLine := line.new(CurrentArtefact.OpenTime, CurrentArtefact.CloseLow+(SessionRange/2),EndTime,  CurrentArtefact.CloseLow+(SessionRange/2),color =  IdrMidpointLineColor,style = IdrMidpointLineStyle, width = 1, xloc = xloc.bar_time)  
+                        if ShowDrMidpoint
+                            MidpointLine := line.new(CurrentArtefact.OpenTime, CurrentArtefact.Low+(CurrentArtefact.High- CurrentArtefact.Low)/2,EndTime, CurrentArtefact.Low+(CurrentArtefact.High - CurrentArtefact.Low)/2,color = DrMidpointLineColor ,style = DrMidpointLineStyle, width = 1, xloc = xloc.bar_time)
+                        if ShowIdrBox
+                            color BoxColor = na
+                            int CloseTime = SessionCloseTime
+                            // if syminfo.type == "crypto" and CurrentArtefact.Name == "Adr"
+                            //     CloseTime := CloseTime-BaseData.ONE_DAY
+
+                            if Obj.Close > CurrentArtefact.Open
+                                BoxColor := IdrUpBoxColor
+                                SessionBoxDirection := "Bull"
+                            else if Obj.Close < CurrentArtefact.Open
+                                BoxColor := IdrDownBoxColor
+                                SessionBoxDirection := "Bear"
+                            else
+                                BoxColor := IdrNeutralBoxColor  
+                                SessionBoxDirection := "Neutral"            
+                            IdrBox := box.new(CurrentArtefact.OpenTime, CurrentArtefact.CloseHigh, CloseTime, CurrentArtefact.CloseLow, border_width=1, bgcolor = BoxColor,border_color=color.new(color.black, 100), xloc = xloc.bar_time)
+
+
+                        if not(ShowRdr) and CurrentArtefact.Name == "Rdr" 
+                            line.delete(DrHighLine)
+                            line.delete(OpenLine)
+                            line.delete(CloseLine)
+                            line.delete(IdrEqLine) 
+                            line.delete(DrLowLine)
+                            line.delete(IdrHighLine)
+                            line.delete(IdrLowLine)
+                            line.delete(MidpointLine)
+                            box.delete(IdrBox)
+                            box.delete(IdrDrBox)
+                            if not na(ClusterHigh)
+                                box.delete(ClusterHigh.Box)
+                                line.delete(ClusterHigh.Line)
+                                box.delete(ClusterLow.Box)
+                                line.delete(ClusterLow.Line)
+
+
+
+
+
+                else if Obj.CloseTime == SessionCloseTime and not CurrentArtefact.FractalDrawn 
+                    if ShouldProcessDay
+                        CurrentArtefact.FractalDrawn  := true
+
+                        int EndTime = SessionMonitorEndTime
+                        int Extend = BaseData.ONE_DAY
+                        if SessionExtendType == "OneDay" or SessionExtendType == "OneWeek"
+                            if CurrentArtefact.Name == "Odr" and Quant.IsDay("Fri") 
+                                Extend := BaseData.ONE_DAY*3
+                                if ExtendOdr
+                                    if ShowIdrLines
+
+                                        line.set_x2(IdrHighLine,CurrentArtefact.OpenTime+Extend)
+                                        line.set_x2(IdrLowLine,CurrentArtefact.OpenTime+Extend)
+                                    if ShowDrLines
+                                        line.set_x2(DrHighLine,CurrentArtefact.OpenTime+Extend)
+                                        line.set_x2(DrLowLine,CurrentArtefact.OpenTime+Extend)
+                                    if ShowOpenLine
+                                        line.set_x2(OpenLine,CurrentArtefact.OpenTime+Extend)
+                                if CurrentArtefact.Name == "Rdr" and Quant.IsDay("Fri")
+                                    Extend := BaseData.ONE_DAY*3
+                                    if ExtendRdr
+                                        if ShowIdrLines
+                                            line.set_x2(IdrHighLine,CurrentArtefact.OpenTime+Extend)
+                                            line.set_x2(IdrLowLine,CurrentArtefact.OpenTime+Extend)
+                                        if ShowDrLines
+                                            line.set_x2(DrHighLine,CurrentArtefact.OpenTime+Extend)
+                                            line.set_x2(DrLowLine,CurrentArtefact.OpenTime+Extend)
+                                        if ShowOpenLine
+                                            line.set_x2(OpenLine,CurrentArtefact.OpenTime+Extend)
+
+
+                                else if CurrentArtefact.Name == "Adr" and Quant.IsDay("Thu")
+                                    Extend := BaseData.ONE_DAY*3
+                                    if ExtendAdr
+                                        if ShowIdrLines
+                                            line.set_x2(IdrHighLine,CurrentArtefact.OpenTime+Extend)
+                                            line.set_x2(IdrLowLine,CurrentArtefact.OpenTime+Extend)
+                                        if ShowDrLines
+                                            line.set_x2(DrHighLine,CurrentArtefact.OpenTime+Extend)
+                                            line.set_x2(DrLowLine,CurrentArtefact.OpenTime+Extend)
+                                        if ShowOpenLine
+                                            line.set_x2(OpenLine,CurrentArtefact.OpenTime+Extend)
+                                else if SessionExtendType == "OneWeek"
+                                    Extend := BaseData.ONE_WEEK
+                                
+                                if ExtendAdr and CurrentArtefact.Name == "Adr"
+                                    EndTime := CurrentArtefact.OpenTime+Extend
+                                else if ExtendOdr and CurrentArtefact.Name == "Odr"
+                                    EndTime := CurrentArtefact.OpenTime+Extend
+                                else if ExtendRdr and CurrentArtefact.Name == "Rdr"
+                                    EndTime := CurrentArtefact.OpenTime+Extend
+                        // if syminfo.type == "crypto" and CurrentArtefact.Name == "Adr" and DST
+                        //     EndTime := EndTime-BaseData.ONE_DAY
+
+                        if ShowCloseLine
+                            CloseLine := line.new(SessionCloseTime, CurrentArtefact.Close,EndTime, CurrentArtefact.Close,color =  CloseLineColor,style = CloseLineStyle, width = 1, xloc = xloc.bar_time)
+
+                        if ShowSessionClusters
+                            BoxHigh =  box.new(CurrentArtefact.OpenTime,CurrentArtefact.CloseHigh,EndTime,CurrentArtefact.High, border_width=1, bgcolor = ClusterHighBoxColor,border_color = ClusterHighBoxBorderColor, xloc = xloc.bar_time)
+                            LineHigh = line.new(CurrentArtefact.OpenTime,CurrentArtefact.CloseHigh+(CurrentArtefact.High-CurrentArtefact.CloseHigh)/2,EndTime, CurrentArtefact.CloseHigh+(CurrentArtefact.High-CurrentArtefact.CloseHigh)/2,color =  ClusterHighBoxBorderColor,style = line.style_dashed, width = 1, xloc = xloc.bar_time)
+                            BoxLow =  box.new(CurrentArtefact.OpenTime,CurrentArtefact.Low,EndTime,CurrentArtefact.CloseLow, border_width=1, bgcolor = ClusterLowBoxColor,border_color = ClusterLowBoxBorderColor, xloc = xloc.bar_time)
+                            LineLow = line.new(CurrentArtefact.OpenTime,CurrentArtefact.CloseLow+(CurrentArtefact.Low-CurrentArtefact.CloseLow)/2,EndTime, CurrentArtefact.CloseLow+(CurrentArtefact.Low-CurrentArtefact.CloseLow)/2,color =  ClusterLowBoxBorderColor,style = line.style_dashed, width = 1, xloc = xloc.bar_time)
+                            ClusterHigh := Quant.BoxWithLine.new(BoxHigh,LineHigh)
+                            ClusterLow := Quant.BoxWithLine.new(BoxLow,LineLow)
+                        if ShowIdrDrAsCluster
+                            IdrDrBox := box.new(CurrentArtefact.OpenTime,CurrentArtefact.Low+(CurrentArtefact.High-CurrentArtefact.Low)/2,EndTime,CurrentArtefact.CloseLow+(SessionRange/2), border_width=1, bgcolor = IdrDrClusterBoxColor,border_color = IdrDrClusterBoxBorderColor, xloc = xloc.bar_time)
+
+                        LastObject = Dr.new(CurrentArtefact.Name,DrHighLine,IdrHighLine, OpenLine, CloseLine, IdrEqLine, IdrLowLine, DrLowLine, IdrBox, MidpointLine,array.new<Quant.LineLabel>(),array.new<Quant.LineLabel>(),ClusterHigh,ClusterLow,IdrDrBox,CurrentArtefact.OpenTime,na)
+                        array.push(ArrayOfDrs, LastObject) 
+
+                        if ShowStDevs and not (CurrentArtefact.Name == "Adr" and ShowDaily)
+
+                            array<float> Stdevs = array.new<float>()
+                            string AdditionalStDevs = na
+                            if CurrentArtefact.Name == "Adr"
+                                Stdevs := AdrStdevs
+                                AdditionalStDevs := AdditionalStDevsAdr
+                            else if CurrentArtefact.Name == "Odr"
+                                Stdevs := AdrStdevs
+                                AdditionalStDevs := AdditionalStDevsOdr
+                            else if CurrentArtefact.Name == "Rdr"
+                                Stdevs := RdrStdevs    
+                                AdditionalStDevs := AdditionalStDevsRdr
+
+
+                            ArrayOfAdditionalStdevs = str.split(AdditionalStDevs, ",")
+                            if array.size(ArrayOfAdditionalStdevs) > 0
+                                for k = 0 to array.size(ArrayOfAdditionalStdevs)-1
+
+                                    FloatStdev = float(str.tonumber(array.get(ArrayOfAdditionalStdevs, k)))
+                                    if FloatStdev < 0
+                                        FloatStdev := FloatStdev-1
+                                    array.push(Stdevs, FloatStdev)
+
+
+
+                            TempStdevArray = array.new<ImportantStdevs>()
+                            if array.size(Stdevs) > 0
+                                for k = 0 to array.size(Stdevs)-1
+                                    CurrentStdev = array.get(Stdevs,k)
+                                    RealStdevValue = array.get(Stdevs,k)
+                                    string Label = ""
+
+                                    if ShowLineLabels
+                                        if CurrentStdev < 0
+                                            Label := str.tostring(CurrentStdev+1)
+                                            RealStdevValue := CurrentStdev+1
+                                        else
+                                            Label := str.tostring(CurrentStdev)
+                                        if not(str.contains(Label, "."))
+                                            Label := Label + ".0"
+
+
+
+                                    color StdevColor = StandardDeviationLinesColor
+                                    string LineStyle = StandardDeviationLinesStyle
+                                    if RealStdevValue == 2.5 or RealStdevValue == -2.5
+                                        StdevColor := IntradayStdev25_Color
+                                        LineStyle := IntradayStdev25_50_75_LinesStyle
+                                        if EnableAlerting and not((CurrentArtefact.Name == "Adr") and ShowDaily)
+                                            AddToArray = false
+                                            if CurrentArtefact.Name == "Adr" and EnableAdrAlerting25
+                                                AddToArray := true
+                                            else if CurrentArtefact.Name == "Odr" and EnableOdrAlerting25
+                                                AddToArray := true
+                                            else if CurrentArtefact.Name == "Rdr" and EnableRdrAlerting25
+                                                AddToArray := true
+
+                                            if AddToArray
+                                                TempStdevArray.push(ImportantStdevs.new(CurrentArtefact.Name, RealStdevValue, CurrentArtefact.CloseHigh+SessionRange*CurrentStdev,time,"Fresh",na))
+
+                                    else if RealStdevValue == 5.0 or RealStdevValue == -5.0
+                                        StdevColor := IntradayStdev50_Color
+                                        LineStyle := IntradayStdev25_50_75_LinesStyle
+                                        if EnableAlerting and not((CurrentArtefact.Name == "Adr") and ShowDaily)
+                                            AddToArray = false
+                                            if CurrentArtefact.Name == "Adr" and EnableAdrAlerting50
+                                                AddToArray := true
+                                            else if CurrentArtefact.Name == "Odr" and EnableOdrAlerting50
+                                                AddToArray := true
+                                            else if CurrentArtefact.Name == "Rdr" and EnableRdrAlerting50
+                                                AddToArray := true
+                                                
+                                            if AddToArray
+                                                TempStdevArray.push(ImportantStdevs.new(CurrentArtefact.Name, RealStdevValue, CurrentArtefact.CloseHigh+SessionRange*CurrentStdev,time,"Fresh",na))
+
+                                    else if RealStdevValue == 7.5 or RealStdevValue == -7.5
+                                        StdevColor := IntradayStdev75_Color
+                                        LineStyle := IntradayStdev25_50_75_LinesStyle
+                                        if EnableAlerting and not((CurrentArtefact.Name == "Adr") and ShowDaily) 
+                                            AddToArray = false
+                                            if CurrentArtefact.Name == "Adr" and EnableAdrAlerting75
+                                                AddToArray := true
+                                            else if CurrentArtefact.Name == "Odr" and EnableOdrAlerting75
+                                                AddToArray := true
+                                            else if CurrentArtefact.Name == "Rdr" and EnableRdrAlerting75
+                                                AddToArray := true
+                                                
+                                            if AddToArray
+                                                TempStdevArray.push(ImportantStdevs.new(CurrentArtefact.Name, RealStdevValue, CurrentArtefact.CloseHigh+SessionRange*CurrentStdev,time,"Fresh",na))
+
+                                    Line = line.new(CurrentArtefact.OpenTime, CurrentArtefact.CloseHigh+SessionRange*CurrentStdev,EndTime, CurrentArtefact.CloseHigh+SessionRange*CurrentStdev,color =  StdevColor, style = LineStyle, width = 1, xloc = xloc.bar_time)
+                                    LabelLine = label.new(EndTime, CurrentArtefact.CloseHigh+SessionRange*CurrentStdev, Label, style = label.style_label_left, xloc = xloc.bar_time, color =color.new(color.green, 100), textcolor = StdevColor, size =size.small)
+                                    array.push(LastObject.ArrayStdevs, Quant.LineLabel.new(Line,LabelLine))
+                            if EnableAlerting and CurrentArtefact.Name == "Adr" and not ShowDaily and EnableAdrAlerting 
+                                ArrayOfAdrImportantStdevs.push(ImportantStdevsArray.new(TempStdevArray))
+                            else if EnableAlerting and CurrentArtefact.Name == "Odr" and EnableOdrAlerting
+                                ArrayOfOdrImportantStdevs.push(ImportantStdevsArray.new(TempStdevArray))
+                            else if EnableAlerting and CurrentArtefact.Name == "Rdr" and EnableRdrAlerting
+                                ArrayOfRdrImportantStdevs.push(ImportantStdevsArray.new(TempStdevArray))
+
+
+                        if not(ShowRdr) and CurrentArtefact.Name == "Rdr" 
+                            line.delete(DrHighLine)
+                            line.delete(OpenLine)
+                            line.delete(CloseLine)
+                            line.delete(IdrEqLine) 
+                            line.delete(DrLowLine)
+                            line.delete(IdrHighLine)
+                            line.delete(IdrLowLine)
+                            line.delete(MidpointLine)
+                            box.delete(IdrBox)
+                            box.delete(IdrDrBox)
+                            if not na(ClusterHigh)
+                                box.delete(ClusterHigh.Box)
+                                line.delete(ClusterHigh.Line)
+                                box.delete(ClusterLow.Box)
+                                line.delete(ClusterLow.Line)
+                            if ShowStDevs
+                                if array.size(LastObject.ArrayStdevs) > 0
+                                    
+                                    for k = 0 to array.size(LastObject.ArrayStdevs)-1
+                                        Stdev = array.get(LastObject.ArrayStdevs,k)
+                                        line.delete(Stdev.Line)
+                                        label.delete(Stdev.Label)
+
+
+                    if ShowDaily and CurrentArtefact.Name == "Adr"
+                        TempStdevArray = array.new<ImportantStdevs>()
+                        if ShowDailyClusters
+                            BoxHighDaily =  box.new(CurrentArtefact.OpenTime,CurrentArtefact.High,CurrentArtefact.OpenTime+BaseData.ONE_WEEK,CurrentArtefact.CloseHigh, border_width=1, bgcolor = DailyClusterHighBoxColor,border_color = DailyClusterHighBoxBorderColor, xloc = xloc.bar_time)
+                            LineHighDaily = line.new(CurrentArtefact.OpenTime,CurrentArtefact.CloseHigh+(CurrentArtefact.High-CurrentArtefact.CloseHigh)/2,CurrentArtefact.OpenTime+BaseData.ONE_WEEK, CurrentArtefact.CloseHigh+(CurrentArtefact.High-CurrentArtefact.CloseHigh)/2,color =  DailyClusterHighBoxBorderColor,style = line.style_dashed, width = 1, xloc = xloc.bar_time)
+                            BoxLowDaily =  box.new(CurrentArtefact.OpenTime,CurrentArtefact.Low,CurrentArtefact.OpenTime+BaseData.ONE_WEEK,CurrentArtefact.CloseLow, border_width=1, bgcolor = DailyClusterLowBoxColor,border_color = DailyClusterLowBoxBorderColor, xloc = xloc.bar_time)
+                            LineLowDaily = line.new(CurrentArtefact.OpenTime,CurrentArtefact.CloseLow+(CurrentArtefact.Low-CurrentArtefact.CloseLow)/2,CurrentArtefact.OpenTime+BaseData.ONE_WEEK, CurrentArtefact.CloseLow+(CurrentArtefact.Low-CurrentArtefact.CloseLow)/2,color =  DailyClusterLowBoxBorderColor,style = line.style_dashed, width = 1, xloc = xloc.bar_time)
+                            ClusterHighDaily := Quant.BoxWithLine.new(BoxHighDaily,LineHighDaily)
+                            ClusterLowDaily := Quant.BoxWithLine.new(BoxLowDaily,LineLowDaily)
+                        if ShowDailyBox
+                            Text = ""
+                            if ShowBoxLabels
+                                Text := "1D"
+                            IdrBoxDaily := box.new(CurrentArtefact.OpenTime, CurrentArtefact.CloseHigh, CurrentArtefact.OpenTime+BaseData.ONE_WEEK, CurrentArtefact.CloseLow, border_width=1, bgcolor = IdrBoxDailyColor,border_color=IdrBoxDailyBorderColor, xloc = xloc.bar_time, text = Text, text_color = IdrBoxDailyBorderColor, text_halign = text.align_right, text_valign = text.align_center, text_size = size.auto)
+                        if ShowDailyIdrMidpoint
+                            IdrEqLineDaily := line.new(CurrentArtefact.OpenTime, CurrentArtefact.Low+(CurrentArtefact.High-CurrentArtefact.Low)/2,CurrentArtefact.OpenTime+BaseData.ONE_WEEK, CurrentArtefact.Low+(CurrentArtefact.High-CurrentArtefact.Low)/2,color = IdrDailyLineColor ,style = IdrDailyLineStyle, width = 1, xloc = xloc.bar_time)
+
+                        LastDailyObject = Dr.new("Daily",na,na, na, na, IdrEqLineDaily, na, na, IdrBoxDaily,na,array.new<Quant.LineLabel>(),array.new<Quant.LineLabel>(),ClusterHighDaily,ClusterLowDaily,na,CurrentArtefact.OpenTime,na)
+                        array.push(ArrayOfDailyDrs, LastDailyObject)
+
+                        if ShowDailyStDevs
+                            LastDailyArtafact = array.get(ArrayOfDailyDrs, array.size(ArrayOfDailyDrs)-1)
+                            Stdevs = DailyStdevs
+                            AdditionalStDevs = AdditionalStDevsDaily
+                            ArrayOfAdditionalStdevs = str.split(AdditionalStDevs, ",")
+                            if array.size(ArrayOfAdditionalStdevs) > 0
+                                for k = 0 to array.size(ArrayOfAdditionalStdevs)-1
+
+                                    FloatStdev = float(str.tonumber(array.get(ArrayOfAdditionalStdevs, k)))
+                                    if FloatStdev < 0
+                                        FloatStdev := FloatStdev-1
+                                    array.push(Stdevs, FloatStdev)
+                            if array.size(Stdevs) > 0
+                                for k = 0 to array.size(Stdevs)-1
+                                    CurrentStdev = array.get(Stdevs,k)
+                                    RealStdevValue = array.get(Stdevs,k)
+                                    string Label = ""
+                                    if ShowLineLabels
+                                        if CurrentStdev < 0
+                                            Label := str.tostring(CurrentStdev+1)
+                                            RealStdevValue := CurrentStdev+1
+                                        else
+                                            Label := str.tostring(CurrentStdev)
+                                        if not(str.contains(Label, "."))
+                                            Label := Label + ".0"
+
+                                    color StdevColor = DailyStandardDeviationsColor
+                                    string LineStyle = DailyStandardDeviationLinesStyle
+                                    if RealStdevValue == 2.5 or RealStdevValue == -2.5
+                                        StdevColor := DailyStdev25_Color
+                                        LineStyle := DailyStdev25_50_75_LinesStyle
+                                        if EnableAlerting and EnableDailyAlerting and EnableDailyAlerting25
+                                            TempStdevArray.push(ImportantStdevs.new("Daily", RealStdevValue, CurrentArtefact.CloseHigh+SessionRange*CurrentStdev,time,"Fresh",na))
+                                    else if RealStdevValue == 5.0 or RealStdevValue == -5.0
+                                        StdevColor := DailyStdev50_Color
+                                        LineStyle := DailyStdev25_50_75_LinesStyle
+                                        if EnableAlerting and EnableDailyAlerting and EnableDailyAlerting50
+                                            TempStdevArray.push(ImportantStdevs.new("Daily", RealStdevValue, CurrentArtefact.CloseHigh+SessionRange*CurrentStdev,time,"Fresh",na))
+                                    else if RealStdevValue == 7.5 or RealStdevValue == -7.5
+                                        StdevColor := DailyStdev75_Color
+                                        LineStyle := DailyStdev25_50_75_LinesStyle                    
+                                        if EnableAlerting and EnableDailyAlerting and EnableDailyAlerting75
+                                            TempStdevArray.push(ImportantStdevs.new("Daily", RealStdevValue, CurrentArtefact.CloseHigh+SessionRange*CurrentStdev,time,"Fresh",na))
+    
+                                    LineDaily = line.new(CurrentArtefact.OpenTime, CurrentArtefact.CloseHigh+SessionRange*CurrentStdev,CurrentArtefact.OpenTime+BaseData.ONE_WEEK, CurrentArtefact.CloseHigh+SessionRange*CurrentStdev,color =  StdevColor, style = LineStyle, width = 1, xloc = xloc.bar_time)
+                                    LabelLineDaily = label.new(CurrentArtefact.OpenTime+BaseData.ONE_WEEK, CurrentArtefact.CloseHigh+SessionRange*CurrentStdev, Label, style = label.style_label_left, xloc = xloc.bar_time, color =color.new(color.green, 100), textcolor = StdevColor, size =size.small)
+                                    array.push(LastDailyArtafact.ArrayStdevs, Quant.LineLabel.new(LineDaily,LabelLineDaily))
+                            if EnableAlerting and EnableDailyAlerting
+                                ArrayOfDailyImportantStdevs.push(ImportantStdevsArray.new(TempStdevArray))
+
+                    if ShowWeekly and Quant.IsDay("Tue") and CurrentArtefact.Name == "Rdr"
+                        TempStdevArray = array.new<ImportantStdevs>()
+                        if ShowWeeklyClusters
+                            BoxHighWeekly =  box.new(CurrentArtefact.OpenTime,CurrentArtefact.High,CurrentArtefact.OpenTime+BaseData.ONE_WEEK,CurrentArtefact.CloseHigh, border_width=1, bgcolor = WeeklyClusterHighBoxColor,border_color = WeeklyClusterHighBoxBorderColor, xloc = xloc.bar_time)
+                            LineHighWeekly = line.new(CurrentArtefact.OpenTime,CurrentArtefact.CloseHigh+(CurrentArtefact.High-CurrentArtefact.CloseHigh)/2,CurrentArtefact.OpenTime+BaseData.ONE_WEEK, CurrentArtefact.CloseHigh+(CurrentArtefact.High-CurrentArtefact.CloseHigh)/2,color =  WeeklyClusterHighBoxBorderColor,style = line.style_dashed, width = 1, xloc = xloc.bar_time)
+                            BoxLowWeekly =  box.new(CurrentArtefact.OpenTime,CurrentArtefact.Low,CurrentArtefact.OpenTime+BaseData.ONE_WEEK,CurrentArtefact.CloseLow, border_width=1, bgcolor = WeeklyClusterLowBoxColor,border_color = WeeklyClusterLowBoxBorderColor, xloc = xloc.bar_time)
+                            LineLowWeekly = line.new(CurrentArtefact.OpenTime,CurrentArtefact.CloseLow+(CurrentArtefact.Low-CurrentArtefact.CloseLow)/2,CurrentArtefact.OpenTime+BaseData.ONE_WEEK, CurrentArtefact.CloseLow+(CurrentArtefact.Low-CurrentArtefact.CloseLow)/2,color =  WeeklyClusterLowBoxBorderColor,style = line.style_dashed, width = 1, xloc = xloc.bar_time)
+                            ClusterHighWeekly := Quant.BoxWithLine.new(BoxHighWeekly,LineHighWeekly)
+                            ClusterLowWeekly := Quant.BoxWithLine.new(BoxLowWeekly,LineLowWeekly)
+                        if ShowWeeklyBox
+                            Text = ""
+                            if ShowBoxLabels
+                                Text := "1W"
+                            IdrBoxWeekly := box.new(CurrentArtefact.OpenTime, CurrentArtefact.CloseHigh, CurrentArtefact.OpenTime+BaseData.ONE_WEEK, CurrentArtefact.CloseLow, border_width=1, bgcolor = IdrBoxWeeklyColor,border_color=IdrBoxWeeklyBorderColor, xloc = xloc.bar_time, text = Text, text_color = IdrBoxWeeklyBorderColor, text_halign = text.align_right, text_valign = text.align_center, text_size = size.auto)
+                        if ShowWeeklyIdrMidpoint
+                            IdrEqLineWeekly := line.new(CurrentArtefact.OpenTime, CurrentArtefact.Low+(CurrentArtefact.High-CurrentArtefact.Low)/2,CurrentArtefact.OpenTime+BaseData.ONE_WEEK, CurrentArtefact.Low+(CurrentArtefact.High-CurrentArtefact.Low)/2,color = IdrWeeklyLineColor ,style = IdrWeeklyLineStyle, width = 1, xloc = xloc.bar_time)
+
+                        LastWeeklyObject = Dr.new("Weekly",na,na, na, na, IdrEqLineWeekly, na, na, IdrBoxWeekly,na,array.new<Quant.LineLabel>(),array.new<Quant.LineLabel>(),ClusterHighWeekly,ClusterLowWeekly,na,CurrentArtefact.OpenTime,na)
+                        array.push(ArrayOfWeeklyDrs, LastWeeklyObject)
+
+                        if ShowWeeklyStDevs
+                            LastWeeklyArtafact = array.get(ArrayOfWeeklyDrs, array.size(ArrayOfWeeklyDrs)-1)
+                            Stdevs = WeeklyStdevs
+                            AdditionalStDevs = AdditionalStDevsWeekly
+                            ArrayOfAdditionalStdevs = str.split(AdditionalStDevs, ",")
+                            if array.size(ArrayOfAdditionalStdevs) > 0
+                                for k = 0 to array.size(ArrayOfAdditionalStdevs)-1
+
+                                    FloatStdev = float(str.tonumber(array.get(ArrayOfAdditionalStdevs, k)))
+                                    if FloatStdev < 0
+                                        FloatStdev := FloatStdev-1
+                                    array.push(Stdevs, FloatStdev)
+                            if array.size(Stdevs) > 0
+                                for k = 0 to array.size(Stdevs)-1
+                                    CurrentStdev = array.get(Stdevs,k)
+                                    RealStdevValue = array.get(Stdevs,k)
+                                    string Label = ""
+                                    if OffsetWeeklyAndMonthlyStdevs
+                                        Label := "    "
+
+                                    if ShowLineLabels
+                                        if CurrentStdev < 0
+                                            Label := Label + str.tostring(CurrentStdev+1)
+                                            RealStdevValue := CurrentStdev+1
+                                        else
+                                            Label := Label + str.tostring(CurrentStdev)
+                                        if not(str.contains(Label, "."))
+                                            Label := Label + ".0"
+
+                                    color StdevColor = WeeklyStandardDeviationsColor
+                                    string LineStyle = WeeklyStandardDeviationLinesStyle
+                                    if RealStdevValue == 2.5 or RealStdevValue == -2.5
+                                        StdevColor := WeeklyStdev25_Color
+                                        LineStyle := WeeklyStdev25_50_75_LinesStyle
+                                        if EnableAlerting and EnableWeeklyAlerting and EnableWeeklyAlerting25
+                                            TempStdevArray.push(ImportantStdevs.new("Weekly", RealStdevValue, CurrentArtefact.CloseHigh+SessionRange*CurrentStdev,time,"Fresh",na))    
+                                    else if RealStdevValue == 5.0 or RealStdevValue == -5.0
+                                        StdevColor := WeeklyStdev50_Color
+                                        LineStyle := WeeklyStdev25_50_75_LinesStyle
+                                        if EnableAlerting and EnableWeeklyAlerting and EnableWeeklyAlerting50
+                                            TempStdevArray.push(ImportantStdevs.new("Weekly", RealStdevValue, CurrentArtefact.CloseHigh+SessionRange*CurrentStdev,time,"Fresh",na))        
+                                    else if RealStdevValue == 7.5 or RealStdevValue == -7.5
+                                        StdevColor := WeeklyStdev75_Color
+                                        LineStyle := WeeklyStdev25_50_75_LinesStyle                   
+                                        if EnableAlerting and EnableWeeklyAlerting and EnableWeeklyAlerting75
+                                            TempStdevArray.push(ImportantStdevs.new("Weekly", RealStdevValue, CurrentArtefact.CloseHigh+SessionRange*CurrentStdev,time,"Fresh",na))        
+
+                                    LineWeekly = line.new(CurrentArtefact.OpenTime, CurrentArtefact.CloseHigh+SessionRange*CurrentStdev,CurrentArtefact.OpenTime+BaseData.ONE_WEEK, CurrentArtefact.CloseHigh+SessionRange*CurrentStdev,color =  StdevColor, style = LineStyle, width = 1, xloc = xloc.bar_time)
+                                    LabelLineWeekly = label.new(CurrentArtefact.OpenTime+BaseData.ONE_WEEK, CurrentArtefact.CloseHigh+SessionRange*CurrentStdev, Label, style = label.style_label_left, xloc = xloc.bar_time, color =color.new(color.green, 100), textcolor = StdevColor, size =size.small)
+                                    array.push(LastWeeklyArtafact.ArrayStdevs, Quant.LineLabel.new(LineWeekly,LabelLineWeekly))
+                            if EnableAlerting and EnableWeeklyAlerting
+                                ArrayOfWeeklyImportantStdevs.push(ImportantStdevsArray.new(TempStdevArray))
+
+                    if ShowMonthly and Quant.IsDay("Thu") and dayofmonth <= 7 and CurrentArtefact.Name == "Rdr"
+                        TempStdevArray = array.new<ImportantStdevs>()
+                        MonthlyOpenTime := CurrentArtefact.OpenTime
+                        MonthlyCloseTime := Quant.GetTimeOfNextThursdayOfMonth(MonthlyOpenTime)
+
+                        if ShowMonthlyClusters
+                            BoxHighMonthly =  box.new(CurrentArtefact.OpenTime,CurrentArtefact.High,MonthlyCloseTime,CurrentArtefact.CloseHigh, border_width=1, bgcolor = MonthlyClusterHighBoxColor,border_color = MonthlyClusterHighBoxBorderColor, xloc = xloc.bar_time)
+                            LineHighMonthly = line.new(CurrentArtefact.OpenTime,CurrentArtefact.CloseHigh+(CurrentArtefact.High-CurrentArtefact.CloseHigh)/2,MonthlyCloseTime, CurrentArtefact.CloseHigh+(CurrentArtefact.High-CurrentArtefact.CloseHigh)/2,color =  MonthlyClusterHighBoxBorderColor,style = line.style_dashed, width = 1, xloc = xloc.bar_time)
+                            BoxLowMonthly =  box.new(CurrentArtefact.OpenTime,CurrentArtefact.Low,MonthlyCloseTime,CurrentArtefact.CloseLow, border_width=1, bgcolor = MonthlyClusterLowBoxColor,border_color = MonthlyClusterLowBoxBorderColor, xloc = xloc.bar_time)
+                            LineLowMonthly = line.new(CurrentArtefact.OpenTime,CurrentArtefact.CloseLow+(CurrentArtefact.Low-CurrentArtefact.CloseLow)/2,MonthlyCloseTime, CurrentArtefact.CloseLow+(CurrentArtefact.Low-CurrentArtefact.CloseLow)/2,color =  MonthlyClusterLowBoxBorderColor,style = line.style_dashed, width = 1, xloc = xloc.bar_time)
+                            ClusterHighMonthly := Quant.BoxWithLine.new(BoxHighMonthly,LineHighMonthly)
+                            ClusterLowMonthly := Quant.BoxWithLine.new(BoxLowMonthly,LineLowMonthly)
+                        if ShowMonthlyBox
+                            Text = ""
+                            if ShowBoxLabels
+                                Text := "1M"
+                            IdrBoxMonthly := box.new(CurrentArtefact.OpenTime, CurrentArtefact.CloseHigh, MonthlyCloseTime, CurrentArtefact.CloseLow, border_width=1, bgcolor = IdrBoxMonthlyColor,border_color=IdrBoxMonthlyBorderColor, xloc = xloc.bar_time, text = Text, text_color = IdrBoxMonthlyBorderColor, text_halign = text.align_right, text_valign = text.align_center, text_size = size.auto)
+                        if ShowMonthlyIdrMidpoint
+                            IdrEqLineMonthly := line.new(CurrentArtefact.OpenTime, CurrentArtefact.CloseLow+(CurrentArtefact.CloseHigh-CurrentArtefact.CloseLow)/2,MonthlyCloseTime, CurrentArtefact.CloseLow+(CurrentArtefact.CloseHigh-CurrentArtefact.CloseLow)/2,color = IdrMonthlyLineColor ,style = IdrMonthlyLineStyle, width = 1, xloc = xloc.bar_time)
+
+                        LastMonthlyObject = Dr.new("Monthly",na,na, na, na, IdrEqLineMonthly, na, na, IdrBoxMonthly,na,array.new<Quant.LineLabel>(),array.new<Quant.LineLabel>(),ClusterHighMonthly,ClusterLowMonthly,na,CurrentArtefact.OpenTime,na)
+                        array.push(ArrayOfMonthlyDrs, LastMonthlyObject)
+
+                        if ShowMonthlyStDevs
+                            LastMonthlyArtafact = array.get(ArrayOfMonthlyDrs, array.size(ArrayOfMonthlyDrs)-1)
+                            Stdevs = MonthlyStdevs
+                            AdditionalStDevs = AdditionalStDevsMonthly
+                            ArrayOfAdditionalStdevs = str.split(AdditionalStDevs, ",")
+                            if array.size(ArrayOfAdditionalStdevs) > 0
+                                for k = 0 to array.size(ArrayOfAdditionalStdevs)-1
+
+                                    FloatStdev = float(str.tonumber(array.get(ArrayOfAdditionalStdevs, k)))
+                                    if FloatStdev < 0
+                                        FloatStdev := FloatStdev-1
+                                    array.push(Stdevs, FloatStdev)
+                            if array.size(Stdevs) > 0
+                                for k = 0 to array.size(Stdevs)-1
+                                    CurrentStdev = array.get(Stdevs,k)
+                                    RealStdevValue = array.get(Stdevs,k)
+                                    string Label = ""
+                                    if OffsetWeeklyAndMonthlyStdevs
+                                        Label := "           "
+                                    if ShowLineLabels
+                                        if CurrentStdev < 0
+                                            Label := Label + str.tostring(CurrentStdev+1)
+                                            RealStdevValue := CurrentStdev+1
+                                        else
+                                            Label := Label + str.tostring(CurrentStdev)
+                                        if not(str.contains(Label, "."))
+                                            Label := Label + ".0"
+
+                                    color StdevColor = MonthlyStandardDeviationsColor
+                                    string LineStyle = MonthlyStandardDeviationLinesStyle
+                                    if RealStdevValue == 2.5 or RealStdevValue == -2.5
+                                        StdevColor := MonthlyStdev25_Color
+                                        LineStyle := MonthlyStdev25_50_75_LinesStyle
+                                        if EnableAlerting and EnableMonthlyAlerting and EnableMonthlyAlerting25
+                                            TempStdevArray.push(ImportantStdevs.new("Monthly", RealStdevValue, CurrentArtefact.CloseHigh+SessionRange*CurrentStdev,time,"Fresh",na))        
+                                    else if RealStdevValue == 5.0 or RealStdevValue == -5.0
+                                        StdevColor := MonthlyStdev50_Color
+                                        LineStyle := MonthlyStdev25_50_75_LinesStyle
+                                        if EnableAlerting and EnableMonthlyAlerting and EnableMonthlyAlerting50
+                                            TempStdevArray.push(ImportantStdevs.new("Monthly", RealStdevValue, CurrentArtefact.CloseHigh+SessionRange*CurrentStdev,time,"Fresh",na))        
+
+                                    else if RealStdevValue == 7.5 or RealStdevValue == -7.5
+                                        StdevColor := MonthlyStdev75_Color
+                                        LineStyle := MonthlyStdev25_50_75_LinesStyle
+                                        if EnableAlerting and EnableMonthlyAlerting and EnableMonthlyAlerting75
+                                            TempStdevArray.push(ImportantStdevs.new("Monthly", RealStdevValue, CurrentArtefact.CloseHigh+SessionRange*CurrentStdev,time,"Fresh",na))        
+
+
+                                    LineMonthly = line.new(CurrentArtefact.OpenTime, CurrentArtefact.CloseHigh+SessionRange*CurrentStdev,MonthlyCloseTime, CurrentArtefact.CloseHigh+SessionRange*CurrentStdev,color =  StdevColor, style = LineStyle, width = 1, xloc = xloc.bar_time)
+                                    LabelLineMonthly = label.new(MonthlyCloseTime, CurrentArtefact.CloseHigh+SessionRange*CurrentStdev, Label, style = label.style_label_left, xloc = xloc.bar_time, color =color.new(color.green, 100), textcolor = StdevColor, size =size.small)
+                                    array.push(LastMonthlyArtafact.ArrayStdevs, Quant.LineLabel.new(LineMonthly,LabelLineMonthly))
+                            if EnableAlerting and EnableMonthlyAlerting
+                                ArrayOfMonthlyImportantStdevs.push(ImportantStdevsArray.new(TempStdevArray))
+
+
+
+
+                else if Obj.OpenTime > SessionMonitorStartTime and Obj.CloseTime < SessionMonitorEndTime and not CurrentArtefact.SessionConfirmed
+                    if ShouldProcessDay
+
+
+
+                        if Obj.Close > CurrentArtefact.High and not CurrentArtefact.SessionConfirmed //and time == Obj.CloseTime //and barstate.isconfirmed
+                            CurrentArtefact.ConfirmedDirection := "Long" 
+                            ConfirmationTime := Obj.OpenTime
+
+                        if  Obj.Close < CurrentArtefact.Low and not CurrentArtefact.SessionConfirmed  //and time == Obj.CloseTime //and barstate.isconfirmed
+                            CurrentArtefact.ConfirmedDirection :=  "Short"
+                            ConfirmationTime := Obj.OpenTime
+
+
+
+                        if ArrayOfDrs.size() > 0 
+                            LastObject = array.get(ArrayOfDrs, array.size(ArrayOfDrs)-1)
+                            if ( CurrentArtefact.ConfirmedDirection == "Long" or CurrentArtefact.ConfirmedDirection == "Short") and not CurrentArtefact.SessionConfirmed
+                                CurrentArtefact.SessionConfirmed := true
+                                if ShowConfirmationDirection
+                                    if  CurrentArtefact.ConfirmedDirection == "Long"
+                                        LastObject.ConfirmationLabel := label.new(ConfirmationTime,Obj.High,color = color.new(color.red, 100),text = "▲", textcolor = SessionUpConfirmationColor, style = label.style_label_down, size = size.tiny,xloc = xloc.bar_time)
+                                    else if  CurrentArtefact.ConfirmedDirection == "Short"
+                                        LastObject.ConfirmationLabel := label.new(ConfirmationTime,Obj.Low,color = color.new(color.red, 100), text = "▼", textcolor = SessionDownConfirmationColor, style = label.style_label_up, size = size.tiny, xloc = xloc.bar_time)
+
+                                if not ShowRdr and CurrentArtefact.Name == "Rdr"
+                                    label.delete(LastObject.ConfirmationLabel)
+
+                                if ShowRetracementGrid and array.size(ArrayOfDrs) > 0
+                                    int EndTime = SessionMonitorEndTime
+                                    // if syminfo.type == "crypto" and CurrentArtefact.Name == "Adr"
+                                    //     EndTime := EndTime-BaseData.ONE_DAY
+                                    if CurrentArtefact.ConfirmedDirection == "Short"
+                                        for k = 0 to array.size(RetracementGrid)-1
+                                            CurrentGrid = array.get(RetracementGrid, k)
+
+                                            string Label = ""
+                                            if ShowLineLabels
+                                                Label := str.tostring(CurrentGrid)
+                                            Line = line.new(SessionOpenTime, CurrentArtefact.CloseHigh+SessionRange*(CurrentGrid-1),EndTime, CurrentArtefact.CloseHigh+SessionRange*(CurrentGrid-1),color =  StandardDeviationLinesColor, style = StandardDeviationLinesStyle, width = 1, xloc = xloc.bar_time)
+                                            LabelLine = label.new(EndTime, CurrentArtefact.CloseHigh+SessionRange*(CurrentGrid-1), Label, style = label.style_label_left, xloc = xloc.bar_time, color =color.new(color.green, 100), textcolor = StandardDeviationLinesColor, size =size.small)
+                                            array.push(LastObject.ArrayRetracementGrid, Quant.LineLabel.new(Line,LabelLine))
+                                    else if CurrentArtefact.ConfirmedDirection == "Long" 
+                                        for k = 0 to array.size(RetracementGrid)-1
+                                            CurrentGrid = array.get(RetracementGrid, k)
+                                            string Label = ""
+                                            if ShowLineLabels
+                                                Label := str.tostring(CurrentGrid)
+                                            Line = line.new(CurrentArtefact.OpenTime, CurrentArtefact.CloseLow-SessionRange*(CurrentGrid-1),EndTime, CurrentArtefact.CloseLow-SessionRange*(CurrentGrid-1),color =  StandardDeviationLinesColor, style = StandardDeviationLinesStyle, width = 1, xloc = xloc.bar_time)
+                                            LabelLine = label.new(EndTime, CurrentArtefact.CloseLow-SessionRange*(CurrentGrid-1), Label, style = label.style_label_left, xloc = xloc.bar_time, color =color.new(color.green, 100), textcolor = StandardDeviationLinesColor, size =size.small)
+                                            array.push(LastObject.ArrayRetracementGrid, Quant.LineLabel.new(Line,LabelLine))
+
+                                    if not(ShowRdr) and CurrentArtefact.Name == "Rdr"
+                                        if array.size(LastObject.ArrayRetracementGrid) > 0
+                                            for k = 0 to array.size(LastObject.ArrayRetracementGrid)-1
+                                                Stdev = array.get(LastObject.ArrayRetracementGrid,k)
+                                                line.delete(Stdev.Line)
+                                                label.delete(Stdev.Label)     
+                                if ShowRetracementClusters and array.size(ArrayOfDrs) > 0
+                                    array<box> ArrayBox = array.new<box>()
+                                    if CurrentArtefact.ConfirmedDirection == "Short"
+                                        
+                                        array.push(ArrayBox, box.new(CurrentArtefact.OpenTime, CurrentArtefact.CloseHigh+SessionRange*(0.2-1), SessionMonitorEndTime, CurrentArtefact.CloseHigh+SessionRange*(0.4-1), border_width=1, bgcolor = RetracementCluster0204BoxColor,border_color=color.new(color.blue, 100), xloc = xloc.bar_time))
+                                        array.push(ArrayBox,box.new(CurrentArtefact.OpenTime, CurrentArtefact.CloseHigh+SessionRange*(0.6-1), SessionMonitorEndTime, CurrentArtefact.CloseHigh+SessionRange*(0.8-1), border_width=1, bgcolor = RetracementCluster0608BoxColor,border_color=color.new(color.red, 100), xloc = xloc.bar_time))
+                                        LastObject.ArrayRetracementClusters := ArrayBox
+                                    else if CurrentArtefact.ConfirmedDirection == "Long"                               
+                                        array.push(ArrayBox, box.new(CurrentArtefact.OpenTime, CurrentArtefact.CloseHigh+SessionRange*(0.2-1), SessionMonitorEndTime, CurrentArtefact.CloseHigh+SessionRange*(0.4-1), border_width=1, bgcolor = RetracementCluster0204BoxColor,border_color=color.new(color.blue, 100), xloc = xloc.bar_time))
+                                        array.push(ArrayBox,box.new(CurrentArtefact.OpenTime, CurrentArtefact.CloseHigh+SessionRange*(0.6-1), SessionMonitorEndTime, CurrentArtefact.CloseHigh+SessionRange*(0.8-1), border_width=1, bgcolor = RetracementCluster0608BoxColor,border_color=color.new(color.red, 100), xloc = xloc.bar_time))
+                                        LastObject.ArrayRetracementClusters := ArrayBox
+
+
+
+
+
+  
+StringToNumber(_String) =>
+    int PosNeg = 1
+    StrArray = str.split(_String, '')
+    if array.size(StrArray) > 0
+        if array.get(StrArray, 0) == "-"
+            PosNeg := -1
+    float(str.tonumber(_String))*PosNeg
+
+
+   
+
+if array.size(ArrayOfDrs) > NumberOfSessionsToShow*NumberOfIntradaySessions
+    CurrentArtefact = array.shift(ArrayOfDrs)
+
+    line.delete(CurrentArtefact.DrHigh)
+    line.delete(CurrentArtefact.IdrHigh)
+    line.delete(CurrentArtefact.Open) 
+    line.delete(CurrentArtefact.Close) 
+    line.delete(CurrentArtefact.IdrEq)
+    line.delete(CurrentArtefact.IdrLow)
+    line.delete(CurrentArtefact.DrLow)
+    box.delete(CurrentArtefact.Idr)
+    line.delete(CurrentArtefact.Midpoint)
+    if ShowIdrDrAsCluster
+        box.delete(CurrentArtefact.DrIdrCluster)
+    if not na(CurrentArtefact.ClusterHigh)
+        box.delete(CurrentArtefact.ClusterHigh.Box)
+        line.delete(CurrentArtefact.ClusterHigh.Line)
+        box.delete(CurrentArtefact.ClusterLow.Box)
+        line.delete(CurrentArtefact.ClusterLow.Line)
+    if not na(CurrentArtefact.ArrayRetracementClusters)
+        for i = 0 to CurrentArtefact.ArrayRetracementClusters.size()-1
+            box.delete(CurrentArtefact.ArrayRetracementClusters.get(i))
+
+    if array.size(CurrentArtefact.ArrayStdevs) > 0
+        for i = 0 to array.size(CurrentArtefact.ArrayStdevs)-1
+            Stdev = array.get(CurrentArtefact.ArrayStdevs,i)
+            line.delete(Stdev.Line)
+            label.delete(Stdev.Label)
+    if array.size(CurrentArtefact.ArrayRetracementGrid) > 0
+        for i = 0 to array.size(CurrentArtefact.ArrayRetracementGrid)-1
+            Stdev = array.get(CurrentArtefact.ArrayRetracementGrid,i)
+            line.delete(Stdev.Line)
+            label.delete(Stdev.Label)
+    if ShowConfirmationDirection
+        label.delete(CurrentArtefact.ConfirmationLabel)
+
+if array.size(ArrayOfDailyDrs) > NumberOfDailySessions
+    CurrentArtefact = array.shift(ArrayOfDailyDrs)
+
+    line.delete(CurrentArtefact.IdrEq)
+    box.delete(CurrentArtefact.Idr)
+    if not na(CurrentArtefact.ClusterHigh)
+        box.delete(CurrentArtefact.ClusterHigh.Box)
+        line.delete(CurrentArtefact.ClusterHigh.Line)
+        box.delete(CurrentArtefact.ClusterLow.Box)
+        line.delete(CurrentArtefact.ClusterLow.Line)
+        box.delete(CurrentArtefact.DrIdrCluster)
+    if array.size(CurrentArtefact.ArrayStdevs) > 0
+        for i = 0 to array.size(CurrentArtefact.ArrayStdevs)-1
+            Stdev = array.get(CurrentArtefact.ArrayStdevs,i)
+            line.delete(Stdev.Line)
+            label.delete(Stdev.Label)
+
+if array.size(ArrayOfWeeklyDrs) > NumberOfWeeklySessions
+    CurrentArtefact = array.shift(ArrayOfWeeklyDrs)
+
+    line.delete(CurrentArtefact.IdrEq)
+    box.delete(CurrentArtefact.Idr)
+    if not na(CurrentArtefact.ClusterHigh)
+        box.delete(CurrentArtefact.ClusterHigh.Box)
+        line.delete(CurrentArtefact.ClusterHigh.Line)
+        box.delete(CurrentArtefact.ClusterLow.Box)
+        line.delete(CurrentArtefact.ClusterLow.Line)
+        box.delete(CurrentArtefact.DrIdrCluster)
+    if array.size(CurrentArtefact.ArrayStdevs) > 0
+        for i = 0 to array.size(CurrentArtefact.ArrayStdevs)-1
+            Stdev = array.get(CurrentArtefact.ArrayStdevs,i)
+            line.delete(Stdev.Line)
+            label.delete(Stdev.Label)
+
+
+if array.size(ArrayOfDailyDrs) > 0 
+    LastArtefact = array.get(ArrayOfDailyDrs,array.size(ArrayOfDailyDrs)-1)
+    if DailyExtendType == "Realtime"
+
+
+        if LastArtefact.OpenTime+BaseData.ONE_DAY >= time
+            if ShowDailyIdrMidpoint
+                line.set_x2(LastArtefact.IdrEq, time)
+            if ShowDailyBox
+                box.set_right(LastArtefact.Idr, time)
+            if ShowDailyClusters
+                box.set_right(LastArtefact.ClusterHigh.Box, time)
+                line.set_x2(LastArtefact.ClusterHigh.Line, time)
+                box.set_right(LastArtefact.ClusterLow.Box, time)
+                line.set_x2(LastArtefact.ClusterLow.Line, time)
+            if ShowDailyStDevs
+                if array.size(LastArtefact.ArrayStdevs) > 0
+                    for j = 0 to array.size(LastArtefact.ArrayStdevs)-1
+                        Stdev = array.get(LastArtefact.ArrayStdevs, j)
+                        line.set_x2(Stdev.Line, time)
+                        label.set_x(Stdev.Label, time)
+    else if DailyExtendType == "ShiftRight"
+        Offset = Quant.GetTimeframeInMilliSeconds(timeframe.period)*3
+        if LastArtefact.OpenTime+BaseData.ONE_WEEK >= time
+            if ShowDailyIdrMidpoint
+                line.set_x1(LastArtefact.IdrEq, time)
+                line.set_x2(LastArtefact.IdrEq, time+Offset)
+            if ShowDailyBox
+                box.set_left(LastArtefact.Idr, time)
+                box.set_right(LastArtefact.Idr, time+Offset)
+            if ShowDailyClusters
+                box.set_left(LastArtefact.ClusterHigh.Box, time)
+                box.set_right(LastArtefact.ClusterHigh.Box, time+Offset)
+                line.set_x1(LastArtefact.ClusterHigh.Line, time)
+                line.set_x2(LastArtefact.ClusterHigh.Line, time+Offset)                
+                box.set_left(LastArtefact.ClusterLow.Box, time)
+                box.set_right(LastArtefact.ClusterLow.Box, time+Offset)
+                line.set_x1(LastArtefact.ClusterLow.Line, time)
+                line.set_x2(LastArtefact.ClusterLow.Line, time+Offset)               
+            if ShowDailyStDevs
+                if array.size(LastArtefact.ArrayStdevs) > 0
+                    for j = 0 to array.size(LastArtefact.ArrayStdevs)-1
+                        Stdev = array.get(LastArtefact.ArrayStdevs, j)
+                        line.set_x1(Stdev.Line, time)
+                        line.set_x2(Stdev.Line, time+Offset)
+                        label.set_x(Stdev.Label, time+Offset)
+
+
+if array.size(ArrayOfWeeklyDrs) > 0 
+    LastArtefact = array.get(ArrayOfWeeklyDrs,array.size(ArrayOfWeeklyDrs)-1)
+    if WeeklyExtendType == "Realtime"
+
+        if LastArtefact.OpenTime+BaseData.ONE_WEEK >= time
+            if ShowWeeklyIdrMidpoint
+                line.set_x2(LastArtefact.IdrEq, time)
+            if ShowWeeklyBox
+                box.set_right(LastArtefact.Idr, time)
+            if ShowWeeklyClusters
+                box.set_right(LastArtefact.ClusterHigh.Box, time)
+                line.set_x2(LastArtefact.ClusterHigh.Line, time)
+                box.set_right(LastArtefact.ClusterLow.Box, time)
+                line.set_x2(LastArtefact.ClusterLow.Line, time)
+            if ShowWeeklyStDevs
+                if array.size(LastArtefact.ArrayStdevs) > 0
+                    for j = 0 to array.size(LastArtefact.ArrayStdevs)-1
+                        Stdev = array.get(LastArtefact.ArrayStdevs, j)
+                        line.set_x2(Stdev.Line, time)
+                        label.set_x(Stdev.Label, time)
+    else if WeeklyExtendType == "ShiftRight"
+        Offset = Quant.GetTimeframeInMilliSeconds(timeframe.period)*3
+        if LastArtefact.OpenTime+BaseData.ONE_WEEK >= time
+            if ShowWeeklyIdrMidpoint
+                line.set_x1(LastArtefact.IdrEq, time)
+                line.set_x2(LastArtefact.IdrEq, time+Offset)
+            if ShowWeeklyBox
+                box.set_left(LastArtefact.Idr, time)
+                box.set_right(LastArtefact.Idr, time+Offset)
+            if ShowWeeklyClusters
+                box.set_left(LastArtefact.ClusterHigh.Box, time)
+                box.set_right(LastArtefact.ClusterHigh.Box, time+Offset)
+                line.set_x1(LastArtefact.ClusterHigh.Line, time)
+                line.set_x2(LastArtefact.ClusterHigh.Line, time+Offset)                
+                box.set_left(LastArtefact.ClusterLow.Box, time)
+                box.set_right(LastArtefact.ClusterLow.Box, time+Offset)
+                line.set_x1(LastArtefact.ClusterLow.Line, time)
+                line.set_x2(LastArtefact.ClusterLow.Line, time+Offset)               
+            if ShowWeeklyStDevs
+                if array.size(LastArtefact.ArrayStdevs) > 0
+                    for j = 0 to array.size(LastArtefact.ArrayStdevs)-1
+                        Stdev = array.get(LastArtefact.ArrayStdevs, j)
+                        line.set_x1(Stdev.Line, time)
+                        line.set_x2(Stdev.Line, time+Offset)
+                        label.set_x(Stdev.Label, time+Offset)
+
+
+
+if array.size(ArrayOfMonthlyDrs) > 0 
+    LastArtefact = array.get(ArrayOfMonthlyDrs,array.size(ArrayOfMonthlyDrs)-1) 
+    if MonthlyExtendType == "Realtime"
+        if MonthlyCloseTime >= time
+            if ShowMonthlyIdrMidpoint
+                line.set_x2(LastArtefact.IdrEq, time)
+            if ShowMonthlyBox
+                box.set_right(LastArtefact.Idr, time)
+            if ShowMonthlyClusters
+                box.set_right(LastArtefact.ClusterHigh.Box, time)
+                line.set_x2(LastArtefact.ClusterHigh.Line, time)
+                box.set_right(LastArtefact.ClusterLow.Box, time)
+                line.set_x2(LastArtefact.ClusterLow.Line, time)
+            if ShowMonthlyStDevs
+                if array.size(LastArtefact.ArrayStdevs) > 0
+                    for j = 0 to array.size(LastArtefact.ArrayStdevs)-1
+                        Stdev = array.get(LastArtefact.ArrayStdevs, j)
+                        line.set_x2(Stdev.Line, time)
+                        label.set_x(Stdev.Label, time)
+    else if MonthlyExtendType == "ShiftRight"
+        Offset = Quant.GetTimeframeInMilliSeconds(timeframe.period)*6
+        if MonthlyCloseTime >= time
+            if ShowMonthlyIdrMidpoint
+                line.set_x1(LastArtefact.IdrEq, time)
+                line.set_x2(LastArtefact.IdrEq, time+Offset)
+            if ShowMonthlyBox
+                box.set_left(LastArtefact.Idr, time)
+                box.set_right(LastArtefact.Idr, time+Offset)
+            if ShowMonthlyClusters
+                box.set_left(LastArtefact.ClusterHigh.Box, time)
+                box.set_right(LastArtefact.ClusterHigh.Box, time+Offset)
+                line.set_x1(LastArtefact.ClusterHigh.Line, time)
+                line.set_x2(LastArtefact.ClusterHigh.Line, time+Offset)                
+                box.set_left(LastArtefact.ClusterLow.Box, time)
+                box.set_right(LastArtefact.ClusterLow.Box, time+Offset)
+                line.set_x1(LastArtefact.ClusterLow.Line, time)
+                line.set_x2(LastArtefact.ClusterLow.Line, time+Offset)               
+            if ShowMonthlyStDevs
+                if array.size(LastArtefact.ArrayStdevs) > 0
+                    for j = 0 to array.size(LastArtefact.ArrayStdevs)-1
+                        Stdev = array.get(LastArtefact.ArrayStdevs, j)
+                        line.set_x1(Stdev.Line, time)
+                        line.set_x2(Stdev.Line, time+Offset)
+                        label.set_x(Stdev.Label, time+Offset)
+
+
+if (SessionExtendType == "Realtime" or SessionExtendType == "OneWeek") and array.size(ArrayOfDrs) > 0
+    for i = 0 to array.size(ArrayOfDrs)-1
+        bool ShouldExtend = false
+        CurrentArtefact = array.get(ArrayOfDrs, i)
+        int Time = na
+        if SessionExtendType == "Realtime"
+            Time := time
+            ShouldExtend := true
+        else if SessionExtendType == "OneWeek"
+            for j = array.size(ArrayOfDrs)-1 to NumberOfSessionsToShow
+                Time := CurrentArtefact.OpenTime+BaseData.ONE_WEEK
+                ShouldExtend := true
+        else
+            ShouldExtend := false            
+
+        if ShouldExtend and ( (CurrentArtefact.SessionName == "Adr" and ExtendAdr) or (CurrentArtefact.SessionName == "Odr" and ExtendOdr) or (CurrentArtefact.SessionName == "Rdr" and ExtendRdr) )
+            line.set_x2(CurrentArtefact.DrHigh, Time)
+            line.set_x2(CurrentArtefact.IdrHigh, Time)
+            line.set_x2(CurrentArtefact.Open, Time) 
+            line.set_x2(CurrentArtefact.Close, Time) 
+            line.set_x2(CurrentArtefact.IdrEq, Time)
+            line.set_x2(CurrentArtefact.IdrLow, Time)
+            line.set_x2(CurrentArtefact.DrLow, Time)
+            // box.delete(CurrentArtefact.Idr, Time)
+            line.set_x2(CurrentArtefact.Midpoint, Time)
+            if ShowIdrDrAsCluster
+                box.set_right(CurrentArtefact.DrIdrCluster, Time)
+            if not na(CurrentArtefact.ClusterHigh)
+                box.set_right(CurrentArtefact.ClusterHigh.Box, Time)
+                line.set_x2(CurrentArtefact.ClusterHigh.Line, Time)
+                box.set_right(CurrentArtefact.ClusterLow.Box, Time)
+                line.set_x2(CurrentArtefact.ClusterLow.Line, Time)
+                
+            if array.size(CurrentArtefact.ArrayStdevs) > 0
+                for k = 0 to array.size(CurrentArtefact.ArrayStdevs)-1
+                    Stdev = array.get(CurrentArtefact.ArrayStdevs,k)
+                    line.set_x2(Stdev.Line, Time)
+                    label.set_x(Stdev.Label, Time)
+
+
+//{ START Alerting
+
+
+
+type AlertStdevData
+    string SessionName
+    string StdevString
+    string ObjectMitigated
+    int TimeCreated
+    bool Bull
+
+
+type AlertTableData
+    string AlertString
+    int TimeMitigated
+
+var array<AlertStdevData> LastCandleAlertTableData = array.new<AlertStdevData>()
+var array<AlertTableData> ArrayOfAlertTableData = array.new<AlertTableData>()
+var array<label> ArrayOfSingalLabels = array.new<label>()
+
+
+
+GetAlertData(_ArrayOfImportantStdevs,_NumberOfSessions) =>
+    string SessionName = na
+
+    if _ArrayOfImportantStdevs.size() > 0
+        if _ArrayOfImportantStdevs.get(0).ArrayStdevs.size() > 0
+            SessionName :=_ArrayOfImportantStdevs.get(0).ArrayStdevs.get(0).SessionName
+            if not ShowDaily and SessionName == "Adr"
+                if _ArrayOfImportantStdevs.size() > _NumberOfSessions
+                    _ArrayOfImportantStdevs.shift()
+            else
+                if _ArrayOfImportantStdevs.size() > _NumberOfSessions
+                    _ArrayOfImportantStdevs.shift()
+
+            for i = 0 to _ArrayOfImportantStdevs.size()-1
+                Object = _ArrayOfImportantStdevs.get(i)
+                if Object.ArrayStdevs.size() > 0
+                    for j = 0 to  Object.ArrayStdevs.size()-1
+                        SubObject = Object.ArrayStdevs.get(j)          
+                        Days = math.floor((time-SubObject.TimeCreated) / BaseData.ONE_DAY)
+                        Hours = math.floor(((time-SubObject.TimeCreated) % BaseData.ONE_DAY) / BaseData.ONE_HOUR)   
+
+                        ShouldProcess = false
+                        if AlertOnlyOnFreshStdevs
+                            if SubObject.Mitigated == "Fresh"
+                                ShouldProcess := true
+                            else
+                                ShouldProcess := false
+                        else
+                            ShouldProcess := true
+
+
+
+                        if SubObject.StdevValue > 0 and ShouldProcess
+                            if  SubObject.Mitigated == "Fresh" and SubObject.PriceValue <= high and SubObject.PriceValue < close and barstate.isconfirmed 
+                                SubObject.Mitigated := "Closed Above"
+                                if EnablePurgeAlerting 
+                                    StdevString = str.tostring(SubObject.StdevValue)
+                                    if not(str.contains(StdevString, "."))
+                                        StdevString := StdevString + ".0"
+
+
+                                    LastCandleAlertTableData.push(AlertStdevData.new(SubObject.SessionName, StdevString, SubObject.Mitigated, SubObject.TimeCreated, false))
+
+                            else if ShouldProcess and SubObject.PriceValue <= high and SubObject.PriceValue >= close and barstate.isconfirmed 
+                                SubObject.Mitigated := "Rejected"
+
+                                if EnableRejectionAlerting
+                                    StdevString = str.tostring(SubObject.StdevValue)
+                                    if not(str.contains(StdevString, "."))
+                                        StdevString := StdevString + ".0"
+
+                                    LastCandleAlertTableData.push(AlertStdevData.new(SubObject.SessionName, StdevString, SubObject.Mitigated,  SubObject.TimeCreated, false))
+                        else                      
+                            if  ShouldProcess and SubObject.PriceValue >= low and SubObject.PriceValue > close and barstate.isconfirmed 
+                                SubObject.Mitigated := "Closed Below"
+
+                                if EnablePurgeAlerting
+                                    StdevString = str.tostring(SubObject.StdevValue)
+                                    if not(str.contains(StdevString, "."))
+                                        StdevString := StdevString + ".0"
+
+                                    LastCandleAlertTableData.push(AlertStdevData.new(SubObject.SessionName, StdevString, SubObject.Mitigated,  SubObject.TimeCreated, true))
+
+                            else if ShouldProcess and SubObject.PriceValue >= low and SubObject.PriceValue <= close and barstate.isconfirmed
+                                SubObject.Mitigated := "Rejected"
+
+                                if EnableRejectionAlerting
+                                    StdevString = str.tostring(SubObject.StdevValue)
+                                    if not(str.contains(StdevString, "."))
+                                        StdevString := StdevString + ".0"
+
+                                    LastCandleAlertTableData.push(AlertStdevData.new(SubObject.SessionName, StdevString, SubObject.Mitigated,  SubObject.TimeCreated, true))
+
+
+if ArrayOfSingalLabels.size() > 20
+    label.delete(ArrayOfSingalLabels.shift())
+
+
+if EnableAlerting
+    if EnableAdrAlerting
+        GetAlertData(ArrayOfAdrImportantStdevs,NumberOfIntradaySessions)
+    if  EnableOdrAlerting
+        GetAlertData(ArrayOfOdrImportantStdevs,NumberOfIntradaySessions)
+    if EnableRdrAlerting
+        GetAlertData(ArrayOfRdrImportantStdevs,NumberOfIntradaySessions)
+    if EnableDailyAlerting
+        GetAlertData(ArrayOfDailyImportantStdevs,NumberOfDailySessions)
+    if EnableWeeklyAlerting
+        GetAlertData(ArrayOfWeeklyImportantStdevs,NumberOfWeeklySessions)
+    if EnableMonthlyAlerting
+        GetAlertData(ArrayOfMonthlyImportantStdevs,NumberOfMonthlySessions)
+
+
+    // Execute Alert Data
+
+    if LastCandleAlertTableData.size() >= MinimumConcurenStdevsRequired
+        string AlertString = na
+        string SingalString = na
+        bool Bullish = false
+        for i = 0 to LastCandleAlertTableData.size()-1
+            AlertObject = LastCandleAlertTableData.get(i)
+            if LastCandleAlertTableData.size() == 1
+                Days = math.floor((time-AlertObject.TimeCreated) / BaseData.ONE_DAY)
+                Hours = math.floor(((time-AlertObject.TimeCreated) % BaseData.ONE_DAY) / BaseData.ONE_HOUR)  
+                if Days == 0
+                    AlertString := AlertObject.SessionName + " " + AlertObject.StdevString + " " + AlertObject.ObjectMitigated + " on: " + syminfo.ticker + "\nStdev was Fresh and Has been created " + str.tostring(Hours) + " Hours ago."
+                    SingalString := AlertObject.SessionName + " " + AlertObject.StdevString + " " + AlertObject.ObjectMitigated + " created " + str.tostring(Hours) + " Hours ago."
+                else if Days == 1
+                    AlertString := AlertObject.SessionName + " " + AlertObject.StdevString + " " + AlertObject.ObjectMitigated + " on: " + syminfo.ticker + "\nStdev was Fresh and Has been created One Day ago."
+                    SingalString := AlertObject.SessionName + " " + AlertObject.StdevString + " " + AlertObject.ObjectMitigated + " created One Day ago."
+                else if Days > 1
+                    AlertString := AlertObject.SessionName + " " + AlertObject.StdevString + " " + AlertObject.ObjectMitigated + " on: " + syminfo.ticker + "\nStdev was Fresh and Has been created " + str.tostring(Days) +" Days ago."                                   
+                    SingalString := AlertObject.SessionName + " " + AlertObject.StdevString + " " + AlertObject.ObjectMitigated + " created " + str.tostring(Days) +" Days ago."
+
+                Bullish := AlertObject.Bull
+
+            else if LastCandleAlertTableData.size() > 0
+                Days = math.floor((time-AlertObject.TimeCreated) / BaseData.ONE_DAY)
+                Hours = math.floor(((time-AlertObject.TimeCreated) % BaseData.ONE_DAY) / BaseData.ONE_HOUR)
+                string AlertTimeString = na
+                string SignalTimeString = na
+                if Days == 0
+                    AlertTimeString := AlertObject.SessionName + " " + AlertObject.StdevString + " " + AlertObject.ObjectMitigated +  " Fresh Std Was created: " + str.tostring(Hours) + " Hours ago."
+                    SignalTimeString := AlertObject.SessionName + " " + AlertObject.StdevString + " " + AlertObject.ObjectMitigated + ". Created " + str.tostring(Hours) + " Hours ago."
+
+                else if Days == 1
+                    AlertTimeString := AlertObject.SessionName + " " + AlertObject.StdevString + " " + AlertObject.ObjectMitigated +  " Fresh Std Was created: One Day ago."
+                    SignalTimeString := AlertObject.SessionName + " " + AlertObject.StdevString + " " + AlertObject.ObjectMitigated + ". Created One Day ago."
+
+                else if Days > 1
+                    AlertTimeString := AlertObject.SessionName + " " + AlertObject.StdevString + " " + AlertObject.ObjectMitigated + " Fresh Std Was created: " + str.tostring(Days) + " Days ago."                                   
+                    SignalTimeString := AlertObject.SessionName + " " + AlertObject.StdevString + " " + AlertObject.ObjectMitigated + ". Created " + str.tostring(Days) +" Days ago."
+
+                if i == 0
+                    AlertString := "Concurent Alerts Triggered on: " + syminfo.ticker + ":"
+                    AlertString :=  AlertString + "\n"  + AlertTimeString
+                    SingalString := SignalTimeString
+
+                else
+                    AlertString :=  AlertString  + "\n" + AlertTimeString
+                    SingalString := SingalString + "\n"  + SignalTimeString
+
+                Bullish := AlertObject.Bull
+
+        ArrayOfAlertTableData.push(AlertTableData.new(AlertString, time))
+
+        alert(AlertString, alert.freq_once_per_bar)
+
+        string Sublabel = ""
+        if ShowStdevSignalLabel
+            Sublabel := SingalString
+
+
+        if ShowStdevSignal
+            if Bullish
+                array.push(ArrayOfSingalLabels, label.new(time, low, "🟢\n" + Sublabel, style = label.style_label_up, xloc = xloc.bar_time, color =color.new(color.green, 100), textcolor = color.new(color.green, 0), size =size.small))
+            else
+                array.push(ArrayOfSingalLabels, label.new(time, high, Sublabel + "\n🔴", style = label.style_label_down, xloc = xloc.bar_time, color =color.new(color.green, 100), textcolor = color.new(color.red, 0), size =size.small))
+      
+
+    while ArrayOfAlertTableData.size() > NumberOfPastAlerts
+        ArrayOfAlertTableData.shift()
+
+    if ArrayOfAlertTableData.size() > 0 and ShowAlertTable
+        table.cell(Table, 0, 0, "Time", text_color = TableTextColor , text_size = TableTextSize,text_halign = text.align_left)
+        table.cell(Table, 1, 0, "Alert Text", text_color = TableTextColor , text_size = TableTextSize,text_halign = text.align_left)    
+        for i = 0 to ArrayOfAlertTableData.size()-1
+            Object = ArrayOfAlertTableData.get(i)
+            color TextColor = na
+            if Object.TimeMitigated > time-ONE_MINUTE*30
+                TextColor := color.new(color.red, 0)
+            else if Object.TimeMitigated <= time-ONE_MINUTE*30 and Object.TimeMitigated > time-ONE_MINUTE*60
+                TextColor := color.new(color.blue, 0)
+            else
+                TextColor := color.new(color.gray, 0) 
+            table.cell(Table, 0, ArrayOfAlertTableData.size()-i, str.format_time(Object.TimeMitigated+TickerTimeOffset,  "d-M-yy HH:mm"), text_color = TextColor , text_size = TableTextSize,text_halign = text.align_left)       
+            table.cell(Table, 1, ArrayOfAlertTableData.size()-i, Object.AlertString, text_color = TextColor , text_size = TableTextSize,text_halign = text.align_left)
+
+
+    while LastCandleAlertTableData.size() > 0
+        LastCandleAlertTableData.shift()
+
+
+// } END Alerting
+
+
+
+

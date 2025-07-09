@@ -1,0 +1,1574 @@
+//@version=5
+
+// T1/T2 Candle Highlighter
+// Highlights T1 (Manipulation) and T2 (Distribution) candles for Ghost MMXM sessions.
+// Uses GhostMMXM_Core library to reuse the same session definitions and target calculations.
+// Works on any timeframe - uses 1-minute precision for T1/T2 detection
+// === IMPORTS ===
+import Trades-Dont-Lie/GhostMMXM_Core/9 as core
+
+// === INDICATOR ===
+indicator("TBR T1/T2 Candles (All Timeframes)", overlay = true, max_boxes_count = 300, max_labels_count = 300, dynamic_requests=true)
+
+// ==========================================
+// DETERMINE IF WE ARE ON THE BASE (1-MIN) TIMEFRAME AND, IF NOT, PREPARE LOWER-TF DATA
+isBaseTF = (timeframe.period == "1")
+
+// Helper: Round time to nearest minute boundary (for 1-minute bar alignment)
+f_roundToMinute(int timeMs) =>
+    int minuteInMs = 60000
+    int remainder = timeMs % minuteInMs
+    if remainder < 30000  // Round down if less than 30 seconds
+        timeMs - remainder
+    else  // Round up if 30 seconds or more
+        timeMs - remainder + minuteInMs
+
+// Helper: Return index of 1-minute bar that matches target time exactly.
+// Pine Script timing: each bar's `time` is the opening time, so we want exact match.
+f_findLtfIndex(int tgt, array<int> times) =>
+    int _idx = -1
+    if not na(times) and array.size(times) > 0
+        int arrSize = array.size(times)
+        // First, try to find an exact match (target time equals bar opening time)
+        for i = 0 to arrSize - 1
+            int t_ = array.get(times, i)
+            if tgt == t_
+                _idx := i
+                break
+        
+        // If no exact match, find the closest bar that would "contain" the target
+        // This is a fallback for cases where timing isn't perfectly aligned
+        if _idx == -1
+            for i = 0 to arrSize - 1
+                int t_ = array.get(times, i)
+                // Check if target time falls within this 1-minute bar's time range
+                if (tgt >= t_) and (tgt < t_ + 60000)
+                    _idx := i
+                    break
+    _idx
+
+// Fetch 1-minute data to analyze for precise T1/T2 timing on higher timeframes
+[LTF_TIME, LTF_HIGH, LTF_LOW, LTF_OPEN, LTF_CLOSE] = request.security_lower_tf(syminfo.tickerid, "1", [time, high, low, open, close], ignore_invalid_symbol=true)
+
+// ==========================================
+// INPUTS
+// ==========================================
+
+// --- Session Visibility Toggles (match Ghost Optimized) ---
+SessionToggleGrp = "Session Settings"
+ShowDaily      = input.bool(false,  title = "Daily",    group = SessionToggleGrp, inline = "htf1")
+ShowWeekly     = input.bool(false,  title = "Weekly",   group = SessionToggleGrp, inline = "htf1")
+ShowMonthly    = input.bool(false,  title = "Monthly",  group = SessionToggleGrp, inline = "htf1")
+
+ShowADR        = input.bool(false,  title = "ADR",      group = SessionToggleGrp, inline = "dr1")
+ShowODR        = input.bool(false,  title = "ODR",      group = SessionToggleGrp, inline = "dr1")
+ShowRDR        = input.bool(false,  title = "RDR",      group = SessionToggleGrp, inline = "dr1")
+
+ShowAllIntraday = input.bool(true, title = "Show All Intraday (Alpha-Julie)", group = SessionToggleGrp)
+// Individual intraday sessions
+ShowADRQ1 = input.bool(false, title = "Alpha",   group = SessionToggleGrp, inline = "i1")
+ShowADRQ2 = input.bool(false, title = "Bravo",   group = SessionToggleGrp, inline = "i1")
+ShowADRQ3 = input.bool(false, title = "Charlie", group = SessionToggleGrp, inline = "i1")
+ShowADRQ4 = input.bool(false, title = "Delta",   group = SessionToggleGrp, inline = "i1")
+
+ShowODRQ1 = input.bool(false, title = "Echo",    group = SessionToggleGrp, inline = "i2")
+ShowODRQ2 = input.bool(false, title = "Foxtrot", group = SessionToggleGrp, inline = "i2")
+
+ShowRDRQ1 = input.bool(false, title = "Golf",    group = SessionToggleGrp, inline = "i3")
+ShowRDRQ2 = input.bool(false, title = "Hotel",   group = SessionToggleGrp, inline = "i3")
+ShowRDRQ3 = input.bool(false, title = "India",   group = SessionToggleGrp, inline = "i3")
+ShowRDRQ4 = input.bool(false, title = "Juliet",  group = SessionToggleGrp, inline = "i3")
+
+ShowHTF1 = input.bool(false, title = "Kilo",     group = SessionToggleGrp, inline = "htf2")
+ShowHTF2 = input.bool(false, title = "Lima",     group = SessionToggleGrp, inline = "htf2")
+
+// ---- Display Settings ----
+DisplayGrp = "Bar Color Settings"
+ShowT1Candles = input.bool(true,  title = "Highlight T1 Candle", group = DisplayGrp, tooltip = "Colors the entire candlestick when T1 (Manipulation) time occurs. T1 represents the initial market manipulation phase where institutions create imbalances.")
+ShowT2Candles = input.bool(true,  title = "Highlight T2 Candle", group = DisplayGrp, tooltip = "Colors the entire candlestick when T2 (Distribution) time occurs. T2 represents the distribution phase where institutions distribute their positions to retail traders.")
+T1BarColor    = input.color(color.new(color.orange,0), title = "T1 Bar Color", group = DisplayGrp, inline = "c1", tooltip = "The color used to highlight T1 (Manipulation) candles. Orange is typically used to represent the aggressive manipulation phase.")
+T2BarColor    = input.color(color.new(color.blue,0),   title = "T2 Bar Color", group = DisplayGrp, inline = "c1", tooltip = "The color used to highlight T2 (Distribution) candles. Blue represents the calmer distribution phase where institutions unload positions.")
+
+// Box extension behaviour
+BoxExtGrp = "T1/T2 Box Extension"
+EnableBoxes      = input.bool(true, title = "Draw Boxes", group = BoxExtGrp, tooltip = "Creates rectangular boxes around T1/T2 candles to highlight their high and low ranges. Boxes make it easier to identify the manipulation and distribution zones on the chart.")
+EnableBoxLabels  = input.bool(true, title="Show Box Labels", group=BoxExtGrp, tooltip = "Displays text labels next to T1/T2 boxes showing session name, T1/T2 type, and date. Helps identify which session and event type each box represents.")
+BoxExtensionMode = input.string("Session", options = ["Realtime","Session","None"], title = "Extension Mode", group = BoxExtGrp, tooltip = "Controls how far boxes extend horizontally:\n• Session: Extends to end of session\n• Realtime: Extends with current bar (dynamic)\n• None: Only covers the T1/T2 candle")
+T1BoxFillColor     = input.color(color.new(color.orange, 90), title = "T1 Box Fill Color",    group = BoxExtGrp, inline = "bc1", tooltip = "The semi-transparent fill color inside T1 boxes. Higher transparency (90) allows you to see price action while maintaining visual reference.")
+T1BoxBorderColor   = input.color(color.new(color.orange, 0),  title = "T1 Box Border Color",  group = BoxExtGrp, inline = "bc1", tooltip = "The solid border color around T1 boxes. Use 0 transparency for clear, visible boundaries around manipulation zones.")
+T2BoxFillColor     = input.color(color.new(color.blue,   90), title = "T2 Box Fill Color",    group = BoxExtGrp, inline = "bc2", tooltip = "The semi-transparent fill color inside T2 boxes. Blue helps distinguish distribution zones from manipulation zones.")
+T2BoxBorderColor   = input.color(color.new(color.blue,   0),  title = "T2 Box Border Color",  group = BoxExtGrp, inline = "bc2", tooltip = "The solid border color around T2 boxes. Solid borders clearly define the distribution zone boundaries.")
+RealtimeBoxOffBars = input.int(1, title="Realtime Box Horizontal Offset (bars)", minval=-500, maxval=500, group=BoxExtGrp, tooltip = "When using Realtime extension mode, this shifts the box ending point forward (+) or backward (-) by the specified number of bars. 0 = ends at current bar, positive values extend forward, negative values extend backward.")
+
+// ---- Open-Price Line Settings ----
+OpenLineGrp   = "Opening Price Lines"
+ShowOpenLines = input.bool(true,  title = "Draw Open Price Line", group = OpenLineGrp, tooltip = "Draws horizontal lines at the opening price of T1/T2 candles. These lines show key institutional entry/exit levels and often act as future support/resistance zones.")
+EnableLineLabels = input.bool(false, title="Show Line Labels", group=OpenLineGrp, tooltip = "Displays text labels next to T1/T2 open price lines showing session name, T1/T2 type, and date. Useful for tracking institutional entry/exit levels.")
+OpenLineExtMode = input.string("Session", options = ["Realtime","Session","Ray"], title = "Line Extension Mode", group = OpenLineGrp, tooltip = "Controls how far open price lines extend:\n• Session: Extends to end of session\n• Realtime: Extends with current bar (updates live)\n• Ray: Extends infinitely to the right")
+OpenLineWidth = input.int(1, minval = 1, maxval = 4, title = "Line Width", group = OpenLineGrp, tooltip = "Thickness of the open price lines (1-4 pixels). Thicker lines are more visible but may clutter the chart. 1-2 is recommended for most use cases.")
+RealtimeLineOffBars = input.int(1, title="Realtime Line Horizontal Offset (bars)", minval=-500, maxval=500, group=OpenLineGrp, tooltip = "When using Realtime line extension mode, this shifts the line ending point forward (+) or backward (-) by the specified number of bars. 0 = ends at current bar, positive values extend forward, negative values extend backward.")
+OpenLineColorT1 = input.color(color.new(color.orange, 0), title = "T1 Line Color", group = OpenLineGrp, inline = "lc", tooltip = "Color of the T1 (Manipulation) open price line. Should match or complement your T1 candle/box colors for consistency.")
+OpenLineColorT2 = input.color(color.new(color.blue,   0), title = "T2 Line Color", group = OpenLineGrp, inline = "lc", tooltip = "Color of the T2 (Distribution) open price line. Should match or complement your T2 candle/box colors for visual coherence.")
+
+// ---- Historical Retention ----
+HistGrp = "Historical (Dont use too many sessions at once)"
+KeepHistorical    = input.bool(false, title = "Keep previous days", group = HistGrp, tooltip = "Maintains T1/T2 boxes, lines, and labels from previous trading sessions for historical analysis. Turn off to only show current session data and improve performance.")
+HistoricalDaysToKeep = input.int(3, minval = 1, maxval = 100, title = "Days to keep", group = HistGrp, inline = "h1", tooltip = "⚠️ WARNING: High day counts + many sessions = floating labels!\nRecommended: 2-3 days with many sessions, 5-7 days with few sessions")
+ExcludeWeekends = input.bool(true, title = "Exclude weekends from history", group = HistGrp, inline = "h2", tooltip = "When counting historical days, excludes Saturday and Sunday since they have no trading activity. Effectively extends the lookback period to capture more actual trading days.")
+HideWeekendSessions = input.bool(false, title = "Hide weekend sessions", group = HistGrp, tooltip = "Completely prevents creation of T1/T2 markings on weekend bars. Keeps charts clean and focused on actual trading activity.")
+MaxHistoricalLabels = input.int(100, minval = 10, maxval = 100, title = "Max Labels", group = HistGrp, inline = "h2", tooltip = "Limits total historical labels to prevent Pine Script object limits.\nLower values = better performance with many sessions")
+HistLineExtMode = input.string("Session", options=["Session","Ray","Realtime"], title="Historical Line Extension", group = HistGrp, tooltip = "Controls how historical open price lines extend:\n• Session: Fixed length to session end\n• Ray: Extends infinitely (good for long-term levels)\n• Realtime: Extends with current bar (dynamic)")
+
+// ---- Session Table ----
+TableGrp = "Session Times Table"
+ShowSessionTable = input.bool(false, title="Show Session Times Table", group=TableGrp, tooltip = "Displays a table showing all active intraday sessions with their calculated T1/T2 times. Updates in real-time as sessions become active.")
+TablePosition = input.string("top_right", title="Table Position", group=TableGrp, options=["top_left","top_center","top_right","middle_left","middle_center","middle_right","bottom_left","bottom_center","bottom_right"], tooltip = "Position of the session times table on the chart.")
+TableSize = input.string("small", title="Text Size", group=TableGrp, options=["tiny","small","normal","large"], tooltip = "Size of the table text and cells.")
+
+// Table Colors
+TableColorsGrp = "Table Colors & Styling"
+TableFrameColor = input.color(color.black, title="Frame Color", group=TableColorsGrp, inline="frame", tooltip = "Color of the outer table frame border.")
+TableFrameWidth = input.int(2, title="Frame Width", group=TableColorsGrp, inline="frame", minval=0, maxval=5, tooltip = "Thickness of outer table frame (0=no frame, 1-5=frame thickness).")
+TableBorderColor = input.color(color.gray, title="Grid Lines Color", group=TableColorsGrp, inline="grid", tooltip = "Color of internal grid lines between cells.")
+TableBorderWidth = input.int(1, title="Grid Lines Width", group=TableColorsGrp, inline="grid", minval=0, maxval=3, tooltip = "Thickness of internal grid lines (0=no grid, 1-3=line thickness).")
+
+// Header Colors
+HeaderBgColor = input.color(color.new(color.blue, 20), title="Header Background", group=TableColorsGrp, inline="header", tooltip = "Background color of the header row (Session, T1 Time, T2 Time).")
+HeaderTextColor = input.color(color.white, title="Header Text", group=TableColorsGrp, inline="header", tooltip = "Text color for header row.")
+
+// Cell Colors
+CellBgColor = input.color(color.new(color.white, 0), title="Cell Background", group=TableColorsGrp, inline="cell", tooltip = "Background color for regular table cells.")
+CellTextColor = input.color(color.black, title="Cell Text", group=TableColorsGrp, inline="cell", tooltip = "Text color for regular table cells.")
+
+// Active Session Colors
+ActiveCellBgColor = input.color(color.new(color.yellow, 70), title="Active Session Background", group=TableColorsGrp, inline="active", tooltip = "Background color for currently active sessions.")
+ActiveCellTextColor = input.color(color.black, title="Active Session Text", group=TableColorsGrp, inline="active", tooltip = "Text color for currently active sessions.")
+
+// HTF Section Header Colors
+HTFHeaderBgColor = input.color(color.new(#000000, 31), title="HTF Section Background", group=TableColorsGrp, inline="htf", tooltip = "Background color for the HTF (Higher Time Frame) section header row.")
+HTFHeaderTextColor = input.color(color.white, title="HTF Section Text", group=TableColorsGrp, inline="htf", tooltip = "Text color for the HTF (Higher Time Frame) section header row.")
+
+// Mitigated Time Colors
+MitigatedCellBgColor = input.color(color.new(color.green, 30), title="Mitigated Time Background", group=TableColorsGrp, inline="mitigated", tooltip = "Background color for T1/T2 cells when their specific time has been reached/mitigated.")
+MitigatedCellTextColor = input.color(color.white, title="Mitigated Time Text", group=TableColorsGrp, inline="mitigated", tooltip = "Text color for T1/T2 cells when their specific time has been reached/mitigated.")
+
+// ---- Label Settings ----
+LabelGrp = "Labels"
+// Label content controls
+ShowTimeInLabels = input.bool(false, title="Show T1/T2 Time in Labels", group=LabelGrp, inline="label_content", tooltip = "Adds the exact T1/T2 time (HH:mm) to box and line labels. Example: 'Alpha T1 09:15 Mon 12/9' instead of just 'Alpha T1 Mon 12/9'. Useful for precise timing analysis.")
+ShowDateInLabels = input.bool(false, title="Show Date in Labels", group=LabelGrp, inline="label_content", tooltip = "Adds the date to box and line labels. Example: 'Alpha T1 Mon 12/9' instead of just 'Alpha T1'. Turn off for cleaner, shorter labels when you don't need date reference.")
+// Box label specific controls
+BoxLabelVertPos = input.string("middle", options=["top","middle","bottom"], title="Box Label Vertical Position", group=LabelGrp, tooltip = "Vertical positioning of box labels relative to the box:\n• Top: Above the box high\n• Middle: Centered on box\n• Bottom: Below the box low")
+BoxLabelHorizOffsetBars = input.int(0, title="Box Label Horizontal Offset (bars)", minval=-500, maxval=500, group=LabelGrp, tooltip = "Horizontal distance between box and its label in bars. Positive values move labels right, negative moves left. Adjust to prevent overlap with price action.")
+BoxLabelVertOffsetTicks = input.int(0, title="Box Label Vertical Offset (ticks)", minval=-1000, maxval=1000, group=LabelGrp, tooltip = "Fine-tune vertical label position in price ticks. Positive moves up, negative moves down. Use for precise positioning relative to the box.")
+// Line label specific controls
+LineLabelVertPos = input.string("middle", options=["above","middle","below"], title="Line Label Vertical Position", group=LabelGrp, tooltip = "Vertical positioning of line labels relative to the price line:\n• Above: Above the price line\n• Middle: Centered on the line\n• Below: Below the price line")
+LineLabelVertOffsetTicks = input.int(0, title="Line Label Vertical Offset (ticks)", minval=-1000, maxval=1000, group=LabelGrp, tooltip = "Fine-tune vertical position of line labels in price ticks. Useful for avoiding overlap with price action or other labels.")
+LineLabelHorizOffsetBars = input.int(5, title="Line Label Horizontal Offset (bars)", minval=-500, maxval=500, group=LabelGrp, tooltip = "Distance in bars between the line end and its label. Positive values move labels to the right, negative to the left. Works for all line extension modes.")
+LabelSizeStr = input.string("small", options=["tiny","small","normal","large","huge"], title="Label Size", group=LabelGrp, tooltip = "Text size for all labels. Larger sizes are more visible but take more screen space. 'Small' or 'Normal' recommended for most charts.")
+LabelTextColor = input.color(color.black, title="Text Color", group=LabelGrp, tooltip = "Color of all label text. Choose a color that contrasts well with your chart background. Black works well on light backgrounds, white on dark backgrounds.")
+
+// helper convert size
+f_to_size(str)=> switch str
+    "tiny"=>size.tiny
+    "small"=>size.small
+    "normal"=>size.normal
+    "large"=>size.large
+    "huge"=>size.huge
+    => size.small
+
+var _labelSizeConst = f_to_size(LabelSizeStr)
+
+// Helper function to convert table position string to position constant
+f_getTablePosition(string pos) =>
+    switch pos
+        "top_left" => position.top_left
+        "top_center" => position.top_center
+        "top_right" => position.top_right
+        "middle_left" => position.middle_left
+        "middle_center" => position.middle_center
+        "middle_right" => position.middle_right
+        "bottom_left" => position.bottom_left
+        "bottom_center" => position.bottom_center
+        "bottom_right" => position.bottom_right
+        => position.top_right
+
+// Helper function to convert table size string to size constant
+f_getTableSize(string sizeStr) =>
+    switch sizeStr
+        "tiny" => size.tiny
+        "small" => size.small
+        "normal" => size.normal
+        "large" => size.large
+        => size.small
+
+// Helper function to format label text with optional time and date
+f_formatLabelText(string sessionName, string eventType, int eventTime, string timezone) =>
+    string timeStr = ShowTimeInLabels ? str.format_time(eventTime, "HH:mm", timezone) + " " : ""
+    string dateStr = ShowDateInLabels ? str.format_time(eventTime, "EEE M/d", timezone) : ""
+    string separator = (ShowTimeInLabels or ShowDateInLabels) ? " " : ""
+    sessionName + " " + eventType + separator + timeStr + dateStr
+
+// ==========================================
+// SESSION CONSTANTS (copied from Ghost Optimized)
+// ==========================================
+const int s1_ADRQ1_END_HOUR_CONST  = 21
+const int s1_ADRQ1_END_MINUTE_CONST= 15
+const int s3_ADRQ2_END_HOUR_CONST  = 0
+const int s3_ADRQ2_END_MINUTE_CONST= 0
+const int s2_ADR_END_HOUR_CONST    = 2
+const int s2_ADR_END_MINUTE_CONST  = 0
+const int s4_ADRQ3_END_HOUR_CONST  = 2
+const int s4_ADRQ3_END_MINUTE_CONST= 45
+const int s5_ADRQ4_END_HOUR_CONST  = 2
+const int s5_ADRQ4_END_MINUTE_CONST= 45
+const int s6_ODRQ1_END_HOUR_CONST  = 5
+const int s6_ODRQ1_END_MINUTE_CONST= 45
+const int s7_ODR_END_HOUR_CONST    = 8
+const int s7_ODR_END_MINUTE_CONST  = 30
+const int s8_HTF1_END_HOUR_CONST   = 16
+const int s8_HTF1_END_MINUTE_CONST = 0
+const int s9_ODRQ2_END_HOUR_CONST  = 8
+const int s9_ODRQ2_END_MINUTE_CONST= 15
+const int s10_RDRQ1_END_HOUR_CONST = 11
+const int s10_RDRQ1_END_MINUTE_CONST=15
+const int s11_RDR_END_HOUR_CONST   = 16
+const int s11_RDR_END_MINUTE_CONST = 0
+const int s12_RDRQ2_END_HOUR_CONST = 14
+const int s12_RDRQ2_END_MINUTE_CONST=0
+const int s13_RDRQ3_END_HOUR_CONST = 14
+const int s13_RDRQ3_END_MINUTE_CONST=45
+const int s14_HTF2_END_HOUR_CONST  = 16
+const int s14_HTF2_END_MINUTE_CONST= 45
+const int s15_RDRQ4_END_HOUR_CONST = 16
+const int s15_RDRQ4_END_MINUTE_CONST=45
+const int s16_DAILY_END_HOUR_CONST = 18
+const int s16_DAILY_END_MINUTE_CONST=0
+const int s17_WEEKLY_END_HOUR_CONST= 18
+const int s17_WEEKLY_END_MINUTE_CONST=0
+const int s18_MONTHLY_END_HOUR_CONST=18
+const int s18_MONTHLY_END_MINUTE_CONST=0
+
+// ==========================================
+// SESSION ARRAYS
+// ==========================================
+var array<core.SessionConfig> SESSION_CFGS = array.new<core.SessionConfig>()
+var array<core.SessionState>  SESSION_STATES = array.new<core.SessionState>()
+
+if barstate.isfirst
+    // Build session configurations (same as Ghost Optimized but pared down to base sessions)
+    array.push(SESSION_CFGS, core.newSessionConfig("Alpha",   "18:45-21:15",  ShowADRQ1 or ShowAllIntraday, s1_ADRQ1_END_HOUR_CONST,  s1_ADRQ1_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig("Bravo",   "21:30-00:00",  ShowADRQ2 or ShowAllIntraday, s3_ADRQ2_END_HOUR_CONST,  s3_ADRQ2_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig("ADR",     "19:30-02:00",  ShowADR,                   s2_ADR_END_HOUR_CONST,     s2_ADR_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig("Charlie", "21:30-02:45",  ShowADRQ3,                 s4_ADRQ3_END_HOUR_CONST,  s4_ADRQ3_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig("Delta",   "00:15-02:45",  ShowADRQ4 or ShowAllIntraday, s5_ADRQ4_END_HOUR_CONST,  s5_ADRQ4_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig("Echo",    "03:00-05:45",  ShowODRQ1 or ShowAllIntraday, s6_ODRQ1_END_HOUR_CONST,  s6_ODRQ1_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig("ODR",     "03:00-08:30",  ShowODR,                   s7_ODR_END_HOUR_CONST,    s7_ODR_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig("Kilo",    "04:30-16:00",  ShowHTF1,                  s8_HTF1_END_HOUR_CONST,   s8_HTF1_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig("Foxtrot", "06:00-08:15",  ShowODRQ2 or ShowAllIntraday, s9_ODRQ2_END_HOUR_CONST,  s9_ODRQ2_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig("Golf",    "08:45-11:15",  ShowRDRQ1 or ShowAllIntraday, s10_RDRQ1_END_HOUR_CONST, s10_RDRQ1_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig("RDR",     "09:30-16:00",  ShowRDR,                   s11_RDR_END_HOUR_CONST,   s11_RDR_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig("Hotel",   "11:30-14:00",  ShowRDRQ2 or ShowAllIntraday, s12_RDRQ2_END_HOUR_CONST, s12_RDRQ2_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig("India",   "11:30-14:45",  ShowRDRQ3 or ShowAllIntraday, s13_RDRQ3_END_HOUR_CONST, s13_RDRQ3_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig("Lima",    "11:30-16:45",  ShowHTF2,                  s14_HTF2_END_HOUR_CONST,  s14_HTF2_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig("Juliet",  "14:15-16:45",  ShowRDRQ4 or ShowAllIntraday, s15_RDRQ4_END_HOUR_CONST, s15_RDRQ4_END_MINUTE_CONST))
+
+    // HTF sessions
+    array.push(SESSION_CFGS, core.newSessionConfig("Daily",   "18:00-18:00",  ShowDaily,  s16_DAILY_END_HOUR_CONST,   s16_DAILY_END_MINUTE_CONST,  true))
+    array.push(SESSION_CFGS, core.newSessionConfig("Weekly",  "SUN18:00-SUN18:00", ShowWeekly, s17_WEEKLY_END_HOUR_CONST,  s17_WEEKLY_END_MINUTE_CONST, true))
+    array.push(SESSION_CFGS, core.newSessionConfig("Monthly", "MONTHLY18:00-MONTHLY18:00", ShowMonthly, s18_MONTHLY_END_HOUR_CONST, s18_MONTHLY_END_MINUTE_CONST, true))
+
+    // --- initialise states and per-session box holders ---
+    for _ = 0 to array.size(SESSION_CFGS)-1
+        array.push(SESSION_STATES, core.newSessionState())
+
+// Arrays declared globally (must be outside if)
+var array<box> T1_BOXES = array.new<box>()
+var array<box> T2_BOXES = array.new<box>()
+var array<line> T1_OPEN_LINES = array.new<line>()
+var array<line> T2_OPEN_LINES = array.new<line>()
+var array<box> HIST_BOXES = array.new<box>()
+var array<int> HIST_BOX_DAYS = array.new<int>()
+var array<line> HIST_LINES = array.new<line>()
+var array<int> HIST_LINE_DAYS = array.new<int>()
+var array<label> HIST_BOX_LABELS = array.new<label>()
+var array<label> HIST_LINE_LABELS = array.new<label>()
+var array<label> CURR_T1_BOX_LABELS = array.new<label>()
+var array<label> CURR_T2_BOX_LABELS = array.new<label>()
+var array<label> CURR_T1_LINE_LABELS = array.new<label>()
+var array<label> CURR_T2_LINE_LABELS = array.new<label>()
+
+// Arrays for T1/T2 timing lines
+var array<line> T1_TIME_LINES = array.new<line>()
+var array<line> T2_TIME_LINES = array.new<line>()
+var array<int> T1_TIME_VALUES = array.new<int>()
+var array<int> T2_TIME_VALUES = array.new<int>()
+var array<bool> T1_TIME_MITIGATED = array.new<bool>()
+var array<bool> T2_TIME_MITIGATED = array.new<bool>()
+var array<label> T1_TIME_LABELS = array.new<label>()
+var array<label> T2_TIME_LABELS = array.new<label>()
+var array<label> T1_TIME_LABELS_BOTTOM = array.new<label>()
+var array<label> T2_TIME_LABELS_BOTTOM = array.new<label>()
+
+// Session times table
+var table sessionTimesTable = na
+
+// Table reset tracking
+var int lastResetTime = na
+var array<bool> sessionValidAfterReset = array.new<bool>()
+
+var bool _boxesInit = false
+if not _boxesInit and barstate.isfirst
+    _boxesInit := true
+    for _ = 0 to array.size(SESSION_CFGS)-1
+        array.push(T1_BOXES, na)
+        array.push(T2_BOXES, na)
+        array.push(T1_OPEN_LINES, na)
+        array.push(T2_OPEN_LINES, na)
+        array.push(CURR_T1_BOX_LABELS, na)
+        array.push(CURR_T2_BOX_LABELS, na)
+        array.push(CURR_T1_LINE_LABELS, na)
+        array.push(CURR_T2_LINE_LABELS, na)
+        // Initialize timing line arrays
+        array.push(T1_TIME_LINES, na)
+        array.push(T2_TIME_LINES, na)
+        array.push(T1_TIME_VALUES, na)
+        array.push(T2_TIME_VALUES, na)
+        array.push(T1_TIME_MITIGATED, false)
+        array.push(T2_TIME_MITIGATED, false)
+        array.push(T1_TIME_LABELS, na)
+        array.push(T2_TIME_LABELS, na)
+        array.push(T1_TIME_LABELS_BOTTOM, na)
+        array.push(T2_TIME_LABELS_BOTTOM, na)
+        // Initialize session validity tracking
+        array.push(sessionValidAfterReset, false)
+
+// ==========================================
+// TIMING LINE ARRAYS (NEW)
+// ==========================================
+
+
+
+// ==========================================
+// TIMING LINE SETTINGS
+// ==========================================
+
+TimingLinesGrp = 'T1/T2 Timing Lines'
+ShowT1TimingLines = input.bool(true, title = 'Show T1 Timing Lines', group = TimingLinesGrp, inline = 'timing_toggles', tooltip = "Shows vertical lines indicating when T1 (Manipulation) times will occur. These predictive lines help you prepare for upcoming manipulation events and disappear when the T1 time is reached.")
+ShowT2TimingLines = input.bool(true, title = 'Show T2 Timing Lines', group = TimingLinesGrp, inline = 'timing_toggles', tooltip = "Shows vertical lines indicating when T2 (Distribution) times will occur. These predictive lines help you prepare for upcoming distribution events and disappear when the T2 time is reached.")
+T1LineColor = input.color(color.new(color.orange, 70), title = 'T1 Line Color', group = TimingLinesGrp, inline = 'timing_colors', tooltip = "Color of the T1 timing lines. Semi-transparent orange (70% transparency) provides visibility without blocking price action.")
+T2LineColor = input.color(color.new(color.blue, 70), title = 'T2 Line Color', group = TimingLinesGrp, inline = 'timing_colors', tooltip = "Color of the T2 timing lines. Semi-transparent blue (70% transparency) distinguishes distribution timing from manipulation timing.")
+TimingLineStyle = input.string("Dashed", title = 'Line Style', group = TimingLinesGrp, options = ["Solid", "Dashed", "Dotted"], tooltip = "Visual style of timing lines:\n• Solid: Continuous line (more prominent)\n• Dashed: Broken line (good visibility)\n• Dotted: Dots (subtle)")
+TimingLineWidth = input.int(2, title = 'Line Width', group = TimingLinesGrp, minval = 1, maxval = 5, tooltip = "Thickness of timing lines (1-5 pixels). Thicker lines are more visible but may interfere with price analysis. 2-3 is recommended.")
+ShowTimingLabels = input.bool(true, title = 'Show Timing Labels', group = TimingLinesGrp, tooltip = "Displays labels on timing lines showing session name, T1/T2 type, and expected time. Helps you quickly identify which session and event the line represents.")
+TimingLabelColor = input.color(color.rgb(255, 255, 255, 100), title = 'Label Background', group = TimingLinesGrp, inline = 'label_colors', tooltip = "Background color of timing line labels. White provides good contrast for text readability.")
+TimingLabelTextColor = input.color(color.black, title = 'Label Text', group = TimingLinesGrp, inline = 'label_colors', tooltip = "Text color for timing line labels. Should contrast well with the label background color for readability.")
+TimingLabelSize = input.string("small", title = 'Label Size', group = TimingLinesGrp, options = ["tiny", "small", "normal", "large"], inline = 'label_style', tooltip = "Size of timing line labels. Larger sizes are more visible but take more space. 'Small' provides good balance of visibility and space efficiency.")
+TimingLabelOffset = input.int(0, title = 'Label Offset (ticks)', group = TimingLinesGrp, minval = 0, maxval = 100, inline = 'label_style', tooltip = "Vertical distance between timing line and its label in price ticks. Higher values move labels further from the line to avoid price action interference.")
+
+// Helper function for line style
+f_getLineStyle(string styleStr) =>
+    switch styleStr
+        "Solid" => line.style_solid
+        "Dashed" => line.style_dashed
+        "Dotted" => line.style_dotted
+        => line.style_dashed
+
+// Helper function for timing label size
+f_getTimingLabelSize(string sizeStr) =>
+    switch sizeStr
+        "tiny" => size.tiny
+        "small" => size.small
+        "normal" => size.normal
+        "large" => size.large
+        => size.small
+
+// Helper function to check if a day is a weekend
+f_isWeekend(int dayTimestamp) =>
+    dayOfWeek = dayofweek(dayTimestamp, "America/New_York")
+    dayOfWeek == dayofweek.saturday or dayOfWeek == dayofweek.sunday
+
+// Helper function to count trading days back from current time
+f_getTradingDaysBack(int days) =>
+    if not ExcludeWeekends
+        days
+    else
+        // Count backwards and skip weekends
+        int tradingDaysFound = 0
+        int currentDay = math.floor(time / 86400000)
+        int daysToCheck = 0
+        
+        while tradingDaysFound < days and daysToCheck < 50  // Safety limit
+            int checkTimestamp = time - (daysToCheck * 86400000)
+            if not f_isWeekend(checkTimestamp)
+                tradingDaysFound += 1
+            daysToCheck += 1
+        
+        daysToCheck
+
+// Function to clean up old labels when limit is exceeded
+f_cleanupOldLabels() =>
+    int currentDay = math.floor(time / 86400000)
+    // Calculate cutoff day more accurately
+    int daysToKeep = HistoricalDaysToKeep
+    int cutoffDay = na
+    
+    if ExcludeWeekends
+        // Count backwards from current day, skipping weekends
+        int tradingDaysFound = 0
+        int daysChecked = 0
+        while tradingDaysFound < daysToKeep and daysChecked < 20  // Safety limit
+            int checkDay = currentDay - daysChecked
+            if not f_isWeekend(checkDay * 86400000)
+                tradingDaysFound += 1
+            if tradingDaysFound == daysToKeep
+                cutoffDay := checkDay
+                break
+            daysChecked += 1
+        // Fallback if not found
+        if na(cutoffDay)
+            cutoffDay := currentDay - daysToKeep
+    else
+        cutoffDay := currentDay - daysToKeep
+    
+    // Clean up historical boxes - use while loop to avoid Pine Script loop validation issues
+    while array.size(HIST_BOX_DAYS) > 0
+        int boxArraySize = array.size(HIST_BOX_DAYS)
+        bool removedAny = false
+        
+        // Check from the oldest (first) entries
+        for i = boxArraySize - 1 to 0
+            bool shouldRemove = false
+            
+            // Check if we need to remove based on limits or age
+            if array.size(HIST_BOX_LABELS) > MaxHistoricalLabels
+                shouldRemove := true
+            else if not na(cutoffDay) and i < array.size(HIST_BOX_DAYS)
+                dayValue = array.get(HIST_BOX_DAYS, i)
+                if dayValue < cutoffDay
+                    shouldRemove := true
+            
+            if shouldRemove
+                // Delete the actual box object
+                if i < array.size(HIST_BOXES)
+                    oldBox = array.get(HIST_BOXES, i)
+                    if not na(oldBox)
+                        box.delete(oldBox)
+                    array.remove(HIST_BOXES, i)
+                
+                // Delete the label object  
+                if i < array.size(HIST_BOX_LABELS)
+                    oldLabel = array.get(HIST_BOX_LABELS, i)
+                    if not na(oldLabel)
+                        label.delete(oldLabel)
+                    array.remove(HIST_BOX_LABELS, i)
+                
+                // Remove the day entry
+                if i < array.size(HIST_BOX_DAYS)
+                    array.remove(HIST_BOX_DAYS, i)
+                
+                removedAny := true
+                break  // Break after each removal to restart with fresh indices
+        
+        // If we didn't remove anything, break to avoid infinite loop
+        if not removedAny
+            break
+    
+    // Clean up historical lines - use while loop to avoid Pine Script loop validation issues
+    while array.size(HIST_LINE_DAYS) > 0
+        int lineArraySize = array.size(HIST_LINE_DAYS)
+        bool removedAny = false
+        
+        // Check from the oldest (first) entries
+        for i = lineArraySize - 1 to 0
+            bool shouldRemove = false
+            
+            // Check if we need to remove based on limits or age
+            if array.size(HIST_LINE_LABELS) > MaxHistoricalLabels
+                shouldRemove := true
+            else if not na(cutoffDay) and i < array.size(HIST_LINE_DAYS)
+                dayValue = array.get(HIST_LINE_DAYS, i)
+                if dayValue < cutoffDay
+                    shouldRemove := true
+            
+            if shouldRemove
+                // Delete the actual line object
+                if i < array.size(HIST_LINES)
+                    oldLine = array.get(HIST_LINES, i)
+                    if not na(oldLine)
+                        line.delete(oldLine)
+                    array.remove(HIST_LINES, i)
+                
+                // Delete the label object
+                if i < array.size(HIST_LINE_LABELS)
+                    oldLabel = array.get(HIST_LINE_LABELS, i)
+                    if not na(oldLabel)
+                        label.delete(oldLabel)
+                    array.remove(HIST_LINE_LABELS, i)
+                
+                // Remove the day entry
+                if i < array.size(HIST_LINE_DAYS)
+                    array.remove(HIST_LINE_DAYS, i)
+                
+                removedAny := true
+                break  // Break after each removal to restart with fresh indices
+        
+        // If we didn't remove anything, break to avoid infinite loop
+        if not removedAny
+            break
+
+// ==========================================
+// HELPER FUNCTIONS
+// ==========================================
+
+// Helper functions for array resizing
+f_resizeLineArray(array<line> arr, int targetSize) =>
+    currentSize = array.size(arr)
+    if currentSize < targetSize
+        for i = currentSize to targetSize - 1
+            array.push(arr, na)
+    else if currentSize > targetSize
+        for i = currentSize - 1 to targetSize by -1
+            array.pop(arr)
+    arr
+
+f_resizeIntArray(array<int> arr, int targetSize, int defaultValue) =>
+    currentSize = array.size(arr)
+    if currentSize < targetSize
+        for i = currentSize to targetSize - 1
+            array.push(arr, defaultValue)
+    else if currentSize > targetSize
+        for i = currentSize - 1 to targetSize by -1
+            array.pop(arr)
+    arr
+
+f_resizeBoolArray(array<bool> arr, int targetSize, bool defaultValue) =>
+    currentSize = array.size(arr)
+    if currentSize < targetSize
+        for i = currentSize to targetSize - 1
+            array.push(arr, defaultValue)
+    else if currentSize > targetSize
+        for i = currentSize - 1 to targetSize by -1
+            array.pop(arr)
+    arr
+
+// ==========================================
+// MAIN LOOP
+// ==========================================
+const string TZ = "America/New_York"
+
+// timeframe length in ms
+TF_MS = timeframe.in_seconds(timeframe.period) * 1000
+
+color _barColor = na
+
+for idx = 0 to array.size(SESSION_CFGS) - 1 by 1
+    cfg = array.get(SESSION_CFGS, idx)
+    if not cfg.enabled
+        continue
+
+    st = array.get(SESSION_STATES, idx)
+    // Update state per bar
+    st := core.updateSession(st, cfg, TZ)
+    array.set(SESSION_STATES, idx, st)
+
+    // Reset flags on first bar of session - clear previous boxes references
+    if st.isFirstBar
+        // Reset per-session pointers; optionally delete drawings
+        if EnableBoxes
+            oldT1 = array.get(T1_BOXES, idx)
+            oldT2 = array.get(T2_BOXES, idx)
+            if not KeepHistorical
+                if not na(oldT1)
+                    box.delete(oldT1)
+                if not na(oldT2)
+                    box.delete(oldT2)
+            array.set(T1_BOXES, idx, na)
+            array.set(T2_BOXES, idx, na)
+        if ShowOpenLines
+            oldL1 = array.get(T1_OPEN_LINES, idx)
+            oldL2 = array.get(T2_OPEN_LINES, idx)
+            if not KeepHistorical
+                if not na(oldL1)
+                    line.delete(oldL1)
+                if not na(oldL2)
+                    line.delete(oldL2)
+            array.set(T1_OPEN_LINES, idx, na)
+            array.set(T2_OPEN_LINES, idx, na)
+        if EnableBoxLabels
+            oldLBL1 = array.get(CURR_T1_BOX_LABELS, idx)
+            oldLBL2 = array.get(CURR_T2_BOX_LABELS, idx)
+            if not na(oldLBL1)
+                label.delete(oldLBL1)
+            if not na(oldLBL2)
+                label.delete(oldLBL2)
+            array.set(CURR_T1_BOX_LABELS, idx, na)
+            array.set(CURR_T2_BOX_LABELS, idx, na)
+        if EnableLineLabels
+            oldLL1 = array.get(CURR_T1_LINE_LABELS, idx)
+            oldLL2 = array.get(CURR_T2_LINE_LABELS, idx)
+            if not na(oldLL1)
+                label.delete(oldLL1)
+            if not na(oldLL2)
+                label.delete(oldLL2)
+            array.set(CURR_T1_LINE_LABELS, idx, na)
+            array.set(CURR_T2_LINE_LABELS, idx, na)
+        
+        // Reset timing lines and their state
+        oldTimingT1 = array.get(T1_TIME_LINES, idx)
+        oldTimingT2 = array.get(T2_TIME_LINES, idx)
+        oldTimingT1Lbl = array.get(T1_TIME_LABELS, idx)
+        oldTimingT2Lbl = array.get(T2_TIME_LABELS, idx)
+        oldTimingT1LblBot = array.get(T1_TIME_LABELS_BOTTOM, idx)
+        oldTimingT2LblBot = array.get(T2_TIME_LABELS_BOTTOM, idx)
+        
+        if not na(oldTimingT1)
+            line.delete(oldTimingT1)
+        if not na(oldTimingT2)
+            line.delete(oldTimingT2)
+        if not na(oldTimingT1Lbl)
+            label.delete(oldTimingT1Lbl)
+        if not na(oldTimingT2Lbl)
+            label.delete(oldTimingT2Lbl)
+        if not na(oldTimingT1LblBot)
+            label.delete(oldTimingT1LblBot)
+        if not na(oldTimingT2LblBot)
+            label.delete(oldTimingT2LblBot)
+            
+        array.set(T1_TIME_LINES, idx, na)
+        array.set(T2_TIME_LINES, idx, na)
+        array.set(T1_TIME_VALUES, idx, na)
+        array.set(T2_TIME_VALUES, idx, na)
+        array.set(T1_TIME_MITIGATED, idx, false)
+        array.set(T2_TIME_MITIGATED, idx, false)
+        array.set(T1_TIME_LABELS, idx, na)
+        array.set(T2_TIME_LABELS, idx, na)
+        array.set(T1_TIME_LABELS_BOTTOM, idx, na)
+        array.set(T2_TIME_LABELS_BOTTOM, idx, na)
+
+    // ==========================================
+    // CREATE T1/T2 PREDICTIVE TIMING LINES
+    // ==========================================
+    
+    // Create T1 timing line when session starts and target is available
+    if st.isFirstBar and not na(st.targetT1) and ShowT1TimingLines
+        int t1Time = int(st.startTime + st.targetT1)
+        
+        // Only create line if T1 time is in the future
+        if t1Time > time
+            // Delete existing line and label
+            existingT1Line = array.get(T1_TIME_LINES, idx)
+            if not na(existingT1Line)
+                line.delete(existingT1Line)
+            existingT1Label = array.get(T1_TIME_LABELS, idx)
+            if not na(existingT1Label)
+                label.delete(existingT1Label)
+            
+            // Create new vertical timing line
+            lineStyle = f_getLineStyle(TimingLineStyle)
+            newT1Line = line.new(t1Time, st.lowPrice - (st.highPrice - st.lowPrice) * 0.1, t1Time, st.highPrice + (st.highPrice - st.lowPrice) * 0.1, xloc.bar_time, color=T1LineColor, style=lineStyle, width=TimingLineWidth)
+            
+            // Create timing labels if enabled
+            label newT1Label = na
+            label newT1LabelBottom = na
+            if ShowTimingLabels
+                // Format the time and create label text
+                string timeStr = str.format_time(t1Time, "HH:mm", TZ)
+                string labelText = cfg.name + " T1\n" + timeStr
+                // Top label
+                float labelYTop = st.highPrice + (st.highPrice - st.lowPrice) * 0.1 + TimingLabelOffset * syminfo.mintick
+                newT1Label := label.new(t1Time, labelYTop, labelText, xloc.bar_time, yloc.price, TimingLabelColor, label.style_label_down, TimingLabelTextColor, f_getTimingLabelSize(TimingLabelSize))
+                // Bottom label
+                float labelYBottom = st.lowPrice - (st.highPrice - st.lowPrice) * 0.1 - TimingLabelOffset * syminfo.mintick
+                newT1LabelBottom := label.new(t1Time, labelYBottom, labelText, xloc.bar_time, yloc.price, TimingLabelColor, label.style_label_up, TimingLabelTextColor, f_getTimingLabelSize(TimingLabelSize))
+            
+            array.set(T1_TIME_LINES, idx, newT1Line)
+            array.set(T1_TIME_LABELS, idx, newT1Label)
+            array.set(T1_TIME_LABELS_BOTTOM, idx, newT1LabelBottom)
+            array.set(T1_TIME_VALUES, idx, t1Time)
+            array.set(T1_TIME_MITIGATED, idx, false)
+    
+    // Create T2 timing line when session starts and target is available
+    if st.isFirstBar and not na(st.targetT2) and ShowT2TimingLines
+        int t2Time = int(st.startTime + st.targetT2)
+        
+        // Only create line if T2 time is in the future
+        if t2Time > time
+            // Delete existing line and label
+            existingT2Line = array.get(T2_TIME_LINES, idx)
+            if not na(existingT2Line)
+                line.delete(existingT2Line)
+            existingT2Label = array.get(T2_TIME_LABELS, idx)
+            if not na(existingT2Label)
+                label.delete(existingT2Label)
+            
+            // Create new vertical timing line
+            lineStyle = f_getLineStyle(TimingLineStyle)
+            newT2Line = line.new(t2Time, st.lowPrice - (st.highPrice - st.lowPrice) * 0.1, t2Time, st.highPrice + (st.highPrice - st.lowPrice) * 0.1, xloc.bar_time, color=T2LineColor, style=lineStyle, width=TimingLineWidth)
+            
+            // Create timing labels if enabled
+            label newT2Label = na
+            label newT2LabelBottom = na
+            if ShowTimingLabels
+                // Format the time and create label text
+                string timeStr = str.format_time(t2Time, "HH:mm", TZ)
+                string labelText = cfg.name + " T2\n" + timeStr
+                // Top label
+                float labelYTop = st.highPrice + (st.highPrice - st.lowPrice) * 0.1 + TimingLabelOffset * syminfo.mintick
+                newT2Label := label.new(t2Time, labelYTop, labelText, xloc.bar_time, yloc.price, TimingLabelColor, label.style_label_down, TimingLabelTextColor, f_getTimingLabelSize(TimingLabelSize))
+                // Bottom label
+                float labelYBottom = st.lowPrice - (st.highPrice - st.lowPrice) * 0.1 - TimingLabelOffset * syminfo.mintick
+                newT2LabelBottom := label.new(t2Time, labelYBottom, labelText, xloc.bar_time, yloc.price, TimingLabelColor, label.style_label_up, TimingLabelTextColor, f_getTimingLabelSize(TimingLabelSize))
+            
+            array.set(T2_TIME_LINES, idx, newT2Line)
+            array.set(T2_TIME_LABELS, idx, newT2Label)
+            array.set(T2_TIME_LABELS_BOTTOM, idx, newT2LabelBottom)
+            array.set(T2_TIME_VALUES, idx, t2Time)
+            array.set(T2_TIME_MITIGATED, idx, false)
+    
+    // Update timing line lengths during active session
+    if st.isActive
+        // Update T1 line length and reposition label
+        t1Line = array.get(T1_TIME_LINES, idx)
+        if not na(t1Line) and not array.get(T1_TIME_MITIGATED, idx)
+            line.set_y1(t1Line, st.lowPrice - (st.highPrice - st.lowPrice) * 0.1)
+            line.set_y2(t1Line, st.highPrice + (st.highPrice - st.lowPrice) * 0.1)
+            
+            // Dynamically reposition T1 labels to stay at top and bottom of line
+            t1Label = array.get(T1_TIME_LABELS, idx)
+            if not na(t1Label) and ShowTimingLabels
+                float newLabelYTop = st.highPrice + (st.highPrice - st.lowPrice) * 0.1 + TimingLabelOffset * syminfo.mintick
+                label.set_y(t1Label, newLabelYTop)
+            
+            t1LabelBottom = array.get(T1_TIME_LABELS_BOTTOM, idx)
+            if not na(t1LabelBottom) and ShowTimingLabels
+                float newLabelYBottom = st.lowPrice - (st.highPrice - st.lowPrice) * 0.1 - TimingLabelOffset * syminfo.mintick
+                label.set_y(t1LabelBottom, newLabelYBottom)
+        
+        // Update T2 line length and reposition label
+        t2Line = array.get(T2_TIME_LINES, idx)
+        if not na(t2Line) and not array.get(T2_TIME_MITIGATED, idx)
+            line.set_y1(t2Line, st.lowPrice - (st.highPrice - st.lowPrice) * 0.1)
+            line.set_y2(t2Line, st.highPrice + (st.highPrice - st.lowPrice) * 0.1)
+            
+            // Dynamically reposition T2 labels to stay at top and bottom of line
+            t2Label = array.get(T2_TIME_LABELS, idx)
+            if not na(t2Label) and ShowTimingLabels
+                float newLabelYTop = st.highPrice + (st.highPrice - st.lowPrice) * 0.1 + TimingLabelOffset * syminfo.mintick
+                label.set_y(t2Label, newLabelYTop)
+            
+            t2LabelBottom = array.get(T2_TIME_LABELS_BOTTOM, idx)
+            if not na(t2LabelBottom) and ShowTimingLabels
+                float newLabelYBottom = st.lowPrice - (st.highPrice - st.lowPrice) * 0.1 - TimingLabelOffset * syminfo.mintick
+                label.set_y(t2LabelBottom, newLabelYBottom)
+
+    // Process only if targets available
+    if st.isActive and not na(st.targetT1)
+        // ----- T1 Detection -----
+        int t1TimeRaw = int(st.startTime + st.targetT1)
+        int t1Time = t1TimeRaw  // Use precise timing without rounding
+        
+        // Always check against 1-minute intervals for precise timing
+        bool isT1Bar = false
+        if isBaseTF
+            // On 1-minute chart, check if T1 time falls within current bar (using precise sub-minute timing)
+            isT1Bar := (t1Time >= time) and (t1Time < time + 60000)
+        else
+            // On higher timeframes, check if T1 time falls within current higher-TF bar
+            isT1Bar := (t1Time >= time) and (t1Time < time + TF_MS)
+        if isT1Bar
+            // Determine which bar values to use (1-min vs current TF)
+            int _barTime = time
+            float _hi = high
+            float _lo = low
+            float _openPrice = open
+            if not isBaseTF and not na(LTF_TIME) and array.size(LTF_TIME) > 0
+                int _idx = f_findLtfIndex(t1Time, LTF_TIME)
+                if _idx != -1 and _idx < array.size(LTF_HIGH) and _idx < array.size(LTF_LOW) and _idx < array.size(LTF_OPEN)
+                    float ltfHigh = array.get(LTF_HIGH, _idx)
+                    float ltfLow = array.get(LTF_LOW, _idx)
+                    float ltfOpen = array.get(LTF_OPEN, _idx)
+                    // Only use LTF data if it's valid (not na and reasonable values)
+                    if not na(ltfHigh) and not na(ltfLow) and not na(ltfOpen) and ltfHigh > 0 and ltfLow > 0 and ltfOpen > 0
+                        _barTime    := t1Time  // Use precise T1 time instead of rounded bar time
+                        _hi         := ltfHigh
+                        _lo         := ltfLow
+                        _openPrice  := ltfOpen
+                    // If LTF data is invalid, use current TF as fallback
+                // If index not found, use current TF as fallback
+            
+            // Set bar color only if candle highlighting is enabled
+            if ShowT1Candles
+                _barColor := T1BarColor
+            // Create box if needed
+            if EnableBoxes and BoxExtensionMode != "None" and na(array.get(T1_BOXES, idx))
+                boxRight = BoxExtensionMode == "Session" ? st.endTime : (BoxExtensionMode == "Realtime" ? (RealtimeBoxOffBars >= 0 ? time_close : time) + (RealtimeBoxOffBars)*TF_MS : time)
+                newBox = box.new(time, _hi, boxRight, _lo, xloc = xloc.bar_time, bgcolor = T1BoxFillColor, border_color = T1BoxBorderColor)
+                array.set(T1_BOXES, idx, newBox)
+                // Only store as historical if this is an actual T1 event (isT1Bar is true)
+                if KeepHistorical and isT1Bar and (not HideWeekendSessions or not f_isWeekend(time))
+                    int _d = math.floor(time / 86400000)
+                    array.push(HIST_BOXES, newBox)
+                    array.push(HIST_BOX_DAYS, _d)
+                    if EnableBoxLabels
+                        float yPos = (BoxLabelVertPos == "top" ? box.get_top(newBox) : (BoxLabelVertPos == "bottom" ? box.get_bottom(newBox) : (box.get_top(newBox)+box.get_bottom(newBox))/2)) + BoxLabelVertOffsetTicks * syminfo.mintick
+                        string lblTxt = f_formatLabelText(cfg.name, "T1", _barTime, TZ)
+                        lbl = label.new(st.endTime + BoxLabelHorizOffsetBars*TF_MS, yPos, lblTxt, xloc.bar_time, yloc.price, color.new(color.white,100), label.style_label_right, LabelTextColor, _labelSizeConst)
+                        array.push(HIST_BOX_LABELS, lbl)
+                    else
+                        array.push(HIST_BOX_LABELS, na)
+                // current-session box label
+                if EnableBoxLabels
+                    float currY = (BoxLabelVertPos == "top" ? box.get_top(newBox) : (BoxLabelVertPos == "bottom" ? box.get_bottom(newBox) : (box.get_top(newBox)+box.get_bottom(newBox))/2)) + BoxLabelVertOffsetTicks * syminfo.mintick
+                    string currTxt = f_formatLabelText(cfg.name, "T1", _barTime, TZ)
+                    lblCurr = label.new(boxRight + BoxLabelHorizOffsetBars*TF_MS, currY, currTxt, xloc.bar_time, yloc.price, color.new(color.white,100), label.style_label_right, LabelTextColor, _labelSizeConst)
+                    array.set(CURR_T1_BOX_LABELS, idx, lblCurr)
+                else
+                    array.set(CURR_T1_BOX_LABELS, idx, na)
+
+            // ----- Open price line for T1 -----
+            if ShowOpenLines and na(array.get(T1_OPEN_LINES, idx))
+                float price = _openPrice
+                int lnRight = OpenLineExtMode == "Session" ? st.endTime : (OpenLineExtMode == "Realtime" ? (RealtimeLineOffBars >= 0 ? time_close : time) + (RealtimeLineOffBars)*TF_MS : time + TF_MS)
+                extendOpt = OpenLineExtMode == "Ray" ? extend.right : extend.none
+                newLine = line.new(time, price, lnRight, price, xloc = xloc.bar_time, extend = extendOpt, color = OpenLineColorT1, width = OpenLineWidth)
+                array.set(T1_OPEN_LINES, idx, newLine)
+                // Only store as historical if this is an actual T1 event (isT1Bar is true)
+                if KeepHistorical and isT1Bar and (not HideWeekendSessions or not f_isWeekend(time))
+                    int _d2 = math.floor(time / 86400000)
+                    // Adjust extension per user choice
+                    if HistLineExtMode == "Ray"
+                        line.set_extend(newLine, extend.right)
+                    else if HistLineExtMode == "Realtime"
+                        line.set_extend(newLine, extend.none)
+                        line.set_x2(newLine, time + TF_MS)
+                    else
+                        line.set_extend(newLine, extend.none)
+                        line.set_x2(newLine, st.endTime)
+                    array.push(HIST_LINES, newLine)
+                    array.push(HIST_LINE_DAYS, _d2)
+                    if EnableLineLabels
+                        float _lineYOffset = (LineLabelVertPos == "above" ? LineLabelVertOffsetTicks * syminfo.mintick : (LineLabelVertPos == "below" ? -LineLabelVertOffsetTicks * syminfo.mintick : 0))
+                        float _histLineY = price + _lineYOffset
+                        string lblLineText = f_formatLabelText(cfg.name, "T1", _barTime, TZ)
+                        lblLine = HistLineExtMode == "Ray" ?
+                          label.new(bar_index + LineLabelHorizOffsetBars, _histLineY, lblLineText, xloc.bar_index, yloc.price, color.new(color.white,100), label.style_label_left, LabelTextColor, _labelSizeConst)
+                          : label.new(st.endTime + LineLabelHorizOffsetBars*TF_MS, _histLineY, lblLineText, xloc.bar_time, yloc.price, color.new(color.white,100), label.style_label_right, LabelTextColor, _labelSizeConst)
+                        array.push(HIST_LINE_LABELS, lblLine)
+                    else
+                        array.push(HIST_LINE_LABELS, na)
+                string lCurrTxt = f_formatLabelText(cfg.name, "T1", _barTime, TZ)
+                label lblLCurr = na
+                if EnableLineLabels and (not KeepHistorical)
+                    if OpenLineExtMode == "Ray"
+                        lblLCurr := label.new(bar_index + LineLabelHorizOffsetBars, price, lCurrTxt, xloc.bar_index, yloc.price, color.new(color.white,100), label.style_label_left, LabelTextColor, _labelSizeConst)
+                    else
+                        lblLCurr := label.new(lnRight + LineLabelHorizOffsetBars*TF_MS, price, lCurrTxt, xloc.bar_time, yloc.price, color.new(color.white,100), label.style_label_right, LabelTextColor, _labelSizeConst)
+                else
+                    lblLCurr := na
+                array.set(CURR_T1_LINE_LABELS, idx, lblLCurr)
+
+        // Update realtime box right edge
+        if EnableBoxes and BoxExtensionMode == "Realtime" and not na(array.get(T1_BOXES, idx))
+            int baseTime = RealtimeBoxOffBars >= 0 ? time_close : time
+            box.set_right(array.get(T1_BOXES, idx), baseTime + (RealtimeBoxOffBars)*TF_MS)
+
+        // Update realtime open line right edge
+        if ShowOpenLines and (OpenLineExtMode == "Realtime" or HistLineExtMode == "Realtime") and not na(array.get(T1_OPEN_LINES, idx))
+            int newX = OpenLineExtMode == "Realtime" ? (RealtimeLineOffBars >= 0 ? time_close : time) + (RealtimeLineOffBars)*TF_MS : time + TF_MS
+            line.set_x2(array.get(T1_OPEN_LINES, idx), newX)
+
+    if st.isActive and not na(st.targetT2)
+        // ----- T2 Detection -----
+        int t2Time = int(st.startTime + st.targetT2)  // Use precise timing without rounding
+        // Always check against 1-minute intervals for precise timing
+        bool isT2Bar = false
+        if isBaseTF
+            // On 1-minute chart, check if T2 time falls within current bar (using precise sub-minute timing)
+            isT2Bar := (t2Time >= time) and (t2Time < time + 60000)
+        else
+            // On higher timeframes, check if T2 time falls within current higher-TF bar
+            isT2Bar := (t2Time >= time) and (t2Time < time + TF_MS)
+        if isT2Bar
+            // Determine 1-minute bar info when needed
+            int _barTime2 = time
+            float _hi2 = high
+            float _lo2 = low
+            float _openPrice2 = open
+            if not isBaseTF and not na(LTF_TIME) and array.size(LTF_TIME) > 0
+                int _idx2 = f_findLtfIndex(t2Time, LTF_TIME)
+                if _idx2 != -1 and _idx2 < array.size(LTF_HIGH) and _idx2 < array.size(LTF_LOW) and _idx2 < array.size(LTF_OPEN)
+                    float ltfHigh2 = array.get(LTF_HIGH, _idx2)
+                    float ltfLow2 = array.get(LTF_LOW, _idx2)
+                    float ltfOpen2 = array.get(LTF_OPEN, _idx2)
+                    // Only use LTF data if it's valid (not na and reasonable values)
+                    if not na(ltfHigh2) and not na(ltfLow2) and not na(ltfOpen2) and ltfHigh2 > 0 and ltfLow2 > 0 and ltfOpen2 > 0
+                        _barTime2   := t2Time  // Use precise T2 time instead of rounded bar time
+                        _hi2        := ltfHigh2
+                        _lo2        := ltfLow2
+                        _openPrice2 := ltfOpen2
+                    // If LTF data is invalid, use current TF as fallback
+                // If index not found, use current TF as fallback
+            
+            // Set bar color only if candle highlighting is enabled
+            if ShowT2Candles
+                _barColor := T2BarColor
+            if EnableBoxes and BoxExtensionMode != "None" and na(array.get(T2_BOXES, idx))
+                boxRight2 = BoxExtensionMode == "Session" ? st.endTime : (BoxExtensionMode == "Realtime" ? (RealtimeBoxOffBars >= 0 ? time_close : time) + (RealtimeBoxOffBars)*TF_MS : time)
+                newBox2 = box.new(time, _hi2, boxRight2, _lo2, xloc = xloc.bar_time, bgcolor = T2BoxFillColor, border_color = T2BoxBorderColor)
+                array.set(T2_BOXES, idx, newBox2)
+                // Only store as historical if this is an actual T2 event (isT2Bar is true)
+                if KeepHistorical and isT2Bar and (not HideWeekendSessions or not f_isWeekend(time))
+                    int _d3 = math.floor(time / 86400000)
+                    array.push(HIST_BOXES, newBox2)
+                    array.push(HIST_BOX_DAYS, _d3)
+                    if EnableBoxLabels
+                        float yPos = (BoxLabelVertPos == "top" ? box.get_top(newBox2) : (BoxLabelVertPos == "bottom" ? box.get_bottom(newBox2) : (box.get_top(newBox2)+box.get_bottom(newBox2))/2)) + BoxLabelVertOffsetTicks * syminfo.mintick
+                        string lblTxt = f_formatLabelText(cfg.name, "T2", _barTime2, TZ)
+                        lbl = label.new(st.endTime + BoxLabelHorizOffsetBars*TF_MS, yPos, lblTxt, xloc.bar_time, yloc.price, color.new(color.white,100), label.style_label_right, LabelTextColor, _labelSizeConst)
+                        array.push(HIST_BOX_LABELS, lbl)
+                    else
+                        array.push(HIST_BOX_LABELS, na)
+                // current-session box label
+                if EnableBoxLabels
+                    float currY2 = (BoxLabelVertPos == "top" ? box.get_top(newBox2) : (BoxLabelVertPos == "bottom" ? box.get_bottom(newBox2) : (box.get_top(newBox2)+box.get_bottom(newBox2))/2)) + BoxLabelVertOffsetTicks * syminfo.mintick
+                    string currTxt2 = f_formatLabelText(cfg.name, "T2", _barTime2, TZ)
+                    lblCurr2 = label.new(boxRight2 + BoxLabelHorizOffsetBars*TF_MS, currY2, currTxt2, xloc.bar_time, yloc.price, color.new(color.white,100), label.style_label_right, LabelTextColor, _labelSizeConst)
+                    array.set(CURR_T2_BOX_LABELS, idx, lblCurr2)
+                else
+                    array.set(CURR_T2_BOX_LABELS, idx, na)
+
+            // ----- Open price line for T2 -----
+            if ShowOpenLines and na(array.get(T2_OPEN_LINES, idx))
+                float price2 = _openPrice2
+                int lnRight2 = OpenLineExtMode == "Session" ? st.endTime : (OpenLineExtMode == "Realtime" ? (RealtimeLineOffBars >= 0 ? time_close : time) + (RealtimeLineOffBars)*TF_MS : time + TF_MS)
+                extendOpt2 = OpenLineExtMode == "Ray" ? extend.right : extend.none
+                newLine2 = line.new(time, price2, lnRight2, price2, xloc = xloc.bar_time, extend = extendOpt2, color = OpenLineColorT2, width = OpenLineWidth)
+                array.set(T2_OPEN_LINES, idx, newLine2)
+                // Only store as historical if this is an actual T2 event (isT2Bar is true)
+                if KeepHistorical and isT2Bar and (not HideWeekendSessions or not f_isWeekend(time))
+                    int _d4 = math.floor(time / 86400000)
+                    // Adjust extension per user choice
+                    if HistLineExtMode == "Ray"
+                        line.set_extend(newLine2, extend.right)
+                    else if HistLineExtMode == "Realtime"
+                        line.set_extend(newLine2, extend.none)
+                        line.set_x2(newLine2, time + TF_MS)
+                    else
+                        line.set_extend(newLine2, extend.none)
+                        line.set_x2(newLine2, st.endTime)
+                    array.push(HIST_LINES, newLine2)
+                    array.push(HIST_LINE_DAYS, _d4)
+                    if EnableLineLabels
+                        float _lineYOffset = (LineLabelVertPos == "above" ? LineLabelVertOffsetTicks * syminfo.mintick : (LineLabelVertPos == "below" ? -LineLabelVertOffsetTicks * syminfo.mintick : 0))
+                        float _histLineY = price2 + _lineYOffset
+                        string lblLineText2 = f_formatLabelText(cfg.name, "T2", _barTime2, TZ)
+                        lblLine2 = HistLineExtMode == "Ray" ?
+                          label.new(bar_index + LineLabelHorizOffsetBars, _histLineY, lblLineText2, xloc.bar_index, yloc.price, color.new(color.white,100), label.style_label_left, LabelTextColor, _labelSizeConst)
+                          : label.new(st.endTime + LineLabelHorizOffsetBars*TF_MS, _histLineY, lblLineText2, xloc.bar_time, yloc.price, color.new(color.white,100), label.style_label_right, LabelTextColor, _labelSizeConst)
+                        array.push(HIST_LINE_LABELS, lblLine2)
+                    else
+                        array.push(HIST_LINE_LABELS, na)
+                string lCurrTxt2 = f_formatLabelText(cfg.name, "T2", _barTime2, TZ)
+                label lblLCurr2 = na
+                if EnableLineLabels and (not KeepHistorical)
+                    if OpenLineExtMode == "Ray"
+                        lblLCurr2 := label.new(bar_index + LineLabelHorizOffsetBars, price2, lCurrTxt2, xloc.bar_index, yloc.price, color.new(color.white,100), label.style_label_left, LabelTextColor, _labelSizeConst)
+                    else
+                        lblLCurr2 := label.new(lnRight2 + LineLabelHorizOffsetBars*TF_MS, price2, lCurrTxt2, xloc.bar_time, yloc.price, color.new(color.white,100), label.style_label_right, LabelTextColor, _labelSizeConst)
+                else
+                    lblLCurr2 := na
+                array.set(CURR_T2_LINE_LABELS, idx, lblLCurr2)
+
+        if EnableBoxes and BoxExtensionMode == "Realtime" and not na(array.get(T2_BOXES, idx))
+            int baseTime = RealtimeBoxOffBars >= 0 ? time_close : time
+            box.set_right(array.get(T2_BOXES, idx), baseTime + (RealtimeBoxOffBars)*TF_MS)
+
+        if ShowOpenLines and (OpenLineExtMode == "Realtime" or HistLineExtMode == "Realtime") and not na(array.get(T2_OPEN_LINES, idx))
+            int newX = OpenLineExtMode == "Realtime" ? (RealtimeLineOffBars >= 0 ? time_close : time) + (RealtimeLineOffBars)*TF_MS : time + TF_MS
+            line.set_x2(array.get(T2_OPEN_LINES, idx), newX)
+
+    // ==========================================
+    // TIMING LINE MITIGATION
+    // ==========================================
+    
+    // Check T1 timing line mitigation
+    if not array.get(T1_TIME_MITIGATED, idx) and not na(array.get(T1_TIME_VALUES, idx))
+        t1TimeValue = array.get(T1_TIME_VALUES, idx)
+        
+        // Mitigation occurs when current time reaches or passes the T1 time
+        // Use a small tolerance for timing precision
+        timeTolerance = 60000  // 1 minute tolerance
+        
+        if time >= (t1TimeValue - timeTolerance)
+            // Simply delete the timing line and labels
+            currentT1Line = array.get(T1_TIME_LINES, idx)
+            if not na(currentT1Line)
+                line.delete(currentT1Line)
+            currentT1Label = array.get(T1_TIME_LABELS, idx)
+            if not na(currentT1Label)
+                label.delete(currentT1Label)
+            currentT1LabelBottom = array.get(T1_TIME_LABELS_BOTTOM, idx)
+            if not na(currentT1LabelBottom)
+                label.delete(currentT1LabelBottom)
+            
+            array.set(T1_TIME_LINES, idx, na)
+            array.set(T1_TIME_LABELS, idx, na)
+            array.set(T1_TIME_LABELS_BOTTOM, idx, na)
+            array.set(T1_TIME_VALUES, idx, na)
+            array.set(T1_TIME_MITIGATED, idx, true)
+    
+    // Check T2 timing line mitigation
+    if not array.get(T2_TIME_MITIGATED, idx) and not na(array.get(T2_TIME_VALUES, idx))
+        t2TimeValue = array.get(T2_TIME_VALUES, idx)
+        
+        // Mitigation occurs when current time reaches or passes the T2 time
+        timeTolerance = 60000  // 1 minute tolerance
+        
+        if time >= (t2TimeValue - timeTolerance)
+            // Simply delete the timing line and labels
+            currentT2Line = array.get(T2_TIME_LINES, idx)
+            if not na(currentT2Line)
+                line.delete(currentT2Line)
+            currentT2Label = array.get(T2_TIME_LABELS, idx)
+            if not na(currentT2Label)
+                label.delete(currentT2Label)
+            currentT2LabelBottom = array.get(T2_TIME_LABELS_BOTTOM, idx)
+            if not na(currentT2LabelBottom)
+                label.delete(currentT2LabelBottom)
+            
+            array.set(T2_TIME_LINES, idx, na)
+            array.set(T2_TIME_LABELS, idx, na)
+            array.set(T2_TIME_LABELS_BOTTOM, idx, na)
+            array.set(T2_TIME_VALUES, idx, na)
+            array.set(T2_TIME_MITIGATED, idx, true)
+
+// Apply bar color - must be in global scope
+barcolor(_barColor)
+
+// --- Global realtime extension for boxes (active + historical) ---
+if EnableBoxes and BoxExtensionMode == "Realtime"
+    // Calculate the target time, ensuring positive offsets work by using time_close when needed
+    int baseTime = RealtimeBoxOffBars >= 0 ? time_close : time
+    int newRight = baseTime + (RealtimeBoxOffBars)*TF_MS
+    
+    // session-current boxes
+    sz1 = array.size(T1_BOXES)
+    if sz1 > 0
+        for i = 0 to sz1 - 1 by 1
+            bx1 = array.get(T1_BOXES, i)
+            if not na(bx1)
+                box.set_right(bx1, newRight)
+    sz2 = array.size(T2_BOXES)
+    if sz2 > 0
+        for i = 0 to sz2 - 1 by 1
+            bx2 = array.get(T2_BOXES, i)
+            if not na(bx2)
+                box.set_right(bx2, newRight)
+    // historical boxes too
+    histSz = array.size(HIST_BOXES)
+    if histSz > 0
+        for i = 0 to histSz - 1 by 1
+            hbx = array.get(HIST_BOXES, i)
+            if not na(hbx)
+                box.set_right(hbx, newRight)
+
+// --- Global realtime extension for open lines ---
+if ShowOpenLines and (OpenLineExtMode == "Realtime" or HistLineExtMode == "Realtime")
+    // Calculate line extension time with offset support
+    int baseTimeForLines = RealtimeLineOffBars >= 0 ? time_close : time
+    int newXWithOffset = baseTimeForLines + (RealtimeLineOffBars)*TF_MS
+    int newXDefault = time + TF_MS  // Default for historical lines
+    
+    // session-current lines only if their mode is Realtime
+    if OpenLineExtMode == "Realtime"
+        int lsz1 = array.size(T1_OPEN_LINES)
+        if lsz1 > 0
+            for i = 0 to lsz1 - 1 by 1
+                ln1 = array.get(T1_OPEN_LINES, i)
+                if not na(ln1)
+                    line.set_x2(ln1, newXWithOffset)
+        int lsz2 = array.size(T2_OPEN_LINES)
+        if lsz2 > 0
+            for i = 0 to lsz2 - 1 by 1
+                ln2 = array.get(T2_OPEN_LINES, i)
+                if not na(ln2)
+                    line.set_x2(ln2, newXWithOffset)
+    // historical lines update if their mode is Realtime
+    if HistLineExtMode == "Realtime"
+        int hLsz = array.size(HIST_LINES)
+        if hLsz > 0
+            for i = 0 to hLsz - 1 by 1
+                hln = array.get(HIST_LINES, i)
+                if not na(hln)
+                    line.set_x2(hln, newXDefault)
+
+// --- Keep labels glued to drawing right edges ---
+if (EnableBoxLabels or EnableLineLabels)
+    // Historical & current boxes labels - with bounds checking
+    int bCount = array.size(HIST_BOXES)
+    int bLblCount = array.size(HIST_BOX_LABELS)
+    if bCount > 0 and bLblCount > 0 and bCount == bLblCount and bCount <= MaxHistoricalLabels
+        for i = 0 to bCount - 1 by 1
+            bx = array.get(HIST_BOXES, i)
+            lb = array.get(HIST_BOX_LABELS, i)
+            if not na(bx) and not na(lb)
+                float yVal = (BoxLabelVertPos == "top" ? box.get_top(bx) : (BoxLabelVertPos == "bottom" ? box.get_bottom(bx) : (box.get_top(bx)+box.get_bottom(bx))/2)) + BoxLabelVertOffsetTicks * syminfo.mintick
+                label.set_x(lb, box.get_right(bx) + BoxLabelHorizOffsetBars*TF_MS)
+                label.set_y(lb, yVal)
+
+    // Historical open-line labels - with bounds checking
+    int lCount = array.size(HIST_LINES)
+    int lblCount = array.size(HIST_LINE_LABELS)
+    if lCount > 0 and lblCount > 0 and lCount == lblCount and lCount <= MaxHistoricalLabels
+        for i = 0 to lCount - 1 by 1
+            ln = array.get(HIST_LINES, i)
+            lb2 = array.get(HIST_LINE_LABELS, i)
+            if not na(ln) and not na(lb2)
+                float price = line.get_y1(ln)
+                if (HistLineExtMode == "Ray")
+                    label.set_x(lb2, bar_index + LineLabelHorizOffsetBars)
+                    float adjPrice = price + (LineLabelVertPos == "above" ? LineLabelVertOffsetTicks * syminfo.mintick : (LineLabelVertPos == "below" ? -LineLabelVertOffsetTicks * syminfo.mintick : 0))
+                    label.set_y(lb2, adjPrice)
+                else if HistLineExtMode == "Realtime"
+                    label.set_x(lb2, line.get_x2(ln) + LineLabelHorizOffsetBars*TF_MS)
+                    float adjPrice = price + (LineLabelVertPos == "above" ? LineLabelVertOffsetTicks * syminfo.mintick : (LineLabelVertPos == "below" ? -LineLabelVertOffsetTicks * syminfo.mintick : 0))
+                    label.set_y(lb2, adjPrice)
+
+    // Current session box labels
+    int cSz = array.size(CURR_T1_BOX_LABELS)
+    if cSz > 0
+        for i = 0 to cSz-1 by 1
+            lbx = array.get(CURR_T1_BOX_LABELS,i)
+            bxCur = array.get(T1_BOXES,i)
+            if not na(bxCur) and not na(lbx)
+                float yv = (BoxLabelVertPos == "top" ? box.get_top(bxCur) : (BoxLabelVertPos == "bottom" ? box.get_bottom(bxCur) : (box.get_top(bxCur)+box.get_bottom(bxCur))/2)) + BoxLabelVertOffsetTicks * syminfo.mintick
+                label.set_x(lbx, box.get_right(bxCur) + BoxLabelHorizOffsetBars*TF_MS)
+                label.set_y(lbx, yv)
+    int cSz2 = array.size(CURR_T2_BOX_LABELS)
+    if cSz2>0
+        for i = 0 to cSz2-1 by 1
+            lbx2 = array.get(CURR_T2_BOX_LABELS,i)
+            bxCur2 = array.get(T2_BOXES,i)
+            if not na(bxCur2) and not na(lbx2)
+                float yv2 = (BoxLabelVertPos == "top" ? box.get_top(bxCur2) : (BoxLabelVertPos == "bottom" ? box.get_bottom(bxCur2) : (box.get_top(bxCur2)+box.get_bottom(bxCur2))/2)) + BoxLabelVertOffsetTicks * syminfo.mintick
+                label.set_x(lbx2, box.get_right(bxCur2) + BoxLabelHorizOffsetBars*TF_MS)
+                label.set_y(lbx2, yv2)
+
+    // Current session line labels
+    int lnSz1 = array.size(CURR_T1_LINE_LABELS)
+    if lnSz1>0
+        for i = 0 to lnSz1-1 by 1
+            ll = array.get(CURR_T1_LINE_LABELS,i)
+            ln = array.get(T1_OPEN_LINES,i)
+            if not na(ln) and not na(ll)
+                if OpenLineExtMode == "Ray"
+                    label.set_x(ll, bar_index + LineLabelHorizOffsetBars)
+                    label.set_y(ll, line.get_y1(ln) + (LineLabelVertPos == "above" ? LineLabelVertOffsetTicks * syminfo.mintick : (LineLabelVertPos == "below" ? -LineLabelVertOffsetTicks * syminfo.mintick : 0)))
+                else
+                    label.set_x(ll, line.get_x2(ln) + LineLabelHorizOffsetBars*TF_MS)
+                    label.set_y(ll, line.get_y1(ln) + (LineLabelVertPos == "above" ? LineLabelVertOffsetTicks * syminfo.mintick : (LineLabelVertPos == "below" ? -LineLabelVertOffsetTicks * syminfo.mintick : 0)))
+    int lnSz2 = array.size(CURR_T2_LINE_LABELS)
+    if lnSz2>0
+        for i = 0 to lnSz2-1 by 1
+            ll2 = array.get(CURR_T2_LINE_LABELS,i)
+            ln2 = array.get(T2_OPEN_LINES,i)
+            if not na(ln2) and not na(ll2)
+                if OpenLineExtMode == "Ray"
+                    label.set_x(ll2, bar_index + LineLabelHorizOffsetBars)
+                    label.set_y(ll2, line.get_y1(ln2) + (LineLabelVertPos == "above" ? LineLabelVertOffsetTicks * syminfo.mintick : (LineLabelVertPos == "below" ? -LineLabelVertOffsetTicks * syminfo.mintick : 0)))
+                else
+                    label.set_x(ll2, line.get_x2(ln2) + LineLabelHorizOffsetBars*TF_MS)
+                    label.set_y(ll2, line.get_y1(ln2) + (LineLabelVertPos == "above" ? LineLabelVertOffsetTicks * syminfo.mintick : (LineLabelVertPos == "below" ? -LineLabelVertOffsetTicks * syminfo.mintick : 0)))
+
+// ==========================================
+// SESSION TIMES TABLE OPTIMIZATION
+// ==========================================
+
+// Cache variables for table optimization
+var array<int> cachedSessionOrder = array.new<int>()
+var array<string> cachedT1Times = array.new<string>()
+var array<string> cachedT2Times = array.new<string>()
+var array<bool> cachedActiveStatus = array.new<bool>()
+var array<bool> cachedT1Mitigated = array.new<bool>()
+var array<bool> cachedT2Mitigated = array.new<bool>()
+var array<int> cachedHTFOrder = array.new<int>()
+var array<string> cachedHTFT1Times = array.new<string>()
+var array<string> cachedHTFT2Times = array.new<string>()
+var array<bool> cachedHTFActiveStatus = array.new<bool>()
+var array<bool> cachedHTFT1Mitigated = array.new<bool>()
+var array<bool> cachedHTFT2Mitigated = array.new<bool>()
+var bool tableNeedsUpdate = true
+var int lastTableUpdateTime = 0
+
+// Efficient insertion sort - O(n) for mostly sorted data, O(n²) worst case but much better than bubble sort
+f_insertionSortSessions(array<int> indices, array<int> startTimes, array<bool> activeStatus) =>
+    int n = array.size(indices)
+    if n <= 1
+        [indices, startTimes, activeStatus]
+    else
+        for i = 1 to n - 1
+            int keyIdx = array.get(indices, i)
+            int keyTime = array.get(startTimes, i)
+            bool keyActive = array.get(activeStatus, i)
+            int j = i - 1
+            
+            // Find insertion position
+            while j >= 0
+                bool currentActive = array.get(activeStatus, j)
+                int currentTime = array.get(startTimes, j)
+                
+                // Stop if current element should stay before key
+                if currentActive and not keyActive
+                    break
+                else if currentActive == keyActive and currentTime >= keyTime
+                    break
+                
+                // Shift element right
+                array.set(indices, j + 1, array.get(indices, j))
+                array.set(startTimes, j + 1, array.get(startTimes, j))
+                array.set(activeStatus, j + 1, array.get(activeStatus, j))
+                j -= 1
+            
+            // Insert key at found position
+            array.set(indices, j + 1, keyIdx)
+            array.set(startTimes, j + 1, keyTime)
+            array.set(activeStatus, j + 1, keyActive)
+        
+        [indices, startTimes, activeStatus]
+
+
+
+// ==========================================
+// SESSION TIMES TABLE
+// ==========================================
+if ShowSessionTable
+    // ULTRA-AGGRESSIVE OPTIMIZATION: Only update on specific triggers
+    bool shouldUpdateTable = false
+    
+    // Force update on very first run
+    if tableNeedsUpdate
+        shouldUpdateTable := true
+        tableNeedsUpdate := false
+    
+    // Update only when sessions start (st.isFirstBar) to minimize processing
+    if not shouldUpdateTable
+        for idx = 0 to array.size(SESSION_CFGS) - 1
+            cfg = array.get(SESSION_CFGS, idx)
+            st = array.get(SESSION_STATES, idx)
+            if cfg.enabled and st.isFirstBar
+                shouldUpdateTable := true
+                break  // Exit loop early once we find a reason to update
+    
+    // Update every 5 minutes as fallback to catch any missed changes
+    if not shouldUpdateTable and (time - lastTableUpdateTime >= 300000)
+        shouldUpdateTable := true
+    
+    if shouldUpdateTable
+        // Create table if it doesn't exist
+        if na(sessionTimesTable)
+            sessionTimesTable := table.new(f_getTablePosition(TablePosition), 3, 20, bgcolor=color.new(color.white, 100), border_width=TableBorderWidth, border_color=TableBorderColor, frame_width=TableFrameWidth, frame_color=TableFrameColor)
+            // Add headers with custom colors
+            table.cell(sessionTimesTable, 0, 0, "Session", text_color=HeaderTextColor, text_size=f_getTableSize(TableSize), bgcolor=HeaderBgColor)
+            table.cell(sessionTimesTable, 1, 0, "T1 Time", text_color=HeaderTextColor, text_size=f_getTableSize(TableSize), bgcolor=HeaderBgColor)
+            table.cell(sessionTimesTable, 2, 0, "T2 Time", text_color=HeaderTextColor, text_size=f_getTableSize(TableSize), bgcolor=HeaderBgColor)
+        
+        // Collect enabled sessions efficiently (same as before but only when actually updating)
+        var array<int> sessionIndices = array.new<int>()
+        var array<int> sessionStartTimes = array.new<int>()
+        var array<bool> sessionActiveStatus = array.new<bool>()
+        var array<int> htfSessionIndices = array.new<int>()
+        var array<int> htfSessionStartTimes = array.new<int>()
+        var array<bool> htfSessionActiveStatus = array.new<bool>()
+        
+        // Clear and rebuild arrays only when needed
+        array.clear(sessionIndices)
+        array.clear(sessionStartTimes)
+        array.clear(sessionActiveStatus)
+        array.clear(htfSessionIndices)
+        array.clear(htfSessionStartTimes)
+        array.clear(htfSessionActiveStatus)
+        
+        // Single pass to collect all enabled sessions
+        for idx = 0 to array.size(SESSION_CFGS) - 1
+            cfg = array.get(SESSION_CFGS, idx)
+            st = array.get(SESSION_STATES, idx)
+            
+            if cfg.enabled
+                if cfg.name == "Weekly" or cfg.name == "Monthly"
+                    array.push(htfSessionIndices, idx)
+                    array.push(htfSessionStartTimes, st.startTime)
+                    array.push(htfSessionActiveStatus, st.isActive)
+                else
+                    array.push(sessionIndices, idx)
+                    array.push(sessionStartTimes, st.startTime)
+                    array.push(sessionActiveStatus, st.isActive)
+        
+        // Use optimized insertion sort
+        [sortedIndices, sortedStartTimes, sortedActiveStatus] = f_insertionSortSessions(sessionIndices, sessionStartTimes, sessionActiveStatus)
+        
+        // Update cached data and table in single pass
+        array.clear(cachedSessionOrder)
+        array.clear(cachedT1Times)
+        array.clear(cachedT2Times)
+        array.clear(cachedActiveStatus)
+        array.clear(cachedT1Mitigated)
+        array.clear(cachedT2Mitigated)
+        
+        // Handle daily reset logic once
+        int currentHour = hour(time, TZ)
+        int currentMinute = minute(time, TZ)
+        bool isDailyResetTime = (currentHour == 16 and currentMinute == 0)
+        
+        if isDailyResetTime and (na(lastResetTime) or time > lastResetTime)
+            lastResetTime := time
+            for j = 0 to array.size(sessionValidAfterReset) - 1
+                cfg_temp = array.get(SESSION_CFGS, j)
+                if cfg_temp.name != "Weekly" and cfg_temp.name != "Monthly"
+                    array.set(sessionValidAfterReset, j, false)
+        
+        // Update session validity flags
+        for idx = 0 to array.size(SESSION_CFGS) - 1
+            cfg = array.get(SESSION_CFGS, idx)
+            st = array.get(SESSION_STATES, idx)
+            
+            if cfg.name != "Weekly" and cfg.name != "Monthly" and cfg.enabled and st.isFirstBar and not na(lastResetTime) and time > lastResetTime
+                array.set(sessionValidAfterReset, idx, true)
+        
+        // Process regular sessions and update table efficiently
+        int sessionCount = array.size(sortedIndices)
+        int rowIdx = 1
+        
+        for i = 0 to sessionCount - 1
+            int idx = array.get(sortedIndices, i)
+            cfg = array.get(SESSION_CFGS, idx)
+            st = array.get(SESSION_STATES, idx)
+            
+            // Cache session order
+            array.push(cachedSessionOrder, idx)
+            
+            string t1TimeStr = "N/A"
+            string t2TimeStr = "N/A"
+            bool t1Mitigated = false
+            bool t2Mitigated = false
+            
+            // Determine session validity
+            bool sessionIsValid = false
+            if cfg.name == "Daily"
+                sessionIsValid := not na(st.targetT1) and not na(st.targetT2)
+            else
+                sessionIsValid := array.get(sessionValidAfterReset, idx) or (st.isActive and not na(st.targetT1) and not na(st.targetT2))
+            
+            if sessionIsValid and not na(st.targetT1) and not na(st.targetT2)
+                int t1Time = int(st.startTime + st.targetT1)
+                int t2Time = int(st.startTime + st.targetT2)
+                t1TimeStr := str.format_time(t1Time, "HH:mm", TZ)
+                t2TimeStr := str.format_time(t2Time, "HH:mm", TZ)
+                t1Mitigated := time >= t1Time
+                t2Mitigated := time >= t2Time
+            
+            // Cache calculated values
+            array.push(cachedT1Times, t1TimeStr)
+            array.push(cachedT2Times, t2TimeStr)
+            array.push(cachedActiveStatus, st.isActive)
+            array.push(cachedT1Mitigated, t1Mitigated)
+            array.push(cachedT2Mitigated, t2Mitigated)
+            
+            // Update table cells
+            color sessionBgColor = st.isActive ? ActiveCellBgColor : CellBgColor
+            color sessionTextColor = st.isActive ? ActiveCellTextColor : CellTextColor
+            color t1CellBgColor = (st.isActive and t1Mitigated) ? MitigatedCellBgColor : sessionBgColor
+            color t1CellTextColor = (st.isActive and t1Mitigated) ? MitigatedCellTextColor : sessionTextColor
+            color t2CellBgColor = (st.isActive and t2Mitigated) ? MitigatedCellBgColor : sessionBgColor
+            color t2CellTextColor = (st.isActive and t2Mitigated) ? MitigatedCellTextColor : sessionTextColor
+            
+            table.cell(sessionTimesTable, 0, rowIdx, cfg.name, text_color=sessionTextColor, text_size=f_getTableSize(TableSize), bgcolor=sessionBgColor)
+            table.cell(sessionTimesTable, 1, rowIdx, t1TimeStr, text_color=t1CellTextColor, text_size=f_getTableSize(TableSize), bgcolor=t1CellBgColor)
+            table.cell(sessionTimesTable, 2, rowIdx, t2TimeStr, text_color=t2CellTextColor, text_size=f_getTableSize(TableSize), bgcolor=t2CellBgColor)
+            
+            rowIdx += 1
+        
+        // Handle HTF sessions
+        int htfSessionCount = array.size(htfSessionIndices)
+        if htfSessionCount > 0
+            // Add HTF section header
+            table.cell(sessionTimesTable, 0, rowIdx, "═══ HTF SESSIONS ═══", text_color=HTFHeaderTextColor, text_size=f_getTableSize(TableSize), bgcolor=HTFHeaderBgColor)
+            table.cell(sessionTimesTable, 1, rowIdx, "T1 Date/Time", text_color=HTFHeaderTextColor, text_size=f_getTableSize(TableSize), bgcolor=HTFHeaderBgColor)
+            table.cell(sessionTimesTable, 2, rowIdx, "T2 Date/Time", text_color=HTFHeaderTextColor, text_size=f_getTableSize(TableSize), bgcolor=HTFHeaderBgColor)
+            rowIdx += 1
+            
+            // Clear HTF cache
+            array.clear(cachedHTFOrder)
+            array.clear(cachedHTFT1Times)
+            array.clear(cachedHTFT2Times)
+            array.clear(cachedHTFActiveStatus)
+            array.clear(cachedHTFT1Mitigated)
+            array.clear(cachedHTFT2Mitigated)
+            
+            // Process HTF sessions
+            for i = 0 to htfSessionCount - 1
+                int htfIdx = array.get(htfSessionIndices, i)
+                cfg_htf = array.get(SESSION_CFGS, htfIdx)
+                st_htf = array.get(SESSION_STATES, htfIdx)
+                
+                array.push(cachedHTFOrder, htfIdx)
+                
+                string t1DateTimeStr = "N/A"
+                string t2DateTimeStr = "N/A"
+                bool htfT1Mitigated = false
+                bool htfT2Mitigated = false
+                
+                if not na(st_htf.targetT1) and not na(st_htf.targetT2)
+                    int htfT1Time = int(st_htf.startTime + st_htf.targetT1)
+                    int htfT2Time = int(st_htf.startTime + st_htf.targetT2)
+                    t1DateTimeStr := str.format_time(htfT1Time, "MMM d HH:mm", TZ)
+                    t2DateTimeStr := str.format_time(htfT2Time, "MMM d HH:mm", TZ)
+                    htfT1Mitigated := time >= htfT1Time
+                    htfT2Mitigated := time >= htfT2Time
+                
+                array.push(cachedHTFT1Times, t1DateTimeStr)
+                array.push(cachedHTFT2Times, t2DateTimeStr)
+                array.push(cachedHTFActiveStatus, st_htf.isActive)
+                array.push(cachedHTFT1Mitigated, htfT1Mitigated)
+                array.push(cachedHTFT2Mitigated, htfT2Mitigated)
+                
+                color htfSessionBgColor = st_htf.isActive ? ActiveCellBgColor : CellBgColor
+                color htfSessionTextColor = st_htf.isActive ? ActiveCellTextColor : CellTextColor
+                color htfT1CellBgColor = (st_htf.isActive and htfT1Mitigated) ? MitigatedCellBgColor : htfSessionBgColor
+                color htfT1CellTextColor = (st_htf.isActive and htfT1Mitigated) ? MitigatedCellTextColor : htfSessionTextColor
+                color htfT2CellBgColor = (st_htf.isActive and htfT2Mitigated) ? MitigatedCellBgColor : htfSessionBgColor
+                color htfT2CellTextColor = (st_htf.isActive and htfT2Mitigated) ? MitigatedCellTextColor : htfSessionTextColor
+                
+                table.cell(sessionTimesTable, 0, rowIdx, cfg_htf.name, text_color=htfSessionTextColor, text_size=f_getTableSize(TableSize), bgcolor=htfSessionBgColor)
+                table.cell(sessionTimesTable, 1, rowIdx, t1DateTimeStr, text_color=htfT1CellTextColor, text_size=f_getTableSize(TableSize), bgcolor=htfT1CellBgColor)
+                table.cell(sessionTimesTable, 2, rowIdx, t2DateTimeStr, text_color=htfT2CellTextColor, text_size=f_getTableSize(TableSize), bgcolor=htfT2CellBgColor)
+                
+                rowIdx += 1
+        
+        // Update tracking variables
+        lastTableUpdateTime := time
+
+// ==========================================
+// ADDITIONAL OPTIMIZATIONS
+// ==========================================
+
+// Cache timing line calculations to avoid repeated work
+var array<int> cachedT1TimingValues = array.new<int>()
+var array<int> cachedT2TimingValues = array.new<int>()
+var bool timingLinesNeedUpdate = true
+
+// Only recalculate timing lines when session states change
+if barstate.isconfirmed and timingLinesNeedUpdate
+    array.clear(cachedT1TimingValues)
+    array.clear(cachedT2TimingValues)
+    
+    for idx = 0 to array.size(SESSION_CFGS) - 1
+        cfg = array.get(SESSION_CFGS, idx)
+        st = array.get(SESSION_STATES, idx)
+        
+        if cfg.enabled and st.isActive
+            int t1Val = not na(st.targetT1) ? int(st.startTime + st.targetT1) : na
+            int t2Val = not na(st.targetT2) ? int(st.startTime + st.targetT2) : na
+            array.push(cachedT1TimingValues, t1Val)
+            array.push(cachedT2TimingValues, t2Val)
+        else
+            array.push(cachedT1TimingValues, na)
+            array.push(cachedT2TimingValues, na)
+    
+    timingLinesNeedUpdate := false
+
+// Optimize label updates - only update when box/line positions actually change
+var int lastLabelUpdateBar = 0
+bool shouldUpdateLabels = (bar_index != lastLabelUpdateBar) and (EnableBoxLabels or EnableLineLabels)
+
+if shouldUpdateLabels
+    lastLabelUpdateBar := bar_index
+    
+    // --- Keep labels glued to drawing right edges (optimized) ---
+    // Historical & current boxes labels - with bounds checking
+    int bCount = array.size(HIST_BOXES)
+    int bLblCount = array.size(HIST_BOX_LABELS)
+    if bCount > 0 and bLblCount > 0 and bCount == bLblCount and bCount <= MaxHistoricalLabels
+        for i = 0 to bCount - 1 by 1
+            bx = array.get(HIST_BOXES, i)
+            lb = array.get(HIST_BOX_LABELS, i)
+            if not na(bx) and not na(lb)
+                float yVal = (BoxLabelVertPos == "top" ? box.get_top(bx) : (BoxLabelVertPos == "bottom" ? box.get_bottom(bx) : (box.get_top(bx)+box.get_bottom(bx))/2)) + BoxLabelVertOffsetTicks * syminfo.mintick
+                label.set_x(lb, box.get_right(bx) + BoxLabelHorizOffsetBars*TF_MS)
+                label.set_y(lb, yVal)
+
+    // Historical open-line labels - with bounds checking
+    int lCount = array.size(HIST_LINES)
+    int lblCount = array.size(HIST_LINE_LABELS)
+    if lCount > 0 and lblCount > 0 and lCount == lblCount and lCount <= MaxHistoricalLabels
+        for i = 0 to lCount - 1 by 1
+            ln = array.get(HIST_LINES, i)
+            lb2 = array.get(HIST_LINE_LABELS, i)
+            if not na(ln) and not na(lb2)
+                float price = line.get_y1(ln)
+                if (HistLineExtMode == "Ray")
+                    label.set_x(lb2, bar_index + LineLabelHorizOffsetBars)
+                    float adjPrice = price + (LineLabelVertPos == "above" ? LineLabelVertOffsetTicks * syminfo.mintick : (LineLabelVertPos == "below" ? -LineLabelVertOffsetTicks * syminfo.mintick : 0))
+                    label.set_y(lb2, adjPrice)
+                else if HistLineExtMode == "Realtime"
+                    label.set_x(lb2, line.get_x2(ln) + LineLabelHorizOffsetBars*TF_MS)
+                    float adjPrice = price + (LineLabelVertPos == "above" ? LineLabelVertOffsetTicks * syminfo.mintick : (LineLabelVertPos == "below" ? -LineLabelVertOffsetTicks * syminfo.mintick : 0))
+                    label.set_y(lb2, adjPrice)
+
+    // Current session box labels
+    int cSz = array.size(CURR_T1_BOX_LABELS)
+    if cSz > 0
+        for i = 0 to cSz-1 by 1
+            lbx = array.get(CURR_T1_BOX_LABELS,i)
+            bxCur = array.get(T1_BOXES,i)
+            if not na(bxCur) and not na(lbx)
+                float yv = (BoxLabelVertPos == "top" ? box.get_top(bxCur) : (BoxLabelVertPos == "bottom" ? box.get_bottom(bxCur) : (box.get_top(bxCur)+box.get_bottom(bxCur))/2)) + BoxLabelVertOffsetTicks * syminfo.mintick
+                label.set_x(lbx, box.get_right(bxCur) + BoxLabelHorizOffsetBars*TF_MS)
+                label.set_y(lbx, yv)
+    int cSz2 = array.size(CURR_T2_BOX_LABELS)
+    if cSz2>0
+        for i = 0 to cSz2-1 by 1
+            lbx2 = array.get(CURR_T2_BOX_LABELS,i)
+            bxCur2 = array.get(T2_BOXES,i)
+            if not na(bxCur2) and not na(lbx2)
+                float yv2 = (BoxLabelVertPos == "top" ? box.get_top(bxCur2) : (BoxLabelVertPos == "bottom" ? box.get_bottom(bxCur2) : (box.get_top(bxCur2)+box.get_bottom(bxCur2))/2)) + BoxLabelVertOffsetTicks * syminfo.mintick
+                label.set_x(lbx2, box.get_right(bxCur2) + BoxLabelHorizOffsetBars*TF_MS)
+                label.set_y(lbx2, yv2)
+
+    // Current session line labels
+    int lnSz1 = array.size(CURR_T1_LINE_LABELS)
+    if lnSz1>0
+        for i = 0 to lnSz1-1 by 1
+            ll = array.get(CURR_T1_LINE_LABELS,i)
+            ln = array.get(T1_OPEN_LINES,i)
+            if not na(ln) and not na(ll)
+                if OpenLineExtMode == "Ray"
+                    label.set_x(ll, bar_index + LineLabelHorizOffsetBars)
+                    label.set_y(ll, line.get_y1(ln) + (LineLabelVertPos == "above" ? LineLabelVertOffsetTicks * syminfo.mintick : (LineLabelVertPos == "below" ? -LineLabelVertOffsetTicks * syminfo.mintick : 0)))
+                else
+                    label.set_x(ll, line.get_x2(ln) + LineLabelHorizOffsetBars*TF_MS)
+                    label.set_y(ll, line.get_y1(ln) + (LineLabelVertPos == "above" ? LineLabelVertOffsetTicks * syminfo.mintick : (LineLabelVertPos == "below" ? -LineLabelVertOffsetTicks * syminfo.mintick : 0)))
+    int lnSz2 = array.size(CURR_T2_LINE_LABELS)
+    if lnSz2>0
+        for i = 0 to lnSz2-1 by 1
+            ll2 = array.get(CURR_T2_LINE_LABELS,i)
+            ln2 = array.get(T2_OPEN_LINES,i)
+            if not na(ln2) and not na(ll2)
+                if OpenLineExtMode == "Ray"
+                    label.set_x(ll2, bar_index + LineLabelHorizOffsetBars)
+                    label.set_y(ll2, line.get_y1(ln2) + (LineLabelVertPos == "above" ? LineLabelVertOffsetTicks * syminfo.mintick : (LineLabelVertPos == "below" ? -LineLabelVertOffsetTicks * syminfo.mintick : 0)))
+                else
+                    label.set_x(ll2, line.get_x2(ln2) + LineLabelHorizOffsetBars*TF_MS)
+                    label.set_y(ll2, line.get_y1(ln2) + (LineLabelVertPos == "above" ? LineLabelVertOffsetTicks * syminfo.mintick : (LineLabelVertPos == "below" ? -LineLabelVertOffsetTicks * syminfo.mintick : 0)))
+
+// ==========================================
+// OPTIMIZED CLEANUP SECTION
+// ==========================================
+
+// Only run cleanup periodically to reduce processing overhead
+var int lastCleanupTime = 0
+bool shouldRunCleanup = KeepHistorical and (time - lastCleanupTime > 300000)  // 5 minutes
+
+if shouldRunCleanup
+    f_cleanupOldLabels()
+    lastCleanupTime := time

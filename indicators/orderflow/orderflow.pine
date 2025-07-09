@@ -1,0 +1,3166 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © jnovak1963zas
+
+//@version=5
+indicator(("TBRos Orderflow∞"), overlay=true,max_lines_count = 500,max_labels_count = 500, max_boxes_count = 500)
+
+
+
+// { -------- START INPUTS --------
+
+GeneralSettings_Group = "General Settings"
+ShowTimeframeBiasTable = false //input.bool(title='Show Table', defval=true, inline = "1", group = GeneralSettings_Group, tooltip = 'Timeframe Bias Needs to be manualy selected.')
+ShowTimeTableTickerInfo = false //input.bool(title='Show Table Ticker Info', defval=true, inline = "1", group = GeneralSettings_Group)
+OldHighLowStyle = "Arrays" //input.string("Fib", options= ["Arrays","Fib"], inline="2", group=GeneralSettings_Group, title = "Old High/Low Profile:", tooltip = 'Choose Swing High/Low Profile. If Arrays is selected: Breakers and All H/L will be drawn. If Fib Is used only Important Highs/Lows will be shown.')
+ShowPOIs = input.bool(title='Show Arrays', defval=true, inline = "1", group = GeneralSettings_Group, tooltip = 'Show Arrays')
+ShowPOILabel = input.bool(title='Show Label', defval=false, inline = "1", group = GeneralSettings_Group, tooltip = 'Show Label')
+ExtendPOIsToBreaker = input.bool(title='Extend to Breaker', defval=false, inline = "1", group = GeneralSettings_Group, tooltip = 'Extend Boxes if Breaker Forms.')
+
+ShowBreakers = input.bool(title='Show Breakers', defval=false, inline = "2", group = GeneralSettings_Group, tooltip = 'Show Breakers')
+ShowBreakerLabel = input.bool(title='Show Label', defval=false, inline = "2", group = GeneralSettings_Group, tooltip = 'Show Label')
+
+ShowBoxes = false //input.bool(title="Show Confirmation Boxes", defval=true, inline="3", group=GeneralSettings_Group, tooltip="Show Confirmation Boxes")
+ShowVortexBoxes = input.bool(title="Show Vortex Boxes", defval=true, inline="3", group=GeneralSettings_Group, tooltip="Show Vortex Boxes")
+ShowBoxLabels = false //input.bool(title="Show Labels", defval=false, inline="3", group=GeneralSettings_Group, tooltip="Show Box Labels")
+IncreaseRange3x = input.bool(title="Filter", defval=false, inline="3", group=GeneralSettings_Group, tooltip="Filter for Lower Sensitivity")
+
+
+PointOfInterest_Group = "Array Style"
+ExtendPOIsForNCandles = input.int(2, maxval=500, title="Extend Arrays for N Candles", tooltip="Enter Candles to which you want Arrays to be extended. Works only if Show in Realtime Is disabled.", group=PointOfInterest_Group, inline = "2")
+PoiBoxBorderWidth = input.int(3, maxval=15, title="Array Border Width", group=PointOfInterest_Group, inline = "2")
+
+
+BullPOIColorBorder = input.color(color.new(color.navy, 15), title="Bull Arrays Border", group = PointOfInterest_Group, inline = "2")
+BullPOIColorFill = input.color(color.new(color.navy, 80), title="Bull Arrays Fill", group = PointOfInterest_Group, inline = "2")
+
+BearPOIColorBorder = input.color(color.new(color.maroon, 15), title="Bear Arrays Border", group = PointOfInterest_Group, inline = "3")
+BearPOIColorFill = input.color(color.new(color.maroon, 80), title="Bear Arrays Fill", group = PointOfInterest_Group, inline = "3")
+
+InversionPOIColor = input.color(color.new(color.purple, 15), title="Inversion Arrays Border", group = PointOfInterest_Group, inline = "4")
+InversionPOIColorFill = input.color(color.new(color.purple, 80), title="Inversion Arrays Fill", group = PointOfInterest_Group, inline = "4")
+NumberOfPOIs = 20
+
+
+Breakers_Group = "Breaker Style"
+
+ExtendBreakersForNCandles = input.int(1, maxval=500, title="Extend Breakers for N Candles", tooltip="Enter Candles to which you want Breakers to be extended. Works only if Show in Realtime Is disabled.", group=Breakers_Group, inline = "1")
+
+BullBreakerColorBorder = input.color(color.new(color.navy, 0), title="Bull Border", group = Breakers_Group, inline = "2")
+BullBreakerColorFill = input.color(color.new(color.navy, 80), title="Bull Fill", group = Breakers_Group, inline = "2")
+
+BearBreakerColorBorder = input.color(color.new(color.maroon, 0), title="Bear Border", group = Breakers_Group, inline = "3")
+BearBreakerColorFill = input.color(color.new(color.maroon, 80), title="Bear Fill", group = Breakers_Group, inline = "3")
+
+InversionBreakerColor = input.color(color.new(color.purple, 0), title="Inversion Border", group = Breakers_Group, inline = "4")
+InversionBreakerColorFill = input.color(color.new(color.purple, 80), title="Inversion Fill", group = Breakers_Group, inline = "4")
+NumberOfBreakers = 20
+
+Vortex_Group = "Vortex Style"
+BoxBull_Border_Size = 1
+BoxBull_Fill_Color = input.color(color.new(color.navy, 80), title="Bull Border", group = Vortex_Group, inline = "1")
+BoxBull_Border_Color = input.color(color.new(color.navy, 0), title="Bull Fill", group = Vortex_Group, inline = "1")
+	
+BoxBear_Border_Size = 1
+BoxBear_Fill_Color =  input.color(color.new(color.maroon, 80), title="Bear Border", group = Vortex_Group, inline = "2")
+BoxBear_Border_Color = input.color(color.new(color.maroon, 0), title="Bear Fill", group = Vortex_Group, inline = "2")
+
+BoxPotential_Border_Size = 1
+BoxPotential_Fill_Color = color.new(color.gray, 80)
+BoxPotential_Border_Color = color.new(color.gray, 0)	
+
+
+BoxInversion_Border_Size = 1
+BoxInversion_Fill_Color = color.new(color.purple, 80)
+BoxInversion_Border_Color = color.new(color.purple, 0)
+
+
+
+VortexBull = BoxBull_Border_Color //input.color(color.new(color.navy, 0), title="Bull  Border", group = Vortex_Group, inline = "1")
+VortexBear = BoxBear_Border_Color// input.color(color.new(color.maroon, 0), title="Bear Border", group = Vortex_Group, inline = "1")
+
+
+
+
+// { -------- START Table Bias Settings --------
+Table_Settings = "Manual Bias Settings"
+Show1Min = false //input.bool(title='', defval=false, inline = "1", group = Table_Settings)
+Bias1Min = "NA" //input.string("NA", options= ["Bullish","Bearish", "NA"], inline="1", group=Table_Settings, title = "1", tooltip = "Manually Enter Bias For Each Timeframe.")
+Show5Min = false //input.bool(title='', defval=true, inline = "1", group = Table_Settings)
+Bias5Min = "NA" // //input.string("NA", options= ["Bullish","Bearish", "NA"], inline="1", group=Table_Settings, title = "5")
+Show15Min = false //input.bool(title='', defval=true, inline = "1", group = Table_Settings)
+Bias15Min = "NA" //se //input.string("NA", options= ["Bullish","Bearish", "NA"], inline="1", group=Table_Settings, title = "15")
+Show30Min = false //input.bool(title='', defval=false, inline = "2", group = Table_Settings)
+Bias30Min = "NA" //input.string("NA", options= ["Bullish","Bearish", "NA"], inline="2", group=Table_Settings, title = "30")
+Show1H = false //input.bool(title='', defval=true, inline = "2", group = Table_Settings)
+Bias1H = "NA" //input.string("NA", options= ["Bullish","Bearish", "NA"], inline="2", group=Table_Settings, title = "H")
+Show4H = false //input.bool(title='', defval=true, inline = "2", group = Table_Settings)
+Bias4H = "NA" //input.string("NA", options= ["Bullish","Bearish", "NA"], inline="2", group=Table_Settings, title = "4H")
+Show1D = false //input.bool(title='', defval=false, inline = "3", group = Table_Settings)
+Bias1D = "NA" //input.string("NA", options= ["Bullish","Bearish", "NA"], inline="3", group=Table_Settings, title = "D")
+Show1W = false //input.bool(title='', defval=false, inline = "3", group = Table_Settings)
+Bias1W = "NA" //input.string("NA", options= ["Bullish","Bearish", "NA"], inline="3", group=Table_Settings, title = "W")
+Show1M = false //input.bool(title='', defval=false, inline = "3", group = Table_Settings)
+Bias1M = "NA" // input.string("NA", options= ["Bullish","Bearish", "NA"], inline="3", group=Table_Settings, title = "M")
+// } -------- END Table Bias Settings --------
+
+
+SwingHighLow_Group = "Swing High/Low"
+ShowSwingHighLowString = "None" //input.string("Only H&L", options= ["All","Only H&L", "None"], inline="1", group=SwingHighLow_Group, title = "Show Swing Highs/Lows", tooltip = 'Only H&L. Shows Only candle which have Both Swing High and Swing Low')
+SwingHighColor = color.new(color.maroon, 0)// input.color(color.new(color.maroon, 0), title="Swing High", group = SwingHighLow_Group, inline = "2")
+SwingLowColor = color.new(color.maroon, 0)// input.color(color.new(color.navy, 0), title="Swing High", group = SwingHighLow_Group, inline = "2")
+SwingHighLowColor = color.new(color.maroon, 0)// input.color(color.new(color.purple, 0), title="Swing High Low", group = SwingHighLow_Group, inline = "2", tooltip = "High/Low on Same Candle")
+
+
+NumberOfSwingHighsLows = 100
+
+var bool ShowSwingHighLow = false
+var bool ShowOnlySwingHighLow = false
+if ShowSwingHighLowString == "All"
+    ShowSwingHighLow := true
+    ShowOnlySwingHighLow := false
+else if ShowSwingHighLowString == "Only H&L"
+    ShowSwingHighLow := true
+    ShowOnlySwingHighLow := true
+
+
+FairValueGaps_Group = "Imbalances/FVGs"
+ShowFVGs = false //input.bool(title='Show FVGs', defval=false, inline = "1", group = FairValueGaps_Group, tooltip = 'Show FVGs')
+ShowFVGLabel = false //input.bool(title='Show Label', defval=true, inline = "1", group = FairValueGaps_Group, tooltip = 'Show Label')
+ExtendFvgsForNCandles = 50//input.int(50, maxval=500, title="Extend FVGs for N Candles", tooltip="Enter Candles to which you want FVGs to be extended. Works only if Show in Realtime Is disabled.", group=FairValueGaps_Group, inline = "2")
+
+BullFVGColorBorder = color.new(color.navy, 0) //input.color(color.new(color.navy, 0), title="Bull FVG Border", group = FairValueGaps_Group, inline = "2")
+BullFVGColorFill = color.new(color.navy, 0) //input.color(color.new(color.navy, 80), title="Bull FVG Fill", group = FairValueGaps_Group, inline = "2")
+
+BearFVGColorBorder = color.new(color.navy, 0) //input.color(color.new(color.maroon, 0), title="Bear FVG Border", group = FairValueGaps_Group, inline = "3")
+BearFVGColorFill = color.new(color.navy, 0) //input.color(color.new(color.maroon, 80), title="Bear FVG Fill", group = FairValueGaps_Group, inline = "3")
+
+InversionFVGColor = color.new(color.navy, 0) //input.color(color.new(color.purple, 0), title="Inversion FVG Border", group = FairValueGaps_Group, inline = "4")
+InversionFVGColorFill = color.new(color.navy, 0) //input.color(color.new(color.purple, 80), title="Inversion FVG Fill", group = FairValueGaps_Group, inline = "4")
+NumberOfFVGs = 20
+
+
+
+OldHighLow_Group = "Old Highs/Lows"
+ShowOldHighsLows = false //input.bool(title='Show Old Highs/Lows', defval=true, inline = "1", group = OldHighLow_Group, tooltip = 'Show Old Highs Lows')
+ShowOldHighsLowsLabel = false //input.bool(title='Show Label', defval=true, inline = "1", group = OldHighLow_Group, tooltip = 'Show Label')
+ExtendOldHighsLowsForNCandles = 2 //input.int(2, maxval=500, title="Extend OldHighsLows for N Candles", tooltip="Enter Candles to which you want Old Highs Lows to be extended. Works only if Show in Realtime Is disabled.", group=OldHighLow_Group, inline = "1")
+//ExtendPurgedHighLowToPurgedLevel = input.bool(title='Extend Purged', defval=true, inline = "1", group = OldHighLow_Group, tooltip = 'Extend Purged Highs and Lows to the Purging Candle')
+ExtendPurgedHighLowToPurgedLevel = true
+
+BullOldHighsLowsColorBorder = color.new(color.navy, 0) //input.color(color.new(color.navy, 0), title="Bull Low Border", group = OldHighLow_Group, inline = "2")
+BearOldHighsLowsColorBorder = color.new(color.navy, 0) //input.color(color.new(color.maroon, 0), title="Bear High Border", group = OldHighLow_Group, inline = "3")
+InversionOldHighsLowsColor = color.new(color.navy, 0) //input.color(color.new(color.purple, 0), title="Inversion H/L Border", group = OldHighLow_Group, inline = "4")
+NumberOfOldHighsLows = 20
+
+
+
+Zigzag_Group = "Zig Zag"
+ShowZigzagLines = false //input.bool(title='Show Zigzag Lines', defval=true, inline = "1", group = Zigzag_Group)
+ShowZigzagHlCircle = false //input.bool(title='Show H/L Circles', defval=true, inline = "1", group = Zigzag_Group)
+ShowBreakLines = false //input.bool(title='Show Break Lines', defval=true, inline = "1", group = Zigzag_Group)
+ShowBreakLabels = false //input.bool(title='Show Break Labels', defval=true, inline = "1", group = Zigzag_Group)
+ShowHighLowLabels = false //input.bool(title='Show H/L Labels', defval=true, inline = "1", group = Zigzag_Group)
+BullZigzagColor = color.new(color.purple, 0) //input.color(color.new(color.navy, 0), title="Bull ZigZag Lines", group = Zigzag_Group, inline = "2")
+BearZigzagColor = color.new(color.purple, 0) //input.color(color.new(color.maroon, 0), title="Bear ZigZag Lines", group = Zigzag_Group, inline = "2")
+ChoChColor = color.new(color.purple, 0) //input.color(color.new(color.purple, 0), title="ChoCh Color", group = Zigzag_Group, inline = "2")
+NumberOfZigZagData = 100
+
+FibRetracement_Group = "Fibonacci Retracements"
+ShowBuySellZone = false //input.bool(title='Show Buy/Sell Zones', defval=true, inline = "1", group = FibRetracement_Group)
+ShowFib0886 = false //input.bool(title='Show .886 line', defval=true, inline = "1", group = FibRetracement_Group)
+ExtendFibRetracementsForNCandles = 40 // input.int(40, maxval=500, title="Extend Fib Retracements for N Candles", group=FibRetracement_Group, inline = "1")
+FibShowHide = "All" //input.string("Delete Mitigated", options= ["All","Delete Mitigated", "Collapse Mitigated"], inline="2", group=FibRetracement_Group, title = "Show Zones and H/L")
+ExtendUnmitigatedToRealtime = false //input.bool(title='Extend Unmitigated', defval=true, inline = "2", group = FibRetracement_Group, tooltip = "Works only if Delete Mitigated is Used")
+BullFibRetracementsColorBorder = color.rgb(223, 123, 123, 95)//input.color(color.rgb(95, 169, 230, 50), title="Bull Fib Retracements Border", group = FibRetracement_Group, inline = "3")
+BullFibRetracementsColorFill = color.rgb(223, 123, 123, 95)//input.color(color.rgb(95, 169, 230, 95), title="Bull Fib Retracements Fill", group = FibRetracement_Group, inline = "3")
+NumberOfFibRetracements = 50
+
+BearFibRetracementsColorBorder = color.rgb(223, 123, 123, 95)//input.color(color.rgb(223, 123, 123, 50), title="Bear Fib Retracements Border", group = FibRetracement_Group, inline = "4")
+BearFibRetracementsColorFill = color.rgb(223, 123, 123, 95)//input.color(color.rgb(223, 123, 123, 95), title="Bear Fib Retracements Fill", group = FibRetracement_Group, inline = "4")
+
+
+PremiumDiscount_Group = "Premium/Discount"
+ShowPremiumDiscount = false //input.bool(title='Show Premium Discount', defval=true, inline = "1", group = PremiumDiscount_Group)
+ShowEqLine = false //input.bool(title='Show EQ Line', defval=true, inline = "1", group = PremiumDiscount_Group)
+PremiumFillColor = color.new(color.maroon, 95) //input.color(color.new(color.maroon, 95), title="Premium Color", group = PremiumDiscount_Group, inline = "2")
+DiscountFillColor = color.new(color.maroon, 95) //input.color(color.new(color.navy, 95), title="Discount Color", group = PremiumDiscount_Group, inline = "2")
+EqLineColor = color.new(color.maroon, 95) //input.color(color.new(color.aqua, 0), title="Eq Line Color", group = PremiumDiscount_Group, inline = "2")
+UseCustomStartDate = false //input.bool(title='', defval=false, inline = "3", group = PremiumDiscount_Group)
+CustomStartDate = timestamp("Nov 1 2024 00:00 +000")// input.time(timestamp("Nov 1 2024 00:00 +000"), title = "Use Custom Start Date", inline = "3", group = PremiumDiscount_Group)
+
+
+Inducement_Group = "Inducements"
+ShowInducements = false //input.bool(title='', defval=false, inline = "1", group = Inducement_Group)
+InducementBullColor = color.new(color.maroon, 95) //input.color(color.new(color.navy, 0), title="Bull Color", group = Inducement_Group, inline = "1")
+InducementBearColor = color.new(color.maroon, 95) //input.color(color.new(color.maroon, 0), title="Bear Color", group = Inducement_Group, inline = "1")
+NumberOfOldInducements = 40
+InducementLowHighCandleLength = 5
+
+
+// Table
+Table_Group = "Table Style"
+// ShowTable = input.bool(title="Show Table", defval=true, inline="1", group=Table_Group, tooltip="Show Table")
+TableBackgroundColor = color.new(color.maroon, 95) //input.color(color.new(color.gray, 95), title="BG Color", group = Table_Group, inline = "1")
+TableTextColor = color.new(color.maroon, 95) //input.color(color.new(color.gray, 0), title="Text Color", group = Table_Group, inline = "1")
+TableTextColorBull = color.new(color.maroon, 95) //input.color(color.new(color.green, 0), title="Text Color Bull", group = Table_Group, inline = "1")
+TableTextColorBear = color.new(color.maroon, 95) //input.color(color.new(color.maroon, 0), title="Text Color Bear", group = Table_Group, inline = "1")
+TableFrameColor = color.new(color.maroon, 95) //input.color(color.new(color.gray, 100), title="Frame Color", group = Table_Group, inline = "2")
+TableBorderColor = color.new(color.maroon, 95) //input.color(color.new(color.gray, 100), title="Frame Color", group = Table_Group, inline = "2")
+TableBorderWidth = 1 // input.int(1, title="Table Border Width", minval=0, group = Table_Group, inline = "2")
+TableFrameWidth = 1 // input.int(1, title="Table Frame Width", minval=0, group = Table_Group, inline = "3")
+TableTextSizeOptions = "Small" //input.string(defval="Small", title="Font Size", options=['Auto', 'Tiny', 'Small', 'Normal', 'Large', 'HUGE'], tooltip="Select Analysis Table Font Size", group=Table_Group, inline = "3")
+TableTextSize = "Auto" //TableTextSizeOptions == "Auto" ? size.auto : TableTextSizeOptions == "Tiny" ? size.tiny : TableTextSizeOptions == "Small" ? size.small : TableTextSizeOptions == "Normal" ? size.normal : TableTextSizeOptions == "Large" ? size.large : TableTextSizeOptions == "HUGE" ? size.huge :"End"
+TablePositionRaw = "Top Right" //input.string("Top Right", options=["Top Left", "Top Center", "Top Right","Middle Left","Middle Center","Middle Right","Bottom Left","Bottom Center","Bottom Right"], group=Table_Group, title = "Position", inline = "3")
+TablePosition = position.top_left//TablePositionRaw=="Top Left" ? position.top_left : TablePositionRaw=="Top Center" ? position.top_center : TablePositionRaw=="Top Right" ? position.top_right: TablePositionRaw=="Middle Left" ? position.middle_left : TablePositionRaw=="Middle Center" ? position.middle_center : TablePositionRaw=="Middle Right" ? position.middle_right : TablePositionRaw=="Bottom Left" ? position.bottom_left : TablePositionRaw=="Bottom Center" ? position.bottom_center : position.bottom_right
+
+
+
+// { START Vortex INPUTS
+
+ShowVortexLines = false // input.bool(title="Show Vortex Lines", defval=true, inline="1", group="Vortex", tooltip="Show Vortex Lines")
+
+// IncreaseRange3x = true
+
+// ShowVortexLines = true
+
+// CloseRejection = input.bool(title="Close Rejection Algo", defval=true, inline="1", group="Vortex Lines", tooltip="Close Rejection Algo")
+
+PreconfLevelBullCandleColor = color.new(color.navy, 0)
+PreconfLevelBearCandleColor = color.new(color.maroon, 0)
+
+
+ShowConfCandleBullBear = false
+ShowVortexAsColorCandle = true
+// } END Vortex INPUTS
+
+
+
+
+
+
+
+
+
+
+var Table = table.new(columns=1, rows=50, bgcolor=TableBackgroundColor,frame_color=TableFrameColor, border_width=TableBorderWidth, position =  TablePosition, frame_width = TableFrameWidth, border_color = TableBorderColor)
+// END Table
+
+if ShowTimeframeBiasTable and ShowTimeTableTickerInfo
+    table.cell(Table, 0, 0, str.tostring(syminfo.ticker), text_color = TableTextColor , text_size = TableTextSize,text_halign =  text.align_center)
+    table.cell(Table, 0, 1, str.format_time(time, "E d-M-yyyy"), text_color = TableTextColor , text_size = TableTextSize,text_halign =  text.align_center)
+
+
+// { -------- START TABLE Code --------
+if Show1Min and ShowTimeframeBiasTable
+    color TextColor = na
+    if Bias1Min == "Bullish"
+        TextColor := TableTextColorBull
+    else if Bias1Min == "Bearish"
+        TextColor := TableTextColorBear
+    else
+        TextColor := TableTextColor
+    table.cell(Table, 0, 3, "1 Min: " + Bias1Min, text_color = TextColor , text_size = TableTextSize,text_halign =  text.align_left)
+if Show5Min and ShowTimeframeBiasTable
+    color TextColor = na
+    if Bias5Min == "Bullish"
+        TextColor := TableTextColorBull
+    else if Bias5Min == "Bearish"
+        TextColor := TableTextColorBear
+    else
+        TextColor := TableTextColor
+    table.cell(Table, 0, 4, "5 Min: " + Bias5Min, text_color = TextColor , text_size = TableTextSize,text_halign =  text.align_left)
+if Show15Min and ShowTimeframeBiasTable
+    color TextColor = na
+    if Bias15Min == "Bullish"
+        TextColor := TableTextColorBull
+    else if Bias15Min == "Bearish"
+        TextColor := TableTextColorBear
+    else
+        TextColor := TableTextColor
+    table.cell(Table, 0, 5, "15 Min: " + Bias15Min, text_color = TextColor , text_size = TableTextSize,text_halign =  text.align_left)
+if Show30Min and ShowTimeframeBiasTable
+    color TextColor = na
+    if Bias30Min == "Bullish"
+        TextColor := TableTextColorBull
+    else if Bias30Min == "Bearish"
+        TextColor := TableTextColorBear
+    else
+        TextColor := TableTextColor
+    table.cell(Table, 0, 6, "30 Min: " + Bias30Min, text_color = TextColor , text_size = TableTextSize,text_halign =  text.align_left)
+if Show1H and ShowTimeframeBiasTable
+    color TextColor = na
+    if Bias1H == "Bullish"
+        TextColor := TableTextColorBull
+    else if Bias1H == "Bearish"
+        TextColor := TableTextColorBear
+    else
+        TextColor := TableTextColor
+    table.cell(Table, 0, 7, "1H: " + Bias1H, text_color = TextColor , text_size = TableTextSize,text_halign =  text.align_left)
+if Show4H and ShowTimeframeBiasTable
+    color TextColor = na
+    if Bias4H == "Bullish"
+        TextColor := TableTextColorBull
+    else if Bias4H == "Bearish"
+        TextColor := TableTextColorBear
+    else
+        TextColor := TableTextColor
+    table.cell(Table, 0, 8, "4H: " + Bias4H, text_color = TextColor , text_size = TableTextSize,text_halign =  text.align_left)
+if Show1D and ShowTimeframeBiasTable
+    color TextColor = na
+    if Bias1D == "Bullish"
+        TextColor := TableTextColorBull
+    else if Bias1D == "Bearish"
+        TextColor := TableTextColorBear
+    else
+        TextColor := TableTextColor
+    table.cell(Table, 0, 9, "1D: " + Bias1D, text_color = TextColor , text_size = TableTextSize,text_halign =  text.align_left)
+if Show1W and ShowTimeframeBiasTable
+    color TextColor = na
+    if Bias1W == "Bullish"
+        TextColor := TableTextColorBull
+    else if Bias1W == "Bearish"
+        TextColor := TableTextColorBear
+    else
+        TextColor := TableTextColor
+    table.cell(Table, 0, 10, "1W: " + Bias1W, text_color = TextColor , text_size = TableTextSize,text_halign =  text.align_left)
+if Show1M and ShowTimeframeBiasTable
+    color TextColor = na
+    if Bias1M == "Bullish"
+        TextColor := TableTextColorBull
+    else if Bias1M == "Bearish"
+        TextColor := TableTextColorBear
+    else
+        TextColor := TableTextColor
+    table.cell(Table, 0, 11, "1M: " + Bias1M, text_color = TextColor , text_size = TableTextSize,text_halign =  text.align_left)
+// } -------- END TABLE Code --------
+
+// } -------- END INPUTS --------
+
+
+// { -------- START OBJECTS--------
+type SwingHighLow
+    string Type
+    color Color
+    int Time
+    float High
+    float Low
+    float Open
+    float Close
+    float OCHigh
+    float OCLow
+    label Label
+
+type CandleData
+    float High
+    float Low
+
+type FVG
+    string Type
+    int Time
+    float High
+    float Low
+    float Mid
+    box Box
+    line CE
+
+type Breaker
+    box Box
+    line CE
+    line HighLowLine
+    bool Mitigated
+
+type POI
+    string Type
+    int Time
+    float High
+    float Low
+    float Mid
+    box Box
+    line CE
+    float LastHigh
+    float LastLow
+    int LastHighTime
+    int LastLowTime
+    bool HighLowDrawn
+    line HighLowLine
+    label HighLowLabel
+    bool HighLowPurged
+    bool HighLowConfirmedPurge
+    int  HighLowPurgeCount
+    int NumberOfSameLevels
+    bool BreakerDrawn
+    Breaker BreakerObject
+    int SameHighLowCount
+
+type LineWithLabel
+    line Line
+    label Label
+
+type FibsRetracements
+    string Type
+    box BuySellZone
+    LineWithLabel Fib886
+    LineWithLabel OldHighLow
+    float Fib059
+    float HighLowPrice
+    int HighLowTime
+    bool ZonePurged
+    bool HighLowDrawn
+    bool HighLowPurged
+
+type HighLowArtefacts
+    float Price
+    int Time
+    label Label
+    string Type // H, L
+    string SubType // H, L, ChoCh, ITH, ITL, ExtX, IntX
+	bool Purged
+    int DirectionCount
+
+type ZigZagData
+    string Direction
+    int HighTime
+    float HighPrice
+    int LowTime
+    float LowPrice
+    array<line> ZigZagLines
+    array<label> ZigZagLabels
+    array<int> HighTimes 
+    array<float> HighPrices
+    array<int> LowTimes 
+    array<float> LowPrices
+    array<HighLowArtefacts> Highs
+    array<HighLowArtefacts> Lows
+    array<line> BreakLines
+    string CurrentDirection
+    int DirectionCount
+
+var array<SwingHighLow> ArrayOfSwingHighLows = array.new<SwingHighLow>()
+var array<FVG> ArrayOfFVGs = array.new<FVG>()
+var array<POI> ArrayOfPOIs = array.new<POI>()
+
+
+
+// } -------- END OBJECTS--------
+
+
+// { -------- START VARIABLES --------
+// Calculate Timezone Offset => Rgray => got it from stackoverflow
+var string Timezone = na
+var bool DST = na
+int HourNY = hour(time, "America/New_York")
+int HourUTC = hour(time, "UTC")
+DST := HourUTC - HourUTC == 5 ? false : true
+DST := HourUTC - HourNY == 5 or HourUTC - HourNY == -19 ? false : HourUTC - HourNY == 4 or HourUTC - HourNY == -20 ? true : na
+
+if DST
+    Timezone := "UTC-4:00"    
+else
+    Timezone := "UTC-5:00"
+
+ONE_HOUR = 3600*1000
+ONE_DAY = 24*ONE_HOUR
+ONE_WEEK = ONE_DAY*7
+
+
+
+
+CandleData LastCandleMinus2 = CandleData.new(high[2],low[2])
+CandleData LastCandleMinus1 = CandleData.new(high[1],low[1])
+CandleData LastCandle = CandleData.new(high,low)
+
+var bool ConfirmedHigh = false
+var bool ConfirmedLow = false
+
+var bool ConfirmedBullFvg = false
+var bool ConfirmedBearFvg = false
+
+// var string FvgOrderflow = "NA"
+// var string PreviousFvgOrderflow = "NA"
+
+var float LastHighPrice = na
+var float LastLowPrice = na
+
+var int LastHighTime = na
+var int LastLowTime = na
+
+var int BullBearConfirmedPurgeCount = 0
+var string CurrentDirection = "NA"
+var bool DirectionChanged = false
+
+array<line> EmptyLineArray = array.new<line>()
+array<label> EmptyLabelArray = array.new<label>()
+array<int> EmptyIntArray = array.new<int>()
+array<float> EmptyFloatArray = array.new<float>()
+var array<FibsRetracements> ArrayOfFibRetracements = array.new<FibsRetracements>()
+array<HighLowArtefacts> EmtpyHighLowArtefacts = array.new<HighLowArtefacts>()
+
+var ZigZagData HighLowData = ZigZagData.new("NA", na,na,na,na,EmptyLineArray,EmptyLabelArray,EmptyIntArray,EmptyFloatArray,EmptyIntArray,EmptyFloatArray,EmtpyHighLowArtefacts,EmtpyHighLowArtefacts,EmptyLineArray,"Bull")
+
+// } -------- END VARIABLES --------
+
+
+// { -------- START FUNCTIONS --------
+
+getTimeframeInMiliSeconds() =>
+    string Timeframe = timeframe.period
+    if str.endswith(Timeframe, "S")
+        SecondsArray = str.split(Timeframe, "S")
+        int(str.tonumber(array.get(SecondsArray, 0)))*1000
+    else if Timeframe == "D"
+        86400*1000
+    else if str.endswith(Timeframe, "D") and not (Timeframe == "D")
+        DaysArray = str.split(Timeframe, "D")
+        int(str.tonumber(array.get(DaysArray, 0)))*86400*1000
+    else if Timeframe == "W"
+        604800*1000
+    else if str.endswith(Timeframe, "W") and not (Timeframe == "W")
+        WeeksArray = str.split(Timeframe, "W")
+        int(str.tonumber(array.get(WeeksArray, 0)))*604800*1000
+    else if Timeframe == "M"
+        86400*1000*30
+    else if str.endswith(Timeframe, "M") and not (Timeframe == "M")
+        MonthsArray = str.split(Timeframe, "M")
+        int(str.tonumber(array.get(MonthsArray, 0)))*604800*1000*30
+
+    else
+        int(str.tonumber(Timeframe))*60*1000
+
+
+
+
+
+FunctionCalculateSwingHighLow() =>
+    string ConfirmedHighInternal = "NA"
+    string ConfirmedLowInternal = "NA"
+
+    if LastCandleMinus2.High < LastCandleMinus1.High and LastCandleMinus1.High > LastCandle.High
+        ConfirmedHighInternal := "ConfirmedHigh"
+    if LastCandleMinus2.Low > LastCandleMinus1.Low and LastCandleMinus1.Low < LastCandle.Low
+        ConfirmedLowInternal := "ConfirmedLow"
+
+    [ConfirmedHighInternal,ConfirmedLowInternal]    
+
+FunctionCalculateFVG() =>
+    if LastCandleMinus2.High < LastCandle.Low
+        "ConfirmedBullFVG"
+    else if LastCandleMinus2.Low > LastCandle.High
+        "ConfirmedBearFVG"
+    else
+        "NA"
+
+ArrayNotEmpty(_Array) =>
+    array.size(_Array) > 0 ? true : false
+
+GetLastObjectInArray(_Array) =>
+    if ArrayNotEmpty(_Array)
+        array.get(_Array, array.size(_Array)-1)
+
+// } -------- END FUNCTIONS --------
+
+
+
+
+// { -------- START LOGIC Swing High/Low --------
+
+[FunctionConfirmedHigh,FunctionConfirmedLow] = FunctionCalculateSwingHighLow()
+
+ConfirmedHigh :=  FunctionConfirmedHigh == "ConfirmedHigh"
+ConfirmedLow := FunctionConfirmedLow == "ConfirmedLow"
+
+
+if ConfirmedHigh or ConfirmedLow
+    float Position = na
+    string Type = "NA"
+    string Label = "NA"
+    Style = label.style_label_down
+    bool IsSwingHighAndLow = ConfirmedHigh and ConfirmedLow
+
+    if ConfirmedHigh
+        color Color = color.new(color.gray, 0)
+        Position := high[1]
+        LastHighPrice := Position
+        LastHighTime := time[1]
+        Type := "H"
+        Label := "●"
+        Style := label.style_label_down
+
+        
+        if barstate.isconfirmed 
+            if IsSwingHighAndLow
+                Color := SwingHighLowColor
+            else  
+                Color := SwingHighColor
+
+        Swing = SwingHighLow.new(
+         Type = Type,
+         Color = Color,
+         Time = time[1],
+         High = high[1],
+         Low = low[1],
+         Open = open[1],
+         Close = close[1],
+         OCHigh = math.max(open[1], close[1]),
+         OCLow = math.min(open[1], close[1]),
+         Label = label.new(bar_index[1], Position, Label, style = Style, xloc = xloc.bar_index, color = color.new(color.black, 100), textcolor = Color, size = size.tiny)
+         )
+        array.push(ArrayOfSwingHighLows, Swing)
+
+        if ShowOnlySwingHighLow
+            if IsSwingHighAndLow
+                "Do Nothing"
+            else
+                label.delete(Swing.Label)
+
+        if not ShowSwingHighLow
+            label.delete(Swing.Label)
+
+
+    if ConfirmedLow
+        color Color = color.new(color.gray, 0)
+        Position := low[1]
+        LastLowPrice := Position
+        LastLowTime := time[1]
+        Type := "L"
+        Label := "●"
+        Style := label.style_label_up      
+
+        if barstate.isconfirmed 
+            if IsSwingHighAndLow
+                Color := SwingHighLowColor
+            else
+                Color := SwingLowColor
+
+        Swing = SwingHighLow.new(
+         Type = Type,
+         Color = Color,
+         Time = time[1],
+         High = high[1],
+         Low = low[1],
+         Open = open[1],
+         Close = close[1],
+         OCHigh = math.max(open[1], close[1]),
+         OCLow = math.min(open[1], close[1]),
+         Label = label.new(bar_index[1], Position, Label, style = Style, xloc = xloc.bar_index, color = color.new(color.black, 100), textcolor = Color, size = size.tiny)
+         )
+        array.push(ArrayOfSwingHighLows, Swing)
+
+        if ShowOnlySwingHighLow
+            if IsSwingHighAndLow
+                "Do Nothing"
+            else
+                label.delete(Swing.Label)
+
+        if not ShowSwingHighLow
+            label.delete(Swing.Label)
+
+
+if array.size(ArrayOfSwingHighLows) > NumberOfSwingHighsLows
+    CurrentArtefact = array.shift(ArrayOfSwingHighLows)
+    label.delete(CurrentArtefact.Label)
+
+
+
+// } -------- END LOGIC Swing High/Low --------
+
+
+
+// { -------- START LOGIC FVGs --------
+
+
+ConfirmedBullFvg := FunctionCalculateFVG() == "ConfirmedBullFVG"
+ConfirmedBearFvg := FunctionCalculateFVG() == "ConfirmedBearFVG"
+
+var bool CanDrawBullPoi = false
+var bool CanDrawBearPoi = false
+var int CountBullFvgCandleSince = 0
+var int CountBearFvgCandleSince = 0
+
+if ConfirmedBullFvg or ConfirmedBearFvg
+    string FvgType = "NA"
+    float FvgHigh = na
+    float FvgLow = na
+    color FvgFillColor = color.new(color.gray, 80)
+    color FvgBgColor = color.new(color.gray, 0)
+
+    Label = ""
+
+    if ShowFVGLabel
+        Label := "FVG"
+
+    if ConfirmedBullFvg
+        FvgType := "Bull"
+        FvgHigh := low
+        FvgLow := high[2]
+        CountBullFvgCandleSince := CountBullFvgCandleSince+1
+
+        if CountBullFvgCandleSince != 1
+            CanDrawBullPoi := true
+        else
+            CanDrawBullPoi := false
+
+        if barstate.isconfirmed
+            FvgFillColor := BullFVGColorFill
+            FvgBgColor := BullFVGColorBorder
+            // FvgOrderflow := "Bull"
+            CountBullFvgCandleSince := 0
+            CountBearFvgCandleSince := CountBearFvgCandleSince + 1
+
+    else if ConfirmedBearFvg
+        FvgType := "Bear"
+        FvgHigh := low[2]
+        FvgLow := high
+
+        CountBearFvgCandleSince := CountBearFvgCandleSince+1
+
+        if CountBearFvgCandleSince != 1
+            CanDrawBearPoi := true
+        else
+            CanDrawBearPoi := false
+
+
+        if barstate.isconfirmed
+            FvgFillColor := BearFVGColorFill
+            FvgBgColor := BearFVGColorBorder
+            // FvgOrderflow := "Bear"
+            CountBearFvgCandleSince := 0
+            CountBullFvgCandleSince := CountBullFvgCandleSince + 1
+
+    Fvg = FVG.new(
+         Type = FvgType,
+         Time = time[2],
+         High = FvgHigh,
+         Low = FvgLow,
+         Mid = FvgLow+(FvgHigh-FvgLow)/2,
+         Box = box.new(time[2], FvgLow, time[3]+ExtendFvgsForNCandles*getTimeframeInMiliSeconds(), FvgHigh,border_width=1, bgcolor = FvgFillColor,border_color= FvgBgColor, text = Label, text_color = FvgBgColor, text_halign = text.align_right, text_size = size.small, xloc = xloc.bar_time),
+         CE = line.new(time[2], FvgLow+(FvgHigh-FvgLow)/2, time[3]+ExtendFvgsForNCandles*getTimeframeInMiliSeconds(), FvgLow+(FvgHigh-FvgLow)/2, color = FvgBgColor, style = line.style_dashed, width = 1, xloc = xloc.bar_time)
+         )
+      
+    array.push(ArrayOfFVGs, Fvg)
+
+    if not ShowFVGs
+        box.delete(Fvg.Box)
+        line.delete(Fvg.CE)
+
+else
+    CountBullFvgCandleSince := CountBullFvgCandleSince + 1
+    CountBearFvgCandleSince := CountBearFvgCandleSince + 1
+    CanDrawBullPoi := false
+    CanDrawBearPoi := false
+
+if array.size(ArrayOfFVGs) > NumberOfFVGs
+    CurrentArtefact = array.shift(ArrayOfFVGs)
+    box.delete(CurrentArtefact.Box)
+    line.delete(CurrentArtefact.CE)
+
+
+// } -------- END LOGIC FVGs --------
+
+
+// { -------- START LOGIC POIs --------
+if HighLowData.LowPrice > low and HighLowData.Direction == "Bear"
+    HighLowData.LowTime := time
+    HighLowData.LowPrice := low
+
+else if HighLowData.HighPrice < high and HighLowData.Direction == "Bull"
+    HighLowData.HighTime := time
+    HighLowData.HighPrice := high
+
+
+if CanDrawBullPoi or CanDrawBearPoi //and CountBullFvgCandleSince != 1
+    string POIType = "NA"
+    float POIHigh = na
+    float POILow = na
+    color POIFillColor = color.new(color.gray, 80)
+    color POIBgColor = color.new(color.gray, 0)
+
+    Label = ""
+
+    if ShowPOILabel
+        Label := "POI"
+
+    if CanDrawBullPoi
+        POIType := "Bull"
+        POIHigh := high[2]
+        POILow := low[2]
+        if barstate.isconfirmed
+            POIFillColor := BullPOIColorFill
+            POIBgColor := BullPOIColorBorder
+        if ShowPOILabel
+            Label := "Array+"
+    else if CanDrawBearPoi
+        POIType := "Bear"
+        POIHigh := high[2]
+        POILow := low[2]
+        if barstate.isconfirmed
+            POIFillColor := BearPOIColorFill
+            POIBgColor := BearPOIColorBorder
+        if ShowPOILabel
+            Label := "Array-"
+
+    Poi = POI.new(
+         Type = POIType,
+         Time = time[2],
+         High = POIHigh,
+         Low = POILow,
+         Mid = POILow+(POIHigh-POILow)/2,
+         Box = box.new(time[2], POILow, time[3]+ExtendPOIsForNCandles*getTimeframeInMiliSeconds(), POIHigh,border_width=PoiBoxBorderWidth, bgcolor = POIFillColor,border_color= POIBgColor, text = Label, text_color = POIBgColor, text_halign = text.align_right, text_size = size.small, xloc = xloc.bar_time),
+         CE = line.new(time[2], POILow+(POIHigh-POILow)/2, time[3]+ExtendPOIsForNCandles*getTimeframeInMiliSeconds(), POILow+(POIHigh-POILow)/2, color = POIBgColor, style = line.style_dashed, width = 1, xloc = xloc.bar_time),
+         LastHigh = LastHighPrice,
+         LastLow = LastLowPrice,
+         LastHighTime = LastHighTime,
+         LastLowTime = LastLowTime,
+         HighLowDrawn = false,
+         HighLowLine = na,
+         HighLowLabel = na,
+         HighLowPurged = false,
+         HighLowConfirmedPurge = false,
+         HighLowPurgeCount = 0,
+         NumberOfSameLevels = 0,
+         BreakerDrawn = false,
+         BreakerObject = na,
+         SameHighLowCount = 0
+         )   
+
+    array.push(ArrayOfPOIs, Poi)    
+
+    if not ShowPOIs
+        box.delete(Poi.Box)
+        line.delete(Poi.CE)
+
+
+
+
+
+// } -------- END LOGIC POIs --------
+
+
+
+
+
+
+
+
+
+// { -------- START LOGIC Breakers And High Low Addition --------
+
+
+// var float LastStrucureHigh = na
+// var float LastStructureLow = na
+
+var bool ConfirmedHighPurge = false
+var bool ConfirmedLowPurge = false
+var int CountBullCandleConfirm = 0
+var int CountBearCandleConfirm = 0
+
+if array.size(HighLowData.Highs) > 0 and array.size(HighLowData.Lows) > 0
+    LastHighDataHtf = array.get(HighLowData.Highs, array.size(HighLowData.Highs)-1)
+    LastLowDataHtf = array.get(HighLowData.Lows, array.size(HighLowData.Lows)-1)
+
+    if LastHighDataHtf.Price < close 
+        if CountBullCandleConfirm == 0
+            CountBullCandleConfirm := 1
+        else if CountBullCandleConfirm == 1
+            ConfirmedHighPurge := true
+
+    if LastLowDataHtf.Price > close 
+        if CountBearCandleConfirm == 0
+            CountBearCandleConfirm := 1
+        else if CountBearCandleConfirm == 1
+            ConfirmedLowPurge := true
+
+var int CountBos = 0
+
+if  array.size(ArrayOfPOIs) > 0
+    for i = 0 to array.size(ArrayOfPOIs)-1
+        CurrentArtefact = array.get(ArrayOfPOIs , i)     
+
+
+        if OldHighLowStyle == "Arrays"
+            if CurrentArtefact.Type == "Bull" and not (CurrentArtefact.HighLowDrawn)
+                if low < CurrentArtefact.High
+                    Line = line.new(CurrentArtefact.LastLowTime, CurrentArtefact.LastLow, CurrentArtefact.LastLowTime+ExtendPOIsForNCandles*getTimeframeInMiliSeconds(), CurrentArtefact.LastLow, color = BullOldHighsLowsColorBorder, style = line.style_solid, width = 1, xloc = xloc.bar_time),
+                    Label = label.new(CurrentArtefact.LastLowTime+ExtendPOIsForNCandles*getTimeframeInMiliSeconds(),  CurrentArtefact.LastLow, "Old Low", style = label.style_label_up, xloc = xloc.bar_time, color = color.new(color.black, 100), textcolor = BullOldHighsLowsColorBorder, size = size.small)
+                    CurrentArtefact.HighLowDrawn := true
+                    CurrentArtefact.HighLowLine := Line
+                    CurrentArtefact.HighLowLabel := Label
+                    if not ShowOldHighsLows
+                        line.delete(Line)
+                        label.delete(Label)
+                    else if not ShowOldHighsLowsLabel
+                        label.delete(Label)
+            else if CurrentArtefact.Type == "Bear" and not (CurrentArtefact.HighLowDrawn)
+                if high < CurrentArtefact.Low
+                    Line = line.new(CurrentArtefact.LastHighTime, CurrentArtefact.LastHigh, CurrentArtefact.LastHighTime+ExtendPOIsForNCandles*getTimeframeInMiliSeconds(), CurrentArtefact.LastHigh, color = BearOldHighsLowsColorBorder, style = line.style_solid, width = 1, xloc = xloc.bar_time),
+                    Label = label.new(CurrentArtefact.LastHighTime+ExtendPOIsForNCandles*getTimeframeInMiliSeconds(),  CurrentArtefact.LastHigh, "Old High", style = label.style_label_down, xloc = xloc.bar_time, color = color.new(color.black, 100), textcolor = BearOldHighsLowsColorBorder, size = size.small)
+                    CurrentArtefact.HighLowDrawn := true
+                    CurrentArtefact.HighLowLine := Line
+                    CurrentArtefact.HighLowLabel := Label
+                    if not ShowOldHighsLows
+                        line.delete(Line)
+                        label.delete(Label)
+                    else if not ShowOldHighsLowsLabel
+                        label.delete(Label)
+
+
+
+
+
+        if not CurrentArtefact.HighLowConfirmedPurge 
+            if CurrentArtefact.HighLowPurgeCount == 1
+
+                if CurrentArtefact.Type == "Bull" and close < CurrentArtefact.LastLow
+                    if CurrentDirection == "Bull"
+                        BullBearConfirmedPurgeCount := BullBearConfirmedPurgeCount + 1
+                        DirectionChanged := false
+                    else
+                        CurrentDirection := "Bull"
+                        BullBearConfirmedPurgeCount := 1
+                        DirectionChanged := true
+
+
+
+                    CurrentArtefact.HighLowConfirmedPurge := true
+                    color ShiftColor = SwingHighColor
+                    if BullBearConfirmedPurgeCount == 1
+                        ShiftColor := color.new(color.orange, 0)
+                        CountBos := CountBos + 1
+						string LabelString = "NA"                       
+                        if array.size(HighLowData.Lows) > 0
+                            LastHighDataBeforeChange = array.get(HighLowData.Highs, array.size(HighLowData.Highs)-1)
+                            LastLowDataBeforeChange = array.get(HighLowData.Lows, array.size(HighLowData.Lows)-1)
+
+                            if ConfirmedHighPurge
+                                LabelString := "E" + str.tostring(CountBos)
+                            else
+                                LabelString := "I" + str.tostring(CountBos)
+
+                            if not ShowHighLowLabels
+                                LabelString := ""
+
+                            ConfirmedHighPurge := false
+
+                        HighLowLabel = label.new(HighLowData.HighTime,  HighLowData.HighPrice, LabelString, style = label.style_label_down, xloc = xloc.bar_time, color = color.new(color.black, 100), textcolor = BullZigzagColor, size = size.normal)
+                        array.push(HighLowData.Highs, HighLowArtefacts.new(HighLowData.HighPrice,HighLowData.HighTime,HighLowLabel,"H",LabelString,false,0))
+
+                        Line = line.new(HighLowData.HighTime, HighLowData.HighPrice,HighLowData.LowTime,HighLowData.LowPrice,color = BearZigzagColor, style = line.style_solid, width = 1, xloc = xloc.bar_time)
+                        Label = label.new(HighLowData.HighTime, HighLowData.HighPrice, "●", color = color.new(color.black, 100), textcolor = BearZigzagColor, style = label.style_label_center, size = size.huge, xloc = xloc.bar_time)
+
+                        if not ShowZigzagLines
+                            line.delete(Line)
+                        if not ShowZigzagHlCircle
+                            label.delete(Label)
+
+                        Range = HighLowData.HighPrice-HighLowData.LowPrice
+                        
+                        BuySellZone = box.new(HighLowData.LowTime,HighLowData.HighPrice-Range*0.59,HighLowData.LowTime+getTimeframeInMiliSeconds()*ExtendFibRetracementsForNCandles, HighLowData.HighPrice-Range*0.79, border_width=1, bgcolor=BullFibRetracementsColorFill, border_color=BullFibRetracementsColorBorder, text = "Buy Zone", text_color = BullFibRetracementsColorBorder, text_halign = text.align_right, text_size = size.small, xloc = xloc.bar_time)
+                        Line886 = line.new(HighLowData.LowTime,HighLowData.HighPrice-Range*0.886,HighLowData.LowTime+getTimeframeInMiliSeconds()*ExtendFibRetracementsForNCandles, HighLowData.HighPrice-Range*0.886,color = BullFibRetracementsColorBorder, style = line.style_solid, width = 2, xloc = xloc.bar_time)
+                        Label886 = label.new(HighLowData.LowTime+getTimeframeInMiliSeconds()*ExtendFibRetracementsForNCandles,HighLowData.HighPrice-Range*0.886, "", color = color.new(color.black, 100), textcolor = BullFibRetracementsColorBorder, style = label.style_label_left, size = size.small, xloc = xloc.bar_time)
+
+                        LineWithLabel886 = LineWithLabel.new(Line886,Label886)
+                        FibRetracements = FibsRetracements.new("Bull",BuySellZone,LineWithLabel886,na,HighLowData.HighPrice-Range*0.59,HighLowData.LowPrice,HighLowData.LowTime,false,false,false)
+                        array.push(ArrayOfFibRetracements, FibRetracements)
+
+                        // line LineHighLow = na
+                        // label LabelHighLow = na
+                        // if OldHighLowStyle == "POI"
+                        //     LineHighLow := line.new(HighLowData.LowTime, HighLowData.LowPrice, HighLowData.LowTime+ExtendOldHighsLowsForNCandles*getTimeframeInMiliSeconds(), HighLowData.LowPrice, color = BullOldHighsLowsColorBorder, style = line.style_solid, width = 1, xloc = xloc.bar_time),
+                        //     LabelHighLow := label.new(HighLowData.LowTime+(ExtendOldHighsLowsForNCandles*getTimeframeInMiliSeconds())/5,  HighLowData.LowPrice, "Old Low", style = label.style_label_up, xloc = xloc.bar_time, color = color.new(color.black, 100), textcolor = BullOldHighsLowsColorBorder, size = size.small)
+                        //     CurrentArtefact.HighLowLine := Line
+                        //     CurrentArtefact.HighLowLabel := Label        
+                        //     CurrentArtefact.HighLowDrawn := true
+   
+
+                        // if not ShowOldHighsLows
+                        //     line.delete(LineHighLow)
+                        //     label.delete(LabelHighLow)
+                        // else if not ShowOldHighsLowsLabel
+                        //     label.delete(LabelHighLow)
+
+
+                        if not ShowBuySellZone
+                            box.delete(BuySellZone)
+
+                        if not ShowFib0886
+                            line.delete(Line886)
+                            label.delete(Label886)
+
+
+                        HighLowData.Direction := "Bear"
+                        HighLowData.LowTime := time
+                        HighLowData.LowPrice := low
+                        array.push(HighLowData.ZigZagLines, Line)
+                        array.push(HighLowData.ZigZagLabels, Label)
+                        array.push(HighLowData.HighTimes, HighLowData.HighTime)
+                        array.push(HighLowData.HighPrices, HighLowData.HighPrice)
+
+
+
+                    label.set_text(CurrentArtefact.HighLowLabel, "Shift " + str.tostring(BullBearConfirmedPurgeCount))
+                    label.set_textcolor(CurrentArtefact.HighLowLabel, ShiftColor)
+                    label.set_x(CurrentArtefact.HighLowLabel, CurrentArtefact.LastLowTime+(time-CurrentArtefact.LastLowTime)/2)
+                    line.set_color(CurrentArtefact.HighLowLine, ShiftColor)
+
+
+    
+                else if CurrentArtefact.Type == "Bear" and close > CurrentArtefact.LastHigh
+                    if CurrentDirection == "Bear"
+                        BullBearConfirmedPurgeCount := BullBearConfirmedPurgeCount + 1
+                        DirectionChanged := false
+                    else
+                        CurrentDirection := "Bear"
+                        BullBearConfirmedPurgeCount := 1
+                        DirectionChanged := true
+
+                    color ShiftColor = SwingLowColor
+                    if BullBearConfirmedPurgeCount == 1                        
+                        ShiftColor := color.new(color.orange, 0)
+                        CountBos := CountBos + 1
+  
+                        string LabelString = "NA"                  
+                        if array.size(HighLowData.Lows) > 0
+                            LastHighDataBeforeChange = array.get(HighLowData.Highs, array.size(HighLowData.Highs)-1)
+                            LastLowDataBeforeChange = array.get(HighLowData.Lows, array.size(HighLowData.Lows)-1)
+
+                            if ConfirmedLowPurge
+                                LabelString := "E" + str.tostring(CountBos)
+                            else
+                                LabelString := "I" + str.tostring(CountBos)
+                            ConfirmedLowPurge := false
+
+                            if not ShowHighLowLabels
+                                LabelString := ""
+
+
+                        HighLowLabel = label.new(HighLowData.LowTime,  HighLowData.LowPrice, LabelString, style = label.style_label_up, xloc = xloc.bar_time, color = color.new(color.black, 100), textcolor = BearZigzagColor, size = size.normal)
+                        array.push(HighLowData.Lows, HighLowArtefacts.new(HighLowData.LowPrice,HighLowData.LowTime,HighLowLabel,"L",LabelString,false,0))
+
+                        Line = line.new(HighLowData.HighTime, HighLowData.HighPrice,HighLowData.LowTime,HighLowData.LowPrice,color = BullZigzagColor, style = line.style_solid, width = 1, xloc = xloc.bar_time)
+                        Label = label.new(HighLowData.LowTime, HighLowData.LowPrice, "●", color = color.new(color.black, 100), textcolor = BullZigzagColor, style = label.style_label_center, size = size.huge, xloc = xloc.bar_time)
+
+                        if not ShowZigzagLines
+                            line.delete(Line)
+                        if not ShowZigzagHlCircle
+                            label.delete(Label)
+
+
+                        Range = HighLowData.HighPrice-HighLowData.LowPrice
+                        
+                        BuySellZone = box.new(HighLowData.HighTime,HighLowData.LowPrice+Range*0.59,HighLowData.HighTime+getTimeframeInMiliSeconds()*ExtendFibRetracementsForNCandles, HighLowData.LowPrice+Range*0.79, border_width=1, bgcolor=BearFibRetracementsColorFill, border_color=BearFibRetracementsColorBorder, text = "Sell Zone", text_color = BearFibRetracementsColorBorder, text_halign = text.align_right, text_size = size.small, xloc = xloc.bar_time)
+                        Line886 = line.new(HighLowData.HighTime,HighLowData.LowPrice+Range*0.886,HighLowData.HighTime+getTimeframeInMiliSeconds()*ExtendFibRetracementsForNCandles, HighLowData.LowPrice+Range*0.886,color = BearFibRetracementsColorBorder, style = line.style_solid, width = 2, xloc = xloc.bar_time)
+                        Label886 = label.new(HighLowData.HighTime+getTimeframeInMiliSeconds()*ExtendFibRetracementsForNCandles,HighLowData.LowPrice+Range*0.886, "", color = color.new(color.black, 100), textcolor = BearFibRetracementsColorBorder, style = label.style_label_left, size = size.small, xloc = xloc.bar_time)
+
+                        LineWithLabel886 = LineWithLabel.new(Line886,Label886)
+                        FibRetracements = FibsRetracements.new("Bear",BuySellZone,LineWithLabel886,na, HighLowData.LowPrice+Range*0.59, HighLowData.HighPrice,HighLowData.HighTime,false,false,false)
+                        array.push(ArrayOfFibRetracements, FibRetracements)
+
+
+                        // line LineHighLow = na
+                        // label LabelHighLow = na
+                        // if OldHighLowStyle == "POI"
+                        //     LineHighLow := line.new(HighLowData.HighTime, HighLowData.HighPrice, HighLowData.HighTime+ExtendOldHighsLowsForNCandles*getTimeframeInMiliSeconds(), HighLowData.HighPrice, color = BearOldHighsLowsColorBorder, style = line.style_solid, width = 1, xloc = xloc.bar_time),
+                        //     LabelHighLow := label.new(HighLowData.HighTime+(ExtendOldHighsLowsForNCandles*getTimeframeInMiliSeconds())/5,  HighLowData.HighPrice, "Old High", style = label.style_label_down, xloc = xloc.bar_time, color = color.new(color.black, 100), textcolor = BearOldHighsLowsColorBorder, size = size.small)
+                        //     CurrentArtefact.HighLowLine := Line
+                        //     CurrentArtefact.HighLowLabel := Label        
+                        //     CurrentArtefact.HighLowDrawn := true    
+
+                        // if not ShowOldHighsLows
+                        //     line.delete(LineHighLow)
+                        //     label.delete(LabelHighLow)
+                        // else if not ShowOldHighsLowsLabel
+                        //     label.delete(LabelHighLow)
+
+
+
+                        if not ShowBuySellZone
+                            box.delete(BuySellZone)
+
+                        if not ShowFib0886
+                            line.delete(Line886)
+                            label.delete(Label886)
+
+
+                        HighLowData.Direction := "Bull"
+                        HighLowData.HighTime := time
+                        HighLowData.HighPrice := high
+                        array.push(HighLowData.ZigZagLines, Line)
+                        array.push(HighLowData.ZigZagLabels, Label)
+                        array.push(HighLowData.LowTimes, HighLowData.LowTime)
+                        array.push(HighLowData.LowPrices, HighLowData.LowPrice)
+
+
+
+                    CurrentArtefact.HighLowConfirmedPurge := true
+                    label.set_text(CurrentArtefact.HighLowLabel, "Shift " + str.tostring(BullBearConfirmedPurgeCount))
+                    label.set_textcolor(CurrentArtefact.HighLowLabel, ShiftColor)
+                    label.set_x(CurrentArtefact.HighLowLabel, CurrentArtefact.LastLowTime+(time-CurrentArtefact.LastLowTime)/2)
+                    line.set_color(CurrentArtefact.HighLowLine, ShiftColor)
+
+                else
+                    CurrentArtefact.HighLowPurgeCount == 0
+            else if CurrentArtefact.HighLowPurgeCount == 0 and CurrentArtefact.Type == "Bull" and close < CurrentArtefact.LastLow
+                CurrentArtefact.HighLowPurgeCount := 1
+
+            else if CurrentArtefact.HighLowPurgeCount == 0 and CurrentArtefact.Type == "Bear" and close > CurrentArtefact.LastHigh
+                CurrentArtefact.HighLowPurgeCount := 1
+
+
+
+        if CurrentArtefact.HighLowDrawn and not CurrentArtefact.HighLowPurged
+
+            float HighLow = na
+            CeValue = CurrentArtefact.Low+(CurrentArtefact.High-CurrentArtefact.Low)/2
+
+            if CurrentArtefact.Type == "Bull" and close < CurrentArtefact.LastLow
+                CurrentArtefact.HighLowPurged := true
+                HighLow := CurrentArtefact.LastLow
+
+            else if CurrentArtefact.Type == "Bear" and close > CurrentArtefact.LastHigh
+                CurrentArtefact.HighLowPurged := true
+                HighLow := CurrentArtefact.LastHigh
+
+            string BreakerLabel = ""
+            if ShowBreakerLabel
+                BreakerLabel := "Breaker"
+
+
+           
+            if CurrentArtefact.HighLowPurged
+                BreakerObj = Breaker.new(
+                     Box = box.new(time, CurrentArtefact.High, time+ExtendBreakersForNCandles*getTimeframeInMiliSeconds(), CurrentArtefact.Low, border_width=1, bgcolor=InversionBreakerColorFill, border_color=InversionBreakerColor, text = BreakerLabel, text_color = InversionBreakerColor, text_halign = text.align_right, text_size = size.small, xloc = xloc.bar_time),
+                     CE = line.new(time, CeValue, time+ExtendBreakersForNCandles*getTimeframeInMiliSeconds(), CeValue, color = InversionBreakerColor, style = line.style_dashed, width = 1, xloc = xloc.bar_time),
+                     HighLowLine = line.new(time, HighLow, time+ExtendBreakersForNCandles*getTimeframeInMiliSeconds(), HighLow, color = InversionBreakerColor, style = line.style_solid, width = 1, xloc = xloc.bar_time),
+                     Mitigated = false
+                 )
+
+
+                if not ShowBreakers
+                    box.delete(BreakerObj.Box)
+                    line.delete(BreakerObj.CE)
+                    line.delete(BreakerObj.HighLowLine)
+
+
+
+
+                CurrentArtefact.BreakerObject := BreakerObj
+                CurrentArtefact.BreakerDrawn := true
+                if ExtendPOIsToBreaker
+                    box.set_right(CurrentArtefact.Box, time)
+                    line.set_x2(CurrentArtefact.CE, time)
+
+                    line.set_x2(CurrentArtefact.HighLowLine, time)
+
+
+
+
+        else if CurrentArtefact.BreakerDrawn
+            if CurrentArtefact.Type == "Bull"
+                if close > CurrentArtefact.High and not CurrentArtefact.BreakerObject.Mitigated
+                    box.set_bgcolor(CurrentArtefact.BreakerObject.Box, BullBreakerColorFill)
+                    box.set_border_color(CurrentArtefact.BreakerObject.Box, BullBreakerColorBorder)
+                    box.set_border_width(CurrentArtefact.BreakerObject.Box, 2)
+                    line.set_color(CurrentArtefact.BreakerObject.CE, BullBreakerColorBorder)
+                    CurrentArtefact.BreakerObject.Mitigated := true
+                else if close < CurrentArtefact.Low and CurrentArtefact.BreakerObject.Mitigated
+                    CurrentArtefact.BreakerObject.Mitigated := false
+                    box.set_bgcolor(CurrentArtefact.BreakerObject.Box, InversionBreakerColorFill)
+                    box.set_border_color(CurrentArtefact.BreakerObject.Box, InversionBreakerColor)
+                    //box.set_border_width(CurrentArtefact.BreakerObject.Box, 2)
+                    line.set_color(CurrentArtefact.BreakerObject.CE, InversionBreakerColor)
+            else if CurrentArtefact.Type == "Bear"
+                if close < CurrentArtefact.Low and not CurrentArtefact.BreakerObject.Mitigated
+                    box.set_bgcolor(CurrentArtefact.BreakerObject.Box, BearBreakerColorFill)
+                    box.set_border_color(CurrentArtefact.BreakerObject.Box, BearBreakerColorBorder)
+                    box.set_border_width(CurrentArtefact.BreakerObject.Box, 2)
+                    line.set_color(CurrentArtefact.BreakerObject.CE, BearBreakerColorBorder)
+                    CurrentArtefact.BreakerObject.Mitigated := true
+                else if close > CurrentArtefact.High and CurrentArtefact.BreakerObject.Mitigated
+                    CurrentArtefact.BreakerObject.Mitigated := false
+                    box.set_bgcolor(CurrentArtefact.BreakerObject.Box, InversionBreakerColorFill)
+                    box.set_border_color(CurrentArtefact.BreakerObject.Box, InversionBreakerColor)
+                    //box.set_border_width(CurrentArtefact.BreakerObject.Box, 2)
+                    line.set_color(CurrentArtefact.BreakerObject.CE, InversionBreakerColor)
+
+
+
+
+
+if array.size(ArrayOfPOIs) > NumberOfPOIs
+    CurrentArtefact = array.shift(ArrayOfPOIs)
+    box.delete(CurrentArtefact.Box)
+    line.delete(CurrentArtefact.CE)
+    line.delete(CurrentArtefact.HighLowLine)
+    label.delete(CurrentArtefact.HighLowLabel)
+
+    if CurrentArtefact.BreakerDrawn
+        box.delete(CurrentArtefact.BreakerObject.Box)
+        line.delete(CurrentArtefact.BreakerObject.CE)
+        line.delete(CurrentArtefact.BreakerObject.HighLowLine)
+
+
+if array.size(HighLowData.ZigZagLines) > NumberOfZigZagData
+    line.delete(array.shift(HighLowData.ZigZagLines))
+    label.delete(array.shift(HighLowData.ZigZagLabels))
+    if array.size(HighLowData.HighTimes) > NumberOfZigZagData
+        array.shift(HighLowData.HighTimes)
+        array.shift(HighLowData.HighPrices)
+    if array.size(HighLowData.LowTimes) > NumberOfZigZagData    
+        array.shift(HighLowData.LowTimes)
+        array.shift(HighLowData.LowPrices)
+
+// } -------- END LOGIC Breakers And High Low Addition --------
+
+// { -------- START LOGIC ChoCh and BoS --------
+
+
+// } -------- END LOGIC ChoCh and BoS --------
+
+type Inducement
+    line Line
+    line Vertical
+
+var array<Inducement> ArrayOfInducements = array.new<Inducement>()
+var bool StartNewInducementDirection = false
+var float InducementLow = na
+var float InducementHigh = na
+var int InducementLowTime = na
+var int InducementHighTime = na
+var string InducementDirection = "NA"
+var bool InducementLowConfirmed = false
+var bool InducementHighConfirmed = false
+var Inducement LastInducementLines = na
+
+var string CurrentDirectionForTable = na
+
+
+if array.size(HighLowData.Highs) > 3 and array.size(HighLowData.Lows) > 3
+    LastHighData = array.get(HighLowData.Highs, array.size(HighLowData.Highs)-1)
+    LastLowData = array.get(HighLowData.Lows, array.size(HighLowData.Lows)-1)
+    PreviousHighData = array.get(HighLowData.Highs, array.size(HighLowData.Highs)-2)
+    PreviousLowData = array.get(HighLowData.Lows, array.size(HighLowData.Lows)-2)
+    HighData3 = array.get(HighLowData.Highs, array.size(HighLowData.Highs)-3)
+    LowData3 = array.get(HighLowData.Lows, array.size(HighLowData.Lows)-3)
+    HighData4 = array.get(HighLowData.Highs, array.size(HighLowData.Highs)-4)
+    LowData4 = array.get(HighLowData.Lows, array.size(HighLowData.Lows)-4)
+
+    if LastHighData.Price < close  
+        if LastHighData.DirectionCount == 0
+            LastHighData.DirectionCount := 1
+        else if LastHighData.DirectionCount == 1
+            LastHighData.DirectionCount := 2
+        else if LastHighData.DirectionCount == 2 and not LastHighData.Purged 
+            if HighLowData.CurrentDirection == "Bear"
+                CountBos := 0
+                Line = line.new(LastHighData.Time, LastHighData.Price, time, LastHighData.Price, color = ChoChColor, style = line.style_solid, width = 2, xloc = xloc.bar_time),
+                array.push(HighLowData.BreakLines ,Line)
+                
+                if not ShowBreakLines
+                    line.delete(Line)
+                
+                string ChochString = ''
+                if ShowBreakLabels
+                    ChochString :="ChoCh+"
+
+ 
+                string ItlString = ""
+                string LtlString = ""
+                if ShowHighLowLabels
+                    ItlString := "ITL"
+                    LtlString := "LTL"
+
+                label.set_text(LastHighData.Label, ChochString)
+                label.set_textcolor(LastHighData.Label, ChoChColor)          
+
+                label.set_text(LastLowData.Label, ItlString)
+
+
+                label.set_text(PreviousLowData.Label, LtlString)
+
+
+                HighLowData.CurrentDirection := "Bull"
+                LastHighData.Purged := true
+                LastHighData.SubType := "ChoCh+"
+                PreviousLowData.SubType := "ITL"
+                LowData3.SubType := "LTL"
+                LastHighData.DirectionCount := 0  
+                StartNewInducementDirection := true      
+
+            else if HighLowData.CurrentDirection == "Bull"
+                LastHighData.Purged := true
+
+                Line = line.new(LastHighData.Time, LastHighData.Price, time, LastHighData.Price, color = BullZigzagColor, style = line.style_solid, width = 2, xloc = xloc.bar_time),
+                array.push(HighLowData.BreakLines ,Line)
+
+                if not ShowBreakLines
+                    line.delete(Line)
+                // label.set_text(LastHighData.Label, LastHighData.SubType)
+                // label.set_textcolor(LastHighData.Label, BullZigzagColor)  
+
+                // label.set_text(LastLowData.Label, LastLowData.SubType)
+        else        
+            LastHighData.DirectionCount == -1
+    else
+        LastHighData.DirectionCount := 0
+
+    if LastLowData.Price > close
+        if LastLowData.DirectionCount == 0
+            LastLowData.DirectionCount := 1
+
+        else if LastLowData.DirectionCount == 1
+            LastLowData.DirectionCount := 2
+        else if LastLowData.DirectionCount == 2 and not LastLowData.Purged 
+            if HighLowData.CurrentDirection == "Bull"
+                CountBos := 0
+                Line = line.new(LastLowData.Time, LastLowData.Price, time, LastLowData.Price, color = ChoChColor, style = line.style_solid, width = 2, xloc = xloc.bar_time),
+                array.push(HighLowData.BreakLines ,Line)
+
+                if not ShowBreakLines
+                    line.delete(Line)
+
+                string ChochString = ''
+                if ShowBreakLabels
+                    ChochString :="ChoCh-"
+
+ 
+                string IthString = ""
+                string LthString = ""
+                if ShowHighLowLabels
+                    IthString := "ITH"
+                    LthString := "LTH"
+
+
+                label.set_text(LastLowData.Label, ChochString)
+                label.set_textcolor(LastLowData.Label, ChoChColor)          
+
+                label.set_text(LastHighData.Label, IthString)
+
+
+                label.set_text(PreviousHighData.Label, LthString)
+
+                HighLowData.CurrentDirection := "Bear"
+                LastLowData.Purged := true
+                LastLowData.SubType := "ChoCh-"
+                PreviousHighData.SubType := "ITH"
+                HighData3.SubType := "LTH"
+                LastLowData.DirectionCount := 0
+                StartNewInducementDirection := true
+
+            else if HighLowData.CurrentDirection == "Bear"
+                LastLowData.Purged := true
+        else        
+            LastLowData.DirectionCount == -1
+    else
+        LastLowData.DirectionCount := 0
+
+
+
+    if array.size(ArrayOfSwingHighLows)-1 > 5
+        LastSwingInArray = array.get(ArrayOfSwingHighLows, array.size(ArrayOfSwingHighLows)-1)
+        PreviousSwingInArray = array.get(ArrayOfSwingHighLows, array.size(ArrayOfSwingHighLows)-2) 
+
+        if HighLowData.CurrentDirection == "Bull"
+            CurrentDirectionForTable := "Bullish"
+            if StartNewInducementDirection
+                while array.size(ArrayOfInducements) > NumberOfOldInducements
+                    CurrentInducement = array.shift(ArrayOfInducements)
+                    line.delete(CurrentInducement.Line)
+                    line.delete(CurrentInducement.Vertical)
+
+                StartNewInducementDirection := false
+                InducementDirection := "Bull"
+                InducementHigh :=  LastSwingInArray.High
+                InducementLow  := LastSwingInArray.Low
+                InducementHighTime := LastSwingInArray.Time
+                InducementLowTime := LastSwingInArray.Time
+                InducementLine = line.new(InducementHighTime,InducementHigh,InducementLowTime, InducementLow, color = InducementBullColor, style = line.style_arrow_right, width = 1, xloc = xloc.bar_time)
+                InducementVertical = line.new(InducementLowTime, InducementLow, InducementLowTime+InducementLowHighCandleLength*getTimeframeInMiliSeconds(), InducementLow , color = InducementBullColor, style = line.style_solid, width = 1, xloc = xloc.bar_time)
+                array.push(ArrayOfInducements, Inducement.new(InducementLine,InducementVertical))
+                LastInducementLines := array.get(ArrayOfInducements, array.size(ArrayOfInducements)-1)
+                InducementHighConfirmed := true
+                InducementLowConfirmed := false
+
+                if not ShowInducements
+                    line.delete(InducementLine)
+                    line.delete(InducementVertical)
+                else
+                    array.push(ArrayOfInducements, Inducement.new(InducementLine,InducementVertical))
+                    LastInducementLines := array.get(ArrayOfInducements, array.size(ArrayOfInducements)-1)
+
+
+            if InducementLowConfirmed and InducementHighConfirmed and high > InducementHigh //and LastSwingInArray.Type == "L"
+                InducementHigh :=  LastSwingInArray.High
+                InducementLow  := LastSwingInArray.Low
+                InducementHighTime := LastSwingInArray.Time
+                InducementLowTime := LastSwingInArray.Time
+                InducementLine = line.new(InducementLowTime,InducementLow ,InducementHighTime ,InducementHigh, color = InducementBullColor, style = line.style_arrow_right, width = 1, xloc = xloc.bar_time)
+                InducementVertical = line.new(InducementHighTime, InducementHigh, InducementHighTime+InducementLowHighCandleLength*getTimeframeInMiliSeconds(), InducementHigh , color = InducementBullColor, style = line.style_solid, width = 1, xloc = xloc.bar_time)
+
+
+                if not ShowInducements
+                    line.delete(InducementLine)
+                    line.delete(InducementVertical)
+                else
+                    array.push(ArrayOfInducements, Inducement.new(InducementLine,InducementVertical))
+                    LastInducementLines := array.get(ArrayOfInducements, array.size(ArrayOfInducements)-1)
+
+
+                InducementHighConfirmed := false                
+                InducementLowConfirmed := false
+
+            else if LastSwingInArray.Type == "H" and LastSwingInArray.High > InducementHigh
+                InducementHigh := LastSwingInArray.High 
+                InducementLow := low
+                InducementHighTime := LastSwingInArray.Time 
+                InducementLowTime := time
+
+                line.set_x1(LastInducementLines.Line, time[1])
+                line.set_y1(LastInducementLines.Line, high[1])
+                line.set_x2(LastInducementLines.Line, InducementHighTime)
+                line.set_y2(LastInducementLines.Line, InducementHigh)
+                line.set_x1(LastInducementLines.Vertical, time[1])
+                line.set_y1(LastInducementLines.Vertical, low[1])
+                line.set_x2(LastInducementLines.Vertical, time[1]+InducementLowHighCandleLength*getTimeframeInMiliSeconds())
+                line.set_y2(LastInducementLines.Vertical, low[1])
+                InducementHighConfirmed := true
+
+
+            else if LastSwingInArray.Type == "L" and LastSwingInArray.Low < InducementLow //and LastSwingInArray.Type == "H" // and PreviousSwingInArray.Type == "L" or (LastSwingInArray.Type == "H" and PreviousSwingInArray.Type == "H")
+                InducementLow := LastSwingInArray.Low
+                InducementLowTime := LastSwingInArray.Time           
+                    
+                line.set_x2(LastInducementLines.Line, InducementLowTime)
+                line.set_y2(LastInducementLines.Line, InducementLow)
+                line.set_x1(LastInducementLines.Vertical, InducementLowTime)
+                line.set_y1(LastInducementLines.Vertical, InducementLow)
+                line.set_x2(LastInducementLines.Vertical, InducementLowTime+InducementLowHighCandleLength*getTimeframeInMiliSeconds())
+                line.set_y2(LastInducementLines.Vertical, InducementLow)
+                InducementLowConfirmed := true
+
+
+
+        else if HighLowData.CurrentDirection == "Bear"
+            CurrentDirectionForTable := "Bearish"
+            if StartNewInducementDirection
+                while array.size(ArrayOfInducements) > NumberOfOldInducements
+                    CurrentInducement = array.shift(ArrayOfInducements)
+                    line.delete(CurrentInducement.Line)
+                    line.delete(CurrentInducement.Vertical)
+
+                StartNewInducementDirection := false
+                InducementDirection := "Bear"
+                InducementLow :=  PreviousSwingInArray.Low
+                InducementHigh := LastSwingInArray.High
+                InducementLowTime := PreviousSwingInArray.Time
+                InducementHighTime := LastSwingInArray.Time
+                InducementLine = line.new(InducementLowTime, InducementLow,InducementHighTime, InducementHigh, color = InducementBearColor, style = line.style_arrow_right, width = 1, xloc = xloc.bar_time)
+                InducementVertical = line.new(InducementHighTime, InducementHigh, InducementHighTime+InducementLowHighCandleLength*getTimeframeInMiliSeconds(), InducementHigh , color = InducementBearColor, style = line.style_solid, width = 1, xloc = xloc.bar_time)
+                array.push(ArrayOfInducements, Inducement.new(InducementLine,InducementVertical))
+                LastInducementLines := array.get(ArrayOfInducements, array.size(ArrayOfInducements)-1)
+                InducementLowConfirmed := true
+                InducementHighConfirmed := false
+
+                if not ShowInducements
+                    line.delete(InducementLine)
+                    line.delete(InducementVertical)
+            
+            if InducementLowConfirmed and InducementHighConfirmed and low < InducementLow //and LastSwingInArray.Type == "L"
+                InducementLow :=  LastSwingInArray.Low
+                InducementHigh := LastSwingInArray.High
+                InducementLowTime := LastSwingInArray.Time
+                InducementHighTime := LastSwingInArray.Time
+                InducementLine = line.new(InducementHighTime, InducementHigh, InducementLowTime, InducementLow , color = InducementBearColor, style = line.style_arrow_right, width = 1, xloc = xloc.bar_time)
+                InducementVertical = line.new(InducementHighTime, InducementHigh, InducementHighTime+InducementLowHighCandleLength*getTimeframeInMiliSeconds(), InducementHigh , color = InducementBearColor, style = line.style_solid, width = 1, xloc = xloc.bar_time)
+
+
+                if not ShowInducements
+                    line.delete(InducementLine)
+                    line.delete(InducementVertical)
+                else
+                    array.push(ArrayOfInducements, Inducement.new(InducementLine,InducementVertical))
+                    LastInducementLines := array.get(ArrayOfInducements, array.size(ArrayOfInducements)-1)
+
+
+
+                InducementLowConfirmed := false
+                InducementHighConfirmed := false               
+
+            else if LastSwingInArray.Type == "L" and LastSwingInArray.Low < InducementLow
+                InducementLow := LastSwingInArray.Low 
+                InducementHigh := high
+                InducementLowTime := LastSwingInArray.Time 
+                InducementHighTime := time
+
+                line.set_x1(LastInducementLines.Line, time[1])
+                line.set_y1(LastInducementLines.Line, low[1])
+                line.set_x2(LastInducementLines.Line, InducementHighTime)
+                line.set_y2(LastInducementLines.Line, InducementHigh)
+                line.set_x1(LastInducementLines.Vertical, time[1])
+                line.set_y1(LastInducementLines.Vertical, high[1])
+                line.set_x2(LastInducementLines.Vertical, time[1]+InducementLowHighCandleLength*getTimeframeInMiliSeconds())
+                line.set_y2(LastInducementLines.Vertical, high[1])
+                InducementLowConfirmed := true
+            else if LastSwingInArray.Type == "H" and LastSwingInArray.High > InducementHigh  //and LastSwingInArray.Type == "H" // and PreviousSwingInArray.Type == "L" or (LastSwingInArray.Type == "H" and PreviousSwingInArray.Type == "H")
+                InducementHigh := LastSwingInArray.High
+                InducementHighTime := LastSwingInArray.Time           
+                    
+                line.set_x2(LastInducementLines.Line, InducementHighTime)
+                line.set_y2(LastInducementLines.Line, InducementHigh)
+                line.set_x1(LastInducementLines.Vertical, InducementHighTime)
+                line.set_y1(LastInducementLines.Vertical, InducementHigh)
+                line.set_x2(LastInducementLines.Vertical, InducementHighTime+InducementLowHighCandleLength*getTimeframeInMiliSeconds())
+                line.set_y2(LastInducementLines.Vertical, InducementHigh)
+                InducementHighConfirmed := true
+
+
+
+if ShowTimeframeBiasTable
+    color TextColor = na
+    if CurrentDirectionForTable == "Bullish"
+        TextColor := TableTextColorBull
+    else if CurrentDirectionForTable == "Bearish"
+        TextColor := TableTextColorBear
+    else
+        TextColor := TableTextColor
+
+    table.cell(Table, 0, 2, "TF(" + str.tostring(timeframe.period) + "): " + CurrentDirectionForTable, text_color = TextColor , text_size = TableTextSize,text_halign =  text.align_center)
+
+
+// { -------- START LOGIC Old Highs/Lows --------
+
+
+
+if  array.size(ArrayOfFibRetracements) > 0
+    array<FibsRetracements> TempFibArray = array.new<FibsRetracements>()
+    for i = 0 to array.size(ArrayOfFibRetracements)-1
+        CurrentArtefact = array.get(ArrayOfFibRetracements , i)       
+
+        if CurrentArtefact.Type == "Bull" 
+            if low <= CurrentArtefact.Fib059 and not CurrentArtefact.ZonePurged and not (CurrentArtefact.HighLowDrawn)
+                line Line = na
+                label Label = na
+                if OldHighLowStyle == "Fib"
+                    Line := line.new(CurrentArtefact.HighLowTime, CurrentArtefact.HighLowPrice, CurrentArtefact.HighLowTime+ExtendOldHighsLowsForNCandles*getTimeframeInMiliSeconds(), CurrentArtefact.HighLowPrice, color = BullOldHighsLowsColorBorder, style = line.style_solid, width = 1, xloc = xloc.bar_time),
+                    Label := label.new(CurrentArtefact.HighLowTime+(ExtendOldHighsLowsForNCandles*getTimeframeInMiliSeconds())/5,  CurrentArtefact.HighLowPrice, "Old Low", style = label.style_label_up, xloc = xloc.bar_time, color = color.new(color.black, 100), textcolor = BullOldHighsLowsColorBorder, size = size.small)
+                    CurrentArtefact.OldHighLow := LineWithLabel.new(Line,Label)
+                    CurrentArtefact.HighLowDrawn := true
+                    CurrentArtefact.ZonePurged := true
+           
+                if not ShowOldHighsLows
+                    line.delete(Line)
+                    label.delete(Label)
+                else if not ShowOldHighsLowsLabel
+                    label.delete(Label)
+                
+    
+            else if low <= CurrentArtefact.HighLowPrice and CurrentArtefact.HighLowDrawn and not (CurrentArtefact.HighLowPurged)
+                CurrentArtefact.HighLowPurged := true
+
+
+        else if CurrentArtefact.Type == "Bear"    
+            if high >= CurrentArtefact.Fib059 and not CurrentArtefact.ZonePurged and not (CurrentArtefact.HighLowDrawn)
+                line Line = na
+                label Label = na
+                if OldHighLowStyle == "Fib"
+                    Line := line.new(CurrentArtefact.HighLowTime, CurrentArtefact.HighLowPrice, CurrentArtefact.HighLowTime+ExtendOldHighsLowsForNCandles*getTimeframeInMiliSeconds(), CurrentArtefact.HighLowPrice, color = BearOldHighsLowsColorBorder, style = line.style_solid, width = 1, xloc = xloc.bar_time),
+                    Label := label.new(CurrentArtefact.HighLowTime+(ExtendOldHighsLowsForNCandles*getTimeframeInMiliSeconds())/5,  CurrentArtefact.HighLowPrice, "Old High", style = label.style_label_down, xloc = xloc.bar_time, color = color.new(color.black, 100), textcolor = BearOldHighsLowsColorBorder, size = size.small)
+                    CurrentArtefact.OldHighLow := LineWithLabel.new(Line,Label)
+                    CurrentArtefact.HighLowDrawn := true
+                    CurrentArtefact.ZonePurged := true
+          
+                if not ShowOldHighsLows
+                    line.delete(Line)
+                    label.delete(Label)
+                else if not ShowOldHighsLowsLabel
+                    label.delete(Label)
+
+            else if high >= CurrentArtefact.HighLowPrice and CurrentArtefact.HighLowDrawn and not CurrentArtefact.HighLowPurged
+                CurrentArtefact.HighLowPurged := true
+
+
+
+
+        if FibShowHide == "Delete Mitigated"
+            if CurrentArtefact.ZonePurged
+                box.delete(CurrentArtefact.BuySellZone)        
+        else if FibShowHide == "Collapse Mitigated"
+            if CurrentArtefact.ZonePurged
+                box.set_right(CurrentArtefact.BuySellZone, CurrentArtefact.HighLowTime+(5*getTimeframeInMiliSeconds())/5)
+                box.set_text(CurrentArtefact.BuySellZone, "")
+
+        if FibShowHide == "Delete Mitigated"
+            if CurrentArtefact.HighLowPurged
+                line.delete(CurrentArtefact.OldHighLow.Line)
+                label.delete(CurrentArtefact.OldHighLow.Label)
+                line.delete(CurrentArtefact.Fib886.Line)
+                label.delete(CurrentArtefact.Fib886.Label)
+            else
+                array.push(TempFibArray,CurrentArtefact)
+        else if FibShowHide == "Collapse Mitigated"
+            if CurrentArtefact.HighLowPurged
+                line.set_x2(CurrentArtefact.OldHighLow.Line, CurrentArtefact.HighLowTime+(5*getTimeframeInMiliSeconds())/5)
+                label.delete(CurrentArtefact.OldHighLow.Label)
+                line.set_x2(CurrentArtefact.Fib886.Line, CurrentArtefact.HighLowTime+(5*getTimeframeInMiliSeconds())/5)
+                label.delete(CurrentArtefact.Fib886.Label) 
+
+
+        if ExtendUnmitigatedToRealtime and FibShowHide == "Delete Mitigated"
+            box.set_right(CurrentArtefact.BuySellZone, time)
+
+            if CurrentArtefact.HighLowDrawn
+                line.set_x2(CurrentArtefact.OldHighLow.Line, time)
+                label.set_x(CurrentArtefact.OldHighLow.Label, time)
+            
+            line.set_x2(CurrentArtefact.Fib886.Line, time)
+            label.set_x(CurrentArtefact.Fib886.Label, time)
+
+    ArrayOfFibRetracements := TempFibArray
+
+if array.size(ArrayOfFibRetracements) > NumberOfFibRetracements
+    CurrentArtefact = array.shift(ArrayOfFibRetracements)
+
+    box.delete(CurrentArtefact.BuySellZone)
+    line.delete(CurrentArtefact.Fib886.Line)
+    label.delete(CurrentArtefact.Fib886.Label)
+
+    if CurrentArtefact.HighLowDrawn
+        line.delete(CurrentArtefact.OldHighLow.Line)
+        label.delete(CurrentArtefact.OldHighLow.Label)
+
+
+
+
+
+// } -------- END LOGIC Old Highs/Lows --------
+
+
+
+// { -------- START LOGIC Premium/Discount --------
+
+type CandleHighLowOpen
+    float High
+    float Low
+    int OpenTime
+
+var array<CandleHighLowOpen> ArrayOfHighLowOpenTimes = array.new<CandleHighLowOpen>()
+
+var float PremiumHigh = na
+var float DiscountLow = na
+var float EquilibriumPremDisc = na
+int PremiumDiscountStartDate = na
+var int TimeframePremDiscCandles = na
+
+var box PremiumBox = na
+var box DiscountBox = na
+var line EqLine = na
+
+
+if ShowPremiumDiscount or ShowEqLine
+    if UseCustomStartDate
+        PremiumDiscountStartDate := CustomStartDate
+        if time >= PremiumDiscountStartDate
+            if na(PremiumHigh)
+                PremiumHigh := high
+                DiscountLow := low
+            else
+                PremiumHigh := math.max(PremiumHigh, high)
+                DiscountLow := math.min(DiscountLow, low)
+
+    else
+        TimeframeInMinutes = (getTimeframeInMiliSeconds()/1000)/60
+        if TimeframeInMinutes <= 5
+            PremiumDiscountStartDate := time-2*ONE_DAY
+        else if TimeframeInMinutes <= 15
+            PremiumDiscountStartDate := time-7*ONE_DAY
+        else if TimeframeInMinutes <= 60
+            PremiumDiscountStartDate := time-31*ONE_DAY
+        else if TimeframeInMinutes <= 240
+            PremiumDiscountStartDate := time-31*3*ONE_DAY
+        else if TimeframeInMinutes >  240
+            PremiumDiscountStartDate := time-31*15*ONE_DAY
+
+
+        TimeframePremDiscCandles:= math.round(((time-PremiumDiscountStartDate)/60000)/TimeframeInMinutes)
+
+        if time >= PremiumDiscountStartDate
+            array.push(ArrayOfHighLowOpenTimes, CandleHighLowOpen.new(high,low,time))
+
+        while array.size(ArrayOfHighLowOpenTimes)-1 > TimeframePremDiscCandles
+            array.shift(ArrayOfHighLowOpenTimes)
+            // else
+            //     break
+
+        for i = 0 to array.size(ArrayOfHighLowOpenTimes)-1
+            CurrentArtefact = array.get(ArrayOfHighLowOpenTimes, i)
+
+            if i == 0
+                PremiumHigh :=  CurrentArtefact.High
+                DiscountLow := CurrentArtefact.Low
+            else
+                PremiumHigh := math.max(PremiumHigh, CurrentArtefact.High)
+                DiscountLow := math.min(DiscountLow, CurrentArtefact.Low)
+
+
+
+    EquilibriumPremDisc := DiscountLow+(PremiumHigh-DiscountLow)/2
+
+    if ShowPremiumDiscount
+        box.delete(PremiumBox)
+        box.delete(DiscountBox)
+        PremiumBox := box.new(PremiumDiscountStartDate, PremiumHigh, time, EquilibriumPremDisc, border_width=1, bgcolor = PremiumFillColor,border_color= color.new(color.black,100), text = "Premium", text_color = PremiumFillColor, text_halign = text.align_right, text_size = size.small, xloc = xloc.bar_time)
+        DiscountBox := box.new(PremiumDiscountStartDate, DiscountLow, time, EquilibriumPremDisc, border_width=1, bgcolor = DiscountFillColor,border_color= color.new(color.black,100), text = "Discount", text_color = DiscountFillColor, text_halign = text.align_right, text_size = size.small, xloc = xloc.bar_time)
+
+    if ShowEqLine
+        line.delete(EqLine)
+        EqLine := line.new(PremiumDiscountStartDate, EquilibriumPremDisc, time, EquilibriumPremDisc, color = EqLineColor, style = line.style_dotted, width = 2, xloc = xloc.bar_time)
+
+
+// } -------- END LOGIC Premium/Discount -------- 
+
+
+
+
+// { -------- START LOGIC Vortex -------- 
+
+ShowOnlyRetestEntry = false
+
+
+
+
+// RangeStyle = input.string("Standard", options= ["Standard", "PO3-LTF",  "PO3-HTF"], inline="2", group="Vortex Lines", title = "Range Mode: ")
+RangeStyle = "PO3-LTF"
+
+// LinesToShow = input.string("All", options=["CEs", "Extremes", "All"], inline="2", group="Vortex Lines", title = "Vortex Type", tooltip = "Vortex Type. Works Only on PO3-LTF")
+LinesToShow = "CEs"
+
+//ColorTransparency = input.string("Dark", options= ["Light", "Dark"], inline="1", group="Other Settings", title = "Color Transparency")
+ColorTransparency = "Light"
+
+ShowLabels = false //input.bool(title="Show Line Labels", defval=false, inline="1", group="Vortex Lines", tooltip="Show Labels")
+
+
+ShowNumberOfOBs = 20
+
+//ExtendBoxesToCurrentPrice = input.bool(title="Extend Boxes in Realtime", defval=true, inline="1", group="Confirmation Candles", tooltip="Extend Confirmation Candles in Realtime")
+ExtendBoxesToCurrentPrice = false
+
+ExtendLinesInRealtime = false //input.bool(title="Extend Lines in Realtime", defval=true, inline="1", group="Vortex Lines", tooltip="Extend Lines in Realtime")
+// ExtendLinesInRealtime = true
+
+
+ShowPreAdr = true //input.bool(title="Show PreAdr Data Candles", defval=true, inline="1", group="Pre Data Candles", tooltip="Show PreAdr Data Candle")
+ShowPreOdr = true //input.bool(title="Show PreOdr Data Candles", defval=false, inline="1", group="Pre Data Candles", tooltip="Show PreOdr Data Candle")
+ShowPreRdr = true //input.bool(title="Show PreRdr Data Candles", defval=false, inline="1", group="Pre Data Candles", tooltip="Show PreRdr Data Candle")
+
+NumberOfCandles = 10
+
+ShowConfirmationMidpoint = true
+
+
+
+
+LineStyle = line.style_solid
+var int LineWidth = 1
+
+var int TransparentCollorFill = na
+var int TransparentColorBorder = na
+var int LineTransparency = na
+var int LineTransparency2 = na
+
+if ColorTransparency == "Light"
+	TransparentCollorFill := 90
+	TransparentColorBorder := 50
+    LineTransparency := 0
+    LineTransparency2 := 70
+else if ColorTransparency == "Dark"
+	TransparentCollorFill := 95
+	TransparentColorBorder := 80
+    LineTransparency := 50
+    LineTransparency2 := 85
+
+
+BlackColorLight = color.new(color.black, LineTransparency)
+GrayColorLight = color.new(color.gray, LineTransparency)
+GrayColorDark = color.new(color.gray, LineTransparency2)
+RedColorLight = color.new(color.red, LineTransparency)
+BlueColorLight = color.new(color.blue, LineTransparency)
+BlueColorDark = color.new(color.blue, LineTransparency2)
+OrangeColorLight = color.new(color.orange, LineTransparency)
+PurpleColorLight = color.new(color.purple, LineTransparency)
+
+
+
+
+var array<line> ArrayOfLinesLarge = array.new_line(0)
+var array<label> ArrayOfLabelsLarge = array.new<label>()
+
+
+var int DayStartTime = na
+var int DayEndTime = na
+
+var float RangeLarge = na
+var float RangeSmall = na
+
+var string CurrentTicker = na
+
+
+if  str.startswith(syminfo.ticker, "CL")
+    CurrentTicker := "CL"
+else if str.startswith(syminfo.ticker, "NG")
+    CurrentTicker := "NG"
+else if str.startswith(syminfo.ticker, "SI")
+    CurrentTicker := "SI"
+else if str.startswith(syminfo.ticker, "GC")
+    CurrentTicker := "GC"
+else if  str.startswith(syminfo.ticker, "NQ")
+    CurrentTicker := "NQ"
+else if str.startswith(syminfo.ticker, "ES")
+    CurrentTicker := "ES"
+else if str.startswith(syminfo.ticker, "YM")
+    CurrentTicker := "YM"
+else if str.contains(syminfo.ticker, "BTC")
+    CurrentTicker := "BTC"
+else if str.contains(syminfo.ticker, "ETH")
+    CurrentTicker := "ETH"
+
+if CurrentTicker == "ES" or CurrentTicker == "NQ" or CurrentTicker == "GC"
+    RangeSmall := 100
+    RangeLarge := 300
+
+else if CurrentTicker == "CL"
+    RangeSmall := 1
+    RangeLarge := 3
+else if CurrentTicker == "BTC" or CurrentTicker == "ETH" or CurrentTicker == "YM"
+    RangeSmall := 1000
+    RangeLarge := 3000
+else if CurrentTicker  == "NG" or CurrentTicker  == "SI"
+    RangeSmall := 0.1
+    RangeLarge := 0.3
+
+var int TickerTimeOffset = na
+var int TickerHourOffset = na
+
+if  str.contains(syminfo.ticker, "CL") or str.contains(syminfo.ticker, "GC")
+    TickerHourOffset := 0
+    TickerTimeOffset := 0 
+else
+    TickerHourOffset := 1
+    TickerTimeOffset := 3600000
+
+
+if hour(time) == 19-TickerHourOffset and minute(time) == 30
+    DayStartTime := time
+    DayEndTime := DayStartTime+ONE_DAY
+
+FunctioroundDown(_Value,_Div) =>
+    math.floor(_Value / _Div) * _Div
+
+
+
+
+var float CurrentLowRangeLarge = na
+var float CurrentHighRangeLarge = na
+CurrentLowRangeLarge := FunctioroundDown(close,RangeLarge)
+CurrentHighRangeLarge := CurrentLowRangeLarge+RangeLarge
+
+var array<float> ArrayOfPo3LtfRanges = array.from(0.0)
+
+if LinesToShow == "All"
+    ArrayOfPo3LtfRanges := array.from(-0.111,0.0,0.03,0.111,0.17,0.25,0.29,0.333,0.382,0.41,0.47,0.5,0.53,0.59,0.618,0.666,0.71,0.75,0.83,0.89,0.97,1.0,1.111)
+else if LinesToShow == "CEs"
+    ArrayOfPo3LtfRanges := array.from(0.0,0.03, 0.17,0.29,0.382,0.41,0.47,0.5,0.53,0.59,0.618,0.71,0.83,0.97,1.0)
+else if LinesToShow == "Extremes"
+    ArrayOfPo3LtfRanges := array.from(-0.111,0.0,0.111,0.17,0.382,0.5,0.618,0.83,0.89,1.0,1.111)
+
+
+if RangeStyle == "PO3-LTF"      
+    for i = 0 to array.size(ArrayOfPo3LtfRanges)-1
+        CurrentRange = array.get(ArrayOfPo3LtfRanges, i)
+
+        Style = LineStyle
+        int Width = LineWidth
+
+        color Color = switch(CurrentRange)
+            -0.111 => OrangeColorLight
+            0.0 => BlueColorLight
+            0.03 => GrayColorDark
+            0.111 => BlueColorDark
+            0.17 => GrayColorDark
+            0.25 => GrayColorLight
+            0.29 => BlueColorLight
+            0.333 => GrayColorLight
+            0.382 => PurpleColorLight
+            0.41 => GrayColorDark
+            0.47 => GrayColorLight
+            0.5 => BlueColorLight
+            0.53 => GrayColorLight
+            0.59 => GrayColorDark
+            0.618 => PurpleColorLight
+            0.666 => GrayColorLight
+            0.71 => BlueColorLight
+            0.75 => GrayColorLight
+            0.83 => GrayColorDark
+            0.89 => BlueColorDark
+            0.97 => GrayColorDark
+            1.0 => BlueColorLight
+            1.111 => OrangeColorLight
+            => GrayColorDark
+
+        if ShowVortexLines
+            array.push(ArrayOfLinesLarge, line.new(DayStartTime, CurrentLowRangeLarge+(RangeLarge*CurrentRange) ,DayEndTime, CurrentLowRangeLarge+(RangeLarge*CurrentRange),color = Color, style = Style, width = Width, xloc = xloc.bar_time))
+            if ShowLabels
+                array.push(ArrayOfLabelsLarge, label.new(DayEndTime, CurrentLowRangeLarge+(RangeLarge*CurrentRange),"          " + str.tostring(CurrentRange), style = label.style_label_center, xloc = xloc.bar_time, color =color.new(color.green, 100), textcolor = Color, size =size.small, textalign = text.align_right))
+
+
+        while array.size(ArrayOfLinesLarge) > array.size(ArrayOfPo3LtfRanges)
+            line.delete(array.shift(ArrayOfLinesLarge))
+        while array.size(ArrayOfLabelsLarge) > array.size(ArrayOfPo3LtfRanges)
+            if ShowLabels
+                label.delete(array.shift(ArrayOfLabelsLarge))
+
+
+var float CandleOpen = na
+var float CandleHigh = na
+var float CandleLow = na
+var float PrevCandleHigh = na
+var float PrevCandleLow = na
+var float CandleClose = na
+var string CandleDirection = na
+
+var string AdrConfirmationDirection = na
+var string OdrConfirmationDirection = na
+var string RdrConfirmationDirection = na
+
+
+var string LabelVortexLarge = na
+var array<float> RangesInPlayLarge = array.new<float>()
+var array<float> RangesInPlayValuesLarge = array.new<float>()
+var array<float> RangesInPlayCandleCloseFromRangeLarge = array.new<float>()
+var array<float> ThreeCandleFormationBullLarge = array.new<float>()
+var array<float> ThreeCandleFormationBearLarge = array.new<float>()
+var array<box> ArrayOfOBsLarge = array.new<box>()
+
+var float RangeInPlayLarge = na
+var float PrevRangeInPlayLarge = na
+
+var float ObHighLarge = na
+var float ObLowLarge = na
+var int ObBarIndexLarge = na
+
+
+CandleDirection(_Open, _Close) =>
+    if _Close > _Open
+        "Bullish"
+    else
+        "Bearish"
+
+
+PrevCandleHigh := CandleHigh
+PrevCandleLow := CandleLow
+CandleOpen := open
+CandleHigh := high
+CandleLow := low
+CandleClose := close
+
+
+for i = 0 to array.size(ArrayOfPo3LtfRanges)-1
+    CurrentRange = array.get(ArrayOfPo3LtfRanges,i )
+
+    if i == 0
+        PrevRangeInPlayLarge := RangeInPlayLarge
+        RangeInPlayLarge := na
+        while array.size(RangesInPlayLarge) > 0
+            array.shift(RangesInPlayLarge)
+            array.shift(RangesInPlayValuesLarge)
+            array.shift(RangesInPlayCandleCloseFromRangeLarge)           
+
+    CandleDirection := CandleDirection(CandleOpen,CandleClose)
+
+    if CandleHigh >= CurrentLowRangeLarge+(RangeLarge*CurrentRange) and CandleLow <= CurrentLowRangeLarge+(RangeLarge*CurrentRange)
+        array.push(RangesInPlayLarge, CurrentRange)
+        array.push(RangesInPlayValuesLarge,CurrentLowRangeLarge+(RangeLarge*CurrentRange))
+        array.push(RangesInPlayCandleCloseFromRangeLarge,math.abs(close-(CurrentLowRangeLarge+(RangeLarge*CurrentRange))))
+
+
+MinArrayValue = array.min(RangesInPlayCandleCloseFromRangeLarge)
+if array.size(RangesInPlayLarge) > 0
+    for i = 0 to array.size(RangesInPlayCandleCloseFromRangeLarge)-1
+        if array.get(RangesInPlayCandleCloseFromRangeLarge, i) == MinArrayValue
+            RangeInPlayLarge := array.get(RangesInPlayLarge, i)
+else
+    RangeInPlayLarge := na
+
+
+
+if close < open
+    array.push(ThreeCandleFormationBullLarge, close)
+else if close > open
+    array.push(ThreeCandleFormationBullLarge, open)
+
+if close > open
+    array.push(ThreeCandleFormationBearLarge, close)
+else if close < open
+    array.push(ThreeCandleFormationBearLarge, open)
+
+
+while array.size(ThreeCandleFormationBullLarge) > 3
+    array.shift(ThreeCandleFormationBullLarge)
+while array.size(ThreeCandleFormationBearLarge) > 3
+    array.shift(ThreeCandleFormationBearLarge)
+
+var string LookForObLarge = na
+var string LowHighConfirmedLarge = na
+
+if not na(RangeInPlayLarge)
+    if PrevCandleLow > CandleLow and not(LookForObLarge == "BearOb") 
+        LookForObLarge := "BullOb" 
+    else if PrevCandleHigh < CandleHigh and not(LookForObLarge == "BullOb") 
+        LookForObLarge := "BearOb"
+
+var float TempRangeLarge = na
+var int LevelBreachedLarge = 0
+
+if array.size(ThreeCandleFormationBullLarge) == 3 and LookForObLarge == "BullOb" and not(LowHighConfirmedLarge == "LowConfirmed")
+    if LevelBreachedLarge == 0
+        TempRangeLarge := RangeInPlayLarge
+    if array.min(ThreeCandleFormationBullLarge) == array.get(ThreeCandleFormationBullLarge, 1)
+        ObHighLarge := high[1]
+        ObLowLarge := low[1]
+        ObBarIndexLarge := bar_index[1]
+        LowHighConfirmedLarge := "LowConfirmed"
+    if close < CurrentLowRangeLarge+(RangeLarge*TempRangeLarge)        
+        LevelBreachedLarge := LevelBreachedLarge+1
+
+    if LevelBreachedLarge > 2
+        LevelBreachedLarge := 0
+        // table.cell(Table, 0, 9, "Breached. Reseting Counters: "  + str.tostring(LevelBreached), text_color = TableTextColor , text_size = TableTextSize,text_halign =  text.align_left)
+        LookForObLarge := na
+        LowHighConfirmedLarge := na
+
+
+else if array.size(ThreeCandleFormationBearLarge) == 3 and LookForObLarge == "BearOb" and not(LowHighConfirmedLarge == "HighConfirmed")
+    if LevelBreachedLarge == 0
+        TempRangeLarge := RangeInPlayLarge
+    if array.max(ThreeCandleFormationBearLarge) == array.get(ThreeCandleFormationBearLarge, 1)
+        ObHighLarge := high[1]
+        ObLowLarge := low[1]
+        ObBarIndexLarge := bar_index[1]
+        LowHighConfirmedLarge := "HighConfirmed"
+    if close > CurrentLowRangeLarge+(RangeLarge*TempRangeLarge)        
+        LevelBreachedLarge := LevelBreachedLarge+1
+
+
+        
+    if LevelBreachedLarge > 2
+        LevelBreachedLarge := 0
+        LookForObLarge := na
+        LowHighConfirmedLarge := na
+
+var bool VortexBullCandle = na
+var bool VortexBearCandle = na
+var int VortexConfirmBarIndex = na
+
+if LowHighConfirmedLarge == "LowConfirmed" 
+    if close >  ObHighLarge
+        if ShowVortexBoxes
+            array.push(ArrayOfOBsLarge,box.new(ObBarIndexLarge,ObHighLarge,bar_index,ObLowLarge, xloc = xloc.bar_index,border_color = BoxBull_Border_Color, bgcolor = BoxBull_Fill_Color, border_width = BoxBull_Border_Size,text = LabelVortexLarge, text_size = size.auto, text_halign = text.align_right, text_valign = text.align_center, text_color = BoxBull_Border_Color))
+            LookForObLarge := na
+            LowHighConfirmedLarge := na
+        if ShowVortexAsColorCandle
+            VortexBullCandle := true
+            VortexConfirmBarIndex := ObBarIndexLarge-bar_index
+
+    else if close < ObLowLarge
+        if ShowVortexBoxes
+            LookForObLarge := na
+            LowHighConfirmedLarge := na
+            array.push(ArrayOfOBsLarge,box.new(ObBarIndexLarge,ObHighLarge,bar_index,ObLowLarge, xloc = xloc.bar_index,border_color = BoxBear_Border_Color, bgcolor = BoxBear_Fill_Color, border_width = BoxBear_Border_Size,text = LabelVortexLarge, text_size = size.auto, text_halign = text.align_right, text_valign = text.align_center, text_color = BoxBear_Border_Color))
+        if ShowVortexAsColorCandle
+            VortexBullCandle := true
+            VortexConfirmBarIndex := ObBarIndexLarge-bar_index
+
+if LowHighConfirmedLarge == "HighConfirmed"
+    if close <  ObLowLarge
+        if ShowVortexBoxes
+            array.push(ArrayOfOBsLarge,box.new(ObBarIndexLarge,ObHighLarge,bar_index,ObLowLarge, xloc = xloc.bar_index,border_color = BoxBear_Border_Color, bgcolor = BoxBear_Fill_Color, border_width = BoxBear_Border_Size,text = LabelVortexLarge, text_size = size.auto, text_halign = text.align_right, text_valign = text.align_center, text_color = BoxBear_Border_Color))
+            LookForObLarge := na
+            LowHighConfirmedLarge := na
+        if ShowVortexAsColorCandle
+            VortexBearCandle := true
+            VortexConfirmBarIndex := ObBarIndexLarge-bar_index
+    else if close > ObHighLarge
+        if ShowVortexBoxes        
+            LookForObLarge := na
+            LowHighConfirmedLarge := na
+            array.push(ArrayOfOBsLarge,box.new(ObBarIndexLarge,ObHighLarge,bar_index,ObLowLarge, xloc = xloc.bar_index,border_color = BoxBull_Border_Color, bgcolor = BoxBull_Fill_Color, border_width = BoxBull_Border_Size,text = LabelVortexLarge, text_size = size.auto, text_halign = text.align_right, text_valign = text.align_center, text_color = BoxBull_Border_Color))
+        if ShowVortexAsColorCandle
+            VortexBearCandle := true
+            VortexConfirmBarIndex := ObBarIndexLarge-bar_index
+if ExtendBoxesToCurrentPrice
+    if array.size(ArrayOfOBsLarge) > 0
+        for i = 0 to array.size(ArrayOfOBsLarge)-1
+            box.set_right(array.get(ArrayOfOBsLarge, i), bar_index)
+            box.set_right(array.get(ArrayOfOBsLarge, i),bar_index)   
+
+if array.size(ArrayOfLinesLarge) > 0 and ExtendLinesInRealtime
+    for i = 0 to array.size(ArrayOfLinesLarge)-1
+        line.set_x2(array.get(ArrayOfLinesLarge, i), time)
+        if ShowLabels and array.size(ArrayOfLabelsLarge) > 0
+            label.set_x(array.get(ArrayOfLabelsLarge, i), time)
+
+
+
+VortexBullCandle := false
+VortexBearCandle := false
+VortexConfirmBarIndex := na
+
+
+// Preconfirmation Candle
+PreAdrOpenTime = timestamp(Timezone,year,month,dayofmonth, 18, 0, 0)
+IsPreAdrOpenTime = hour == hour(PreAdrOpenTime) and minute == minute(PreAdrOpenTime)
+PreAdrCloseTime = timestamp(Timezone,year,month,dayofmonth, 18, 45, 0)
+PreAdrFinish = timestamp(Timezone,year,month,dayofmonth+1, 2, 00, 0)
+IsPreAdrCloseTime = hour == hour(PreAdrCloseTime) and minute == minute(PreAdrCloseTime)
+string PreAdrOpenCloseBullish = na
+
+PreOdrOpenTime = timestamp(Timezone,year,month,dayofmonth, 2, 0, 0)
+IsPreOdrOpenTime = hour == hour(PreOdrOpenTime) and minute == minute(PreOdrOpenTime)
+PreOdrCloseTime = timestamp(Timezone,year,month,dayofmonth, 2, 45, 0)
+PreOdrFinish = timestamp(Timezone,year,month,dayofmonth, 8, 30, 0)
+IsPreOdrCloseTime = hour == hour(PreOdrCloseTime) and minute == minute(PreOdrCloseTime)
+string PreOdrOpenCloseBullish = na
+
+PreRdrOpenTime = timestamp(Timezone,year,month,dayofmonth, 9, 0, 0)
+IsPreRdrOpenTime = hour == hour(PreRdrOpenTime) and minute == minute(PreRdrOpenTime)
+PreRdrCloseTime = timestamp(Timezone,year,month,dayofmonth, 9, 45, 0)
+PreRdrFinish = timestamp(Timezone,year,month,dayofmonth, 16, 0, 0)
+IsPreRdrCloseTime = hour == hour(PreRdrCloseTime) and minute == minute(PreRdrCloseTime)
+string PreRdrOpenCloseBullish = na
+
+
+
+
+var array<float> ArrayOfPreAdrMidpoints = array.new<float>()
+var array<float> ArrayOfPreOdrMidpoints = array.new<float>()
+var array<float> ArrayOfPreRdrMidpoints = array.new<float>()
+
+var array<float> ArrayOfPreAdrHighs = array.new<float>()
+var array<float> ArrayOfPreOdrHighs = array.new<float>()
+var array<float> ArrayOfPreRdrHighs = array.new<float>()
+
+var array<float> ArrayOfPreAdrLows = array.new<float>()
+var array<float> ArrayOfPreOdrLows = array.new<float>()
+var array<float> ArrayOfPreRdrLows = array.new<float>()
+
+var array<string> ArrayOfPreAdrDirections = array.new<string>()
+var array<string> ArrayOfPreOdrDirections = array.new<string>()
+var array<string> ArrayOfPreRdrDirections = array.new<string>()
+
+var array<box> ArrayOfPreAdrConfirmationCandles = array.new<box>(0)
+var array<box> ArrayOfPreOdrConfirmationCandles = array.new<box>(0)
+var array<box> ArrayOfPreRdrConfirmationCandles = array.new<box>(0)
+
+var array<line> ArrayOfPreAdrConfirmationCandleLines = array.new<line>(0)
+var array<line> ArrayOfPreOdrConfirmationCandleLines = array.new<line>(0)
+var array<line> ArrayOfPreRdrConfirmationCandleLines = array.new<line>(0)
+
+var sessionOpenPricePrice = 0.0
+var sessionHighCandlePrice = 0.0
+var sessionLowCandlePrice = 0.0
+var SessionRange = 0.0
+var sessionHighPrice = 0.0
+var sessionLowPrice = 0.0
+
+var string SessionPreAdr = "1800-1845"
+var string SessionPreOdr = "0200-0245"
+var string SessionPreRdr = "0900-0945"
+
+var string PreAdrMonitorConfirmation = "1845-0200"
+var string PreOdrMonitorConfirmation = "0245-0830"
+var string PreRdrMonitorConfirmation = "0945-1600"
+
+
+var string ConfirmationDirection = na
+var bool AlreadyConfirmedAdr = na
+var bool AlreadyConfirmedOdr = na
+var bool AlreadyConfirmedRdr = na
+
+var bool AlreadyConfirmedAdrPrev = na
+var bool AlreadyConfirmedOdrPrev = na
+var bool AlreadyConfirmedRdrPrev = na
+var int ConfirmationTime = na
+var string ConfirmationBucket = na
+var string CurrentSession = na
+
+bool AdrBullConf = na
+bool OdrBullConf = na
+bool RdrBullConf = na
+
+bool AdrBearConf = na
+bool OdrBearConf = na
+bool RdrBearConf = na
+
+FunctionSession(_session) => 
+    not na(time(timeframe.period, _session, Timezone))
+
+FunctionIsDisplacementCandle() =>
+    if barstate.isconfirmed
+        CandleBody = math.abs(open-close)
+        bool CandleBull = false
+        float WicksCombined = na
+        if close > open
+            CandleBull := true
+        if CandleBull
+            WicksCombined := math.abs(high-close)+math.abs(open-low)
+        else
+            WicksCombined := math.abs(high-open)+math.abs(close-low)
+        
+        CandleBody > WicksCombined
+
+
+inPreAdrMonitorConfirmation = FunctionSession(PreAdrMonitorConfirmation)
+PreAdrMonitorConfirmationSessionStartPrice = inPreAdrMonitorConfirmation and not inPreAdrMonitorConfirmation[1]
+
+var int TempCounter = na
+
+if ShowPreAdr
+    inPreAdr = FunctionSession(SessionPreAdr)
+
+    inSessionPreAdr   = FunctionSession(SessionPreAdr) and timeframe.isintraday
+    sessionStartPricePreAdr = inSessionPreAdr and not inSessionPreAdr[1]
+
+    if sessionStartPricePreAdr
+        sessionOpenPricePrice := open
+        sessionHighCandlePrice := close
+        sessionLowCandlePrice := close
+        sessionHighPrice := high
+        sessionLowPrice := low
+        DayStartTime := time
+        DayEndTime := DayStartTime+ONE_DAY
+        // CurrentSession := "PreAdr"
+
+    else if inSessionPreAdr
+        CurrentClose = close   
+        if (sessionHighCandlePrice < CurrentClose)
+            sessionHighCandlePrice := CurrentClose
+        if (sessionLowCandlePrice > CurrentClose)
+            sessionLowCandlePrice:= CurrentClose
+
+        if (sessionHighPrice < high)
+            sessionHighPrice := high
+        if (sessionLowPrice > low)
+            sessionLowPrice := low
+
+        SessionRange:= sessionHighCandlePrice-sessionLowCandlePrice
+
+
+
+    
+        
+    if PreAdrMonitorConfirmationSessionStartPrice
+        ConfirmationDirection := na
+        AlreadyConfirmedAdr := false
+        AlreadyConfirmedOdr := true
+        AlreadyConfirmedRdr := true
+        ConfirmationTime := na
+
+    else if inPreAdrMonitorConfirmation
+        AlreadyConfirmedAdrPrev := AlreadyConfirmedAdr
+
+        if not AlreadyConfirmedAdr
+            var string PreLabel = na      
+            if close > sessionHighPrice and not AlreadyConfirmedAdr and barstate.isconfirmed
+                if ShowConfCandleBullBear
+                    AdrBullConf := true
+                TempCounter := TempCounter+1
+                AdrConfirmationDirection := "Long"
+                AlreadyConfirmedAdr := true
+                ConfirmationDirection := "Long" 
+                ConfirmationTime := time//+TickerTimeOffset
+                CandleHigh := high
+                CandleLow := low
+                if ShowBoxLabels
+                    PreLabel := "Base " + str.format_time(time+TickerTimeOffset, "d-M-yy HH:mm")
+                else
+                    PreLabel := ""
+                if ShowBoxes
+                    array.push(ArrayOfPreAdrConfirmationCandles,box.new(ConfirmationTime,CandleHigh,PreAdrFinish,CandleLow, xloc = xloc.bar_time,border_color = BoxBull_Border_Color, bgcolor = BoxBull_Fill_Color, border_width = BoxBull_Border_Size,text = PreLabel, text_size = size.auto, text_halign = text.align_right, text_valign = text.align_center, text_color = BoxBull_Border_Color))
+
+                    if ShowConfirmationMidpoint
+                        array.push(ArrayOfPreAdrConfirmationCandleLines, line.new(ConfirmationTime,CandleHigh-(CandleHigh-CandleLow)/2 ,PreAdrFinish, CandleHigh-(CandleHigh-CandleLow)/2,color = BoxBull_Border_Color,style = line.style_dashed, xloc = xloc.bar_time))
+
+                array.push(ArrayOfPreAdrMidpoints,CandleHigh-(CandleHigh-CandleLow)/2)
+                array.push(ArrayOfPreAdrDirections,ConfirmationDirection)
+                array.push(ArrayOfPreAdrHighs, CandleHigh)
+                array.push(ArrayOfPreAdrLows, CandleLow) 
+            
+            else
+                AdrBullConf := false
+
+            if close < sessionLowPrice and not AlreadyConfirmedAdr and barstate.isconfirmed
+                if ShowConfCandleBullBear
+                    AdrBearConf := true
+                TempCounter := TempCounter+1
+                AdrConfirmationDirection := "Short"
+                AlreadyConfirmedAdr := true
+                ConfirmationDirection :=  "Short"
+                ConfirmationTime := time//+TickerTimeOffset
+                CandleHigh := high
+                CandleLow := low 
+                if ShowBoxLabels
+                    PreLabel := "Base " + str.format_time(time+TickerTimeOffset, "d-M-yy HH:mm")
+                else
+                    PreLabel := ""
+                if ShowBoxes
+                    array.push(ArrayOfPreAdrConfirmationCandles,box.new(ConfirmationTime,CandleHigh,PreAdrFinish,CandleLow, xloc = xloc.bar_time,border_color = BoxBear_Border_Color, bgcolor = BoxBear_Fill_Color, border_width = BoxBear_Border_Size,text = PreLabel, text_size = size.auto, text_halign = text.align_right, text_valign = text.align_center, text_color = BoxBear_Border_Color))
+
+                    if ShowConfirmationMidpoint
+                        array.push(ArrayOfPreAdrConfirmationCandleLines, line.new(ConfirmationTime,CandleHigh-(CandleHigh-CandleLow)/2 ,PreAdrFinish, CandleHigh-(CandleHigh-CandleLow)/2,color = BoxBear_Border_Color,style = line.style_dashed, xloc = xloc.bar_time))
+
+                array.push(ArrayOfPreAdrHighs, CandleHigh)
+                array.push(ArrayOfPreAdrLows, CandleLow) 
+                array.push(ArrayOfPreAdrMidpoints,CandleHigh-(CandleHigh-CandleLow)/2)
+                array.push(ArrayOfPreAdrDirections,ConfirmationDirection)
+            else
+                AdrBearConf := false
+
+            if array.size(ArrayOfPreAdrConfirmationCandles) > NumberOfCandles
+                box.delete(array.shift(ArrayOfPreAdrConfirmationCandles))
+                array.shift(ArrayOfPreAdrMidpoints)
+                array.shift(ArrayOfPreAdrDirections)
+                array.shift(ArrayOfPreAdrHighs)
+                array.shift(ArrayOfPreAdrLows)
+                if ShowConfirmationMidpoint and array.size(ArrayOfPreAdrConfirmationCandleLines) > NumberOfCandles
+                    line.delete(array.shift(ArrayOfPreAdrConfirmationCandleLines))
+                
+
+
+inPreOdrMonitorConfirmation = FunctionSession(PreOdrMonitorConfirmation)
+PreOdrMonitorConfirmationSessionStartPrice = inPreOdrMonitorConfirmation and not inPreOdrMonitorConfirmation[1]
+
+if ShowPreOdr
+    inPreOdr = FunctionSession(SessionPreOdr)
+
+    inSessionPreOdr   = FunctionSession(SessionPreOdr) and timeframe.isintraday
+    sessionStartPricePreOdr = inSessionPreOdr and not inSessionPreOdr[1]
+
+    if sessionStartPricePreOdr
+        sessionOpenPricePrice := open
+        sessionHighCandlePrice := close
+        sessionLowCandlePrice := close
+        sessionHighPrice := high
+        sessionLowPrice := low
+        // CurrentSession := "PreOdr"
+
+    else if inSessionPreOdr
+        CurrentClose = close   
+        if (sessionHighCandlePrice < CurrentClose)
+            sessionHighCandlePrice := CurrentClose
+        if (sessionLowCandlePrice > CurrentClose)
+            sessionLowCandlePrice:= CurrentClose
+
+        if (sessionHighPrice < high)
+            sessionHighPrice := high
+        if (sessionLowPrice > low)
+            sessionLowPrice := low
+
+        SessionRange:= sessionHighCandlePrice-sessionLowCandlePrice
+
+   
+        
+    if PreOdrMonitorConfirmationSessionStartPrice
+        ConfirmationDirection := na
+        AlreadyConfirmedAdr := true
+        AlreadyConfirmedOdr := false
+        AlreadyConfirmedRdr := true
+        ConfirmationTime := na
+
+    else if inPreOdrMonitorConfirmation
+        AlreadyConfirmedOdrPrev := AlreadyConfirmedOdr
+
+        var string PreLabel = na      
+        if close > sessionHighPrice and not AlreadyConfirmedOdr and barstate.isconfirmed
+            if ShowConfCandleBullBear
+                OdrBullConf := true
+            AlreadyConfirmedOdr := true
+            ConfirmationDirection := "Long" 
+            ConfirmationTime := time//+TickerTimeOffset
+            CandleHigh := high
+            CandleLow := low
+            if ShowBoxLabels
+                PreLabel := "Base " + str.format_time(time+TickerTimeOffset, "d-M-yy HH:mm")
+            else
+                PreLabel := ""
+            if ShowBoxes
+                array.push(ArrayOfPreOdrConfirmationCandles,box.new(ConfirmationTime,CandleHigh,PreOdrFinish,CandleLow, xloc = xloc.bar_time,border_color = BoxBull_Border_Color, bgcolor = BoxBull_Fill_Color, border_width = BoxBull_Border_Size,text = PreLabel, text_size = size.auto, text_halign = text.align_right, text_valign = text.align_center, text_color = BoxBull_Border_Color))
+
+                if ShowConfirmationMidpoint
+                    array.push(ArrayOfPreOdrConfirmationCandleLines, line.new(ConfirmationTime,CandleHigh-(CandleHigh-CandleLow)/2 ,PreOdrFinish, CandleHigh-(CandleHigh-CandleLow)/2,color = BoxBull_Border_Color,style = line.style_dashed, xloc = xloc.bar_time))
+
+            array.push(ArrayOfPreOdrHighs, CandleHigh)
+            array.push(ArrayOfPreOdrLows, CandleLow) 
+            array.push(ArrayOfPreOdrMidpoints,CandleHigh-(CandleHigh-CandleLow)/2)
+            array.push(ArrayOfPreOdrDirections,ConfirmationDirection)
+        else
+            OdrBullConf := false
+
+        if close < sessionLowPrice and not AlreadyConfirmedOdr and barstate.isconfirmed
+            if ShowConfCandleBullBear
+                OdrBearConf := true
+            AlreadyConfirmedOdr := true
+            ConfirmationDirection :=  "Short"
+            ConfirmationTime := time//+TickerTimeOffset
+            CandleHigh := high
+            CandleLow := low 
+            if ShowBoxLabels
+                PreLabel := "Base " + str.format_time(time+TickerTimeOffset, "d-M-yy HH:mm")
+            else
+                PreLabel := ""
+            if ShowBoxes
+                array.push(ArrayOfPreOdrConfirmationCandles,box.new(ConfirmationTime,CandleHigh,PreOdrFinish,CandleLow, xloc = xloc.bar_time,border_color = BoxBear_Border_Color, bgcolor = BoxBear_Fill_Color, border_width = BoxBear_Border_Size,text = PreLabel, text_size = size.auto, text_halign = text.align_right, text_valign = text.align_center, text_color = BoxBear_Border_Color))
+                if ShowConfirmationMidpoint
+                    array.push(ArrayOfPreOdrConfirmationCandleLines, line.new(ConfirmationTime,CandleHigh-(CandleHigh-CandleLow)/2 ,PreOdrFinish, CandleHigh-(CandleHigh-CandleLow)/2,color = BoxBear_Border_Color,style = line.style_dashed, xloc = xloc.bar_time))
+
+            array.push(ArrayOfPreOdrMidpoints,CandleHigh-(CandleHigh-CandleLow)/2)
+            array.push(ArrayOfPreOdrDirections,ConfirmationDirection)
+            array.push(ArrayOfPreOdrHighs, CandleHigh)
+            array.push(ArrayOfPreOdrLows, CandleLow) 
+       
+        else
+            OdrBearConf := false
+
+    if array.size(ArrayOfPreOdrConfirmationCandles) > NumberOfCandles
+        array.shift(ArrayOfPreOdrHighs)
+        array.shift(ArrayOfPreOdrLows)
+        box.delete(array.shift(ArrayOfPreOdrConfirmationCandles))
+        array.shift(ArrayOfPreOdrMidpoints)
+        array.shift(ArrayOfPreOdrDirections)
+
+        if ShowConfirmationMidpoint and array.size(ArrayOfPreOdrConfirmationCandleLines) > NumberOfCandles
+            line.delete(array.shift(ArrayOfPreOdrConfirmationCandleLines))
+
+
+inPreRdrMonitorConfirmation = FunctionSession(PreRdrMonitorConfirmation)
+PreRdrMonitorConfirmationSessionStartPrice = inPreRdrMonitorConfirmation and not inPreRdrMonitorConfirmation[1]
+
+
+if ShowPreRdr
+    inPreRdr = FunctionSession(SessionPreRdr)
+
+    inSessionPreRdr   = FunctionSession(SessionPreRdr) and timeframe.isintraday
+    sessionStartPricePreRdr = inSessionPreRdr and not inSessionPreRdr[1]
+
+    if sessionStartPricePreRdr
+        sessionOpenPricePrice := open
+        sessionHighCandlePrice := close
+        sessionLowCandlePrice := close
+        sessionHighPrice := high
+        sessionLowPrice := low
+
+    else if inSessionPreRdr
+        CurrentClose = close   
+        if (sessionHighCandlePrice < CurrentClose)
+            sessionHighCandlePrice := CurrentClose
+        if (sessionLowCandlePrice > CurrentClose)
+            sessionLowCandlePrice:= CurrentClose
+
+        if (sessionHighPrice < high)
+            sessionHighPrice := high
+        if (sessionLowPrice > low)
+            sessionLowPrice := low
+
+        SessionRange:= sessionHighCandlePrice-sessionLowCandlePrice
+        
+    if PreRdrMonitorConfirmationSessionStartPrice
+        ConfirmationDirection := na
+        AlreadyConfirmedAdr := true
+        AlreadyConfirmedOdr := true
+        AlreadyConfirmedRdr := false
+        ConfirmationTime := na
+
+    else if inPreRdrMonitorConfirmation
+        AlreadyConfirmedRdrPrev := AlreadyConfirmedRdr
+
+        var string PreLabel = na      
+        if close > sessionHighPrice and not AlreadyConfirmedRdr and barstate.isconfirmed
+            if ShowConfCandleBullBear
+                RdrBullConf := true
+            AlreadyConfirmedRdr := true
+            ConfirmationDirection := "Long" 
+            ConfirmationTime := time//+TickerTimeOffset
+            CandleHigh := high
+            CandleLow := low
+            if ShowBoxLabels
+                PreLabel := "Base " + str.format_time(time+TickerTimeOffset, "d-M-yy HH:mm")
+            else
+                PreLabel := ""
+            if ShowBoxes
+                array.push(ArrayOfPreRdrConfirmationCandles,box.new(ConfirmationTime,CandleHigh,PreRdrFinish,CandleLow, xloc = xloc.bar_time,border_color = BoxBull_Border_Color, bgcolor = BoxBull_Fill_Color, border_width = BoxBull_Border_Size,text = PreLabel, text_size = size.auto, text_halign = text.align_right, text_valign = text.align_center, text_color = BoxBull_Border_Color))
+                if ShowConfirmationMidpoint
+                    array.push(ArrayOfPreRdrConfirmationCandleLines, line.new(ConfirmationTime,CandleHigh-(CandleHigh-CandleLow)/2 ,PreRdrFinish, CandleHigh-(CandleHigh-CandleLow)/2,color = BoxBull_Border_Color,style = line.style_dashed, xloc = xloc.bar_time))        
+                    
+            array.push(ArrayOfPreRdrMidpoints,CandleHigh-(CandleHigh-CandleLow)/2)
+            array.push(ArrayOfPreRdrDirections,ConfirmationDirection)
+            array.push(ArrayOfPreRdrHighs, CandleHigh)
+            array.push(ArrayOfPreRdrLows, CandleLow) 
+          
+        else
+            RdrBullConf := false
+
+        if close < sessionLowPrice and not AlreadyConfirmedRdr and barstate.isconfirmed
+            if ShowConfCandleBullBear
+                RdrBearConf := true
+            AlreadyConfirmedRdr := true
+            ConfirmationDirection :=  "Short"
+            ConfirmationTime := time//+TickerTimeOffset
+            CandleHigh := high
+            CandleLow := low 
+            if ShowBoxLabels
+                PreLabel := "Base " + str.format_time(time+TickerTimeOffset, "d-M-yy HH:mm")
+            else
+                PreLabel := ""
+            if ShowBoxes
+                array.push(ArrayOfPreRdrConfirmationCandles,box.new(ConfirmationTime,CandleHigh,PreRdrFinish,CandleLow, xloc = xloc.bar_time,border_color = BoxBear_Border_Color, bgcolor = BoxBear_Fill_Color, border_width = BoxBear_Border_Size,text = PreLabel, text_size = size.auto, text_halign = text.align_right, text_valign = text.align_center, text_color = BoxBear_Border_Color))
+                if ShowConfirmationMidpoint
+                    array.push(ArrayOfPreRdrConfirmationCandleLines, line.new(ConfirmationTime,CandleHigh-(CandleHigh-CandleLow)/2 ,PreRdrFinish, CandleHigh-(CandleHigh-CandleLow)/2,color = BoxBear_Border_Color,style = line.style_dashed, xloc = xloc.bar_time))        
+    
+
+            array.push(ArrayOfPreRdrMidpoints,CandleHigh-(CandleHigh-CandleLow)/2)
+            array.push(ArrayOfPreRdrDirections,ConfirmationDirection)
+            array.push(ArrayOfPreRdrHighs, CandleHigh)
+            array.push(ArrayOfPreRdrLows, CandleLow) 
+           
+        else
+            RdrBearConf := false
+
+
+
+    if array.size(ArrayOfPreRdrConfirmationCandles) > NumberOfCandles
+        box.delete(array.shift(ArrayOfPreRdrConfirmationCandles))
+		array.shift(ArrayOfPreRdrMidpoints)
+        array.shift(ArrayOfPreRdrDirections)
+        array.shift(ArrayOfPreRdrHighs)
+        array.shift(ArrayOfPreRdrLows)
+        if ShowConfirmationMidpoint and array.size(ArrayOfPreRdrConfirmationCandleLines) > NumberOfCandles
+            line.delete(array.shift(ArrayOfPreRdrConfirmationCandleLines))
+            
+			
+
+
+if ExtendBoxesToCurrentPrice
+    if ShowPreAdr
+        if array.size(ArrayOfPreAdrConfirmationCandles) > 0
+            for i = 0 to array.size(ArrayOfPreAdrConfirmationCandles)-1
+                box.set_right(array.get(ArrayOfPreAdrConfirmationCandles, i), time)
+                box.set_right(array.get(ArrayOfPreAdrConfirmationCandles, i), time)   
+
+        if array.size(ArrayOfPreAdrConfirmationCandleLines) > 0
+            for i = 0 to array.size(ArrayOfPreAdrConfirmationCandleLines)-1
+                line.set_x2(array.get(ArrayOfPreAdrConfirmationCandleLines, i), time)  
+
+    if ShowPreOdr
+        if array.size(ArrayOfPreOdrConfirmationCandles) > 0
+            for i = 0 to array.size(ArrayOfPreOdrConfirmationCandles)-1
+                box.set_right(array.get(ArrayOfPreOdrConfirmationCandles, i), time)
+                box.set_right(array.get(ArrayOfPreOdrConfirmationCandles, i), time)   
+		if array.size(ArrayOfPreOdrConfirmationCandleLines) > 0
+            for i = 0 to array.size(ArrayOfPreOdrConfirmationCandleLines)-1
+                line.set_x2(array.get(ArrayOfPreOdrConfirmationCandleLines, i), time)  
+    if ShowPreRdr
+        if array.size(ArrayOfPreRdrConfirmationCandles) > 0
+            for i = 0 to array.size(ArrayOfPreRdrConfirmationCandles)-1
+                box.set_right(array.get(ArrayOfPreRdrConfirmationCandles, i), time)
+                box.set_right(array.get(ArrayOfPreRdrConfirmationCandles, i), time)   
+        if array.size(ArrayOfPreRdrConfirmationCandleLines) > 0
+            for i = 0 to array.size(ArrayOfPreRdrConfirmationCandleLines)-1
+                line.set_x2(array.get(ArrayOfPreRdrConfirmationCandleLines, i), time)  
+
+
+if array.size(ArrayOfPreAdrConfirmationCandles) > 0
+    for i = 0 to array.size(ArrayOfPreAdrDirections)-1
+        if array.get(ArrayOfPreAdrDirections, i) == "Long"
+            if close < array.get(ArrayOfPreAdrMidpoints, i)
+                box.set_bgcolor(array.get(ArrayOfPreAdrConfirmationCandles,i), BoxInversion_Fill_Color)
+                box.set_border_color(array.get(ArrayOfPreAdrConfirmationCandles,i), BoxInversion_Border_Color)
+            else
+                box.set_bgcolor(array.get(ArrayOfPreAdrConfirmationCandles,i), BoxBull_Fill_Color)
+                box.set_border_color(array.get(ArrayOfPreAdrConfirmationCandles,i), BoxBull_Border_Color)
+        else if array.get(ArrayOfPreAdrDirections, i) == "Short"
+            if close > array.get(ArrayOfPreAdrMidpoints, i)
+                box.set_bgcolor(array.get(ArrayOfPreAdrConfirmationCandles,i), BoxInversion_Fill_Color)
+                box.set_border_color(array.get(ArrayOfPreAdrConfirmationCandles,i), BoxInversion_Border_Color) 
+            else
+                box.set_bgcolor(array.get(ArrayOfPreAdrConfirmationCandles,i), BoxBear_Fill_Color)
+                box.set_border_color(array.get(ArrayOfPreAdrConfirmationCandles,i), BoxBear_Border_Color)
+
+if array.size(ArrayOfPreOdrConfirmationCandles) > 0
+    for i = 0 to array.size(ArrayOfPreOdrDirections)-1
+        if array.get(ArrayOfPreOdrDirections, i) == "Long"
+            if close < array.get(ArrayOfPreOdrMidpoints, i)
+                box.set_bgcolor(array.get(ArrayOfPreOdrConfirmationCandles,i), BoxInversion_Fill_Color)
+                box.set_border_color(array.get(ArrayOfPreOdrConfirmationCandles,i), BoxInversion_Border_Color)
+            else
+                box.set_bgcolor(array.get(ArrayOfPreOdrConfirmationCandles,i), BoxBull_Fill_Color)
+                box.set_border_color(array.get(ArrayOfPreOdrConfirmationCandles,i), BoxBull_Border_Color)
+        else if array.get(ArrayOfPreOdrDirections, i) == "Short"
+            if close > array.get(ArrayOfPreOdrMidpoints, i)
+                box.set_bgcolor(array.get(ArrayOfPreOdrConfirmationCandles,i), BoxInversion_Fill_Color)
+                box.set_border_color(array.get(ArrayOfPreOdrConfirmationCandles,i), BoxInversion_Border_Color) 
+            else
+                box.set_bgcolor(array.get(ArrayOfPreOdrConfirmationCandles,i), BoxBear_Fill_Color)
+                box.set_border_color(array.get(ArrayOfPreOdrConfirmationCandles,i), BoxBear_Border_Color)
+
+if array.size(ArrayOfPreRdrConfirmationCandles) > 0
+    for i = 0 to array.size(ArrayOfPreRdrDirections)-1
+        if array.get(ArrayOfPreRdrDirections, i) == "Long"
+            if close < array.get(ArrayOfPreRdrMidpoints, i)
+                box.set_bgcolor(array.get(ArrayOfPreRdrConfirmationCandles,i), BoxInversion_Fill_Color)
+                box.set_border_color(array.get(ArrayOfPreRdrConfirmationCandles,i), BoxInversion_Border_Color)
+            else
+                box.set_bgcolor(array.get(ArrayOfPreRdrConfirmationCandles,i), BoxBull_Fill_Color)
+                box.set_border_color(array.get(ArrayOfPreRdrConfirmationCandles,i), BoxBull_Border_Color)
+        else if array.get(ArrayOfPreRdrDirections, i) == "Short"
+            if close > array.get(ArrayOfPreRdrMidpoints, i)
+                box.set_bgcolor(array.get(ArrayOfPreRdrConfirmationCandles,i), BoxInversion_Fill_Color)
+                box.set_border_color(array.get(ArrayOfPreRdrConfirmationCandles,i), BoxInversion_Border_Color) 
+            else
+                box.set_bgcolor(array.get(ArrayOfPreRdrConfirmationCandles,i), BoxBear_Fill_Color)
+                box.set_border_color(array.get(ArrayOfPreRdrConfirmationCandles,i), BoxBear_Border_Color)
+
+
+if array.size(ArrayOfLinesLarge) > 0 and ExtendLinesInRealtime
+    for i = 0 to array.size(ArrayOfLinesLarge)-1
+        line.set_x2(array.get(ArrayOfLinesLarge, i), time)
+        if ShowLabels and array.size(ArrayOfLabelsLarge) > 0
+            label.set_x(array.get(ArrayOfLabelsLarge, i), time)
+
+var float LastAdrMidpoint = na
+var float LastOdrMidpoint = na
+var float LastRdrMidpoint = na
+
+var float LastAdrHigh = na
+var float LastOdrHigh = na
+var float LastRdrHigh = na
+
+var float LastAdrLow = na
+var float LastOdrLow = na
+var float LastRdrLow = na
+
+bool isPreConfAdrBearish = na
+bool isPreConfAdrBullish = na
+
+bool isPreConfOdrBearish = na
+bool isPreConfOdrBullish = na
+
+bool isPreConfRdrBearish = na
+bool isPreConfRdrBullish = na
+
+
+barcolor(OdrBullConf ? PreconfLevelBullCandleColor : na)
+barcolor(OdrBearConf ? PreconfLevelBearCandleColor : na)
+barcolor(RdrBullConf ? PreconfLevelBullCandleColor : na)
+barcolor(RdrBearConf ? PreconfLevelBearCandleColor : na)
+
+
+var bool BuyAdr = na
+var bool SellAdr = na
+
+var bool BuyOdr = na
+var bool SellOdr = na
+
+var bool BuyRdr = na
+var bool SellRdr = na
+
+var float AdrBullCandleHigh = na
+var float AdrBullCandleLow = na
+var float AdrBullInvalidationOneThird = na
+var int AdrBullCountIfImmediateFlip = 0
+
+var float AdrBearCandleHigh = na
+var float AdrBearCandleLow = na
+var float AdrBearInvalidationOneThird = na
+var int AdrBearCountIfImmediateFlip = 0
+
+var float OdrBullCandleHigh = na
+var float OdrBullCandleLow = na
+var float OdrBullInvalidationOneThird = na
+var int OdrBullCountIfImmediateFlip = 0
+
+var float OdrBearCandleHigh = na
+var float OdrBearCandleLow = na
+var float OdrBearInvalidationOneThird = na
+var int OdrBearCountIfImmediateFlip = 0
+
+
+var float RdrBullCandleHigh = na
+var float RdrBullCandleLow = na
+var float RdrBullInvalidationOneThird = na
+var int RdrBullCountIfImmediateFlip = 0
+
+var float RdrBearCandleHigh = na
+var float RdrBearCandleLow = na
+var float RdrBearInvalidationOneThird = na
+var int RdrBearCountIfImmediateFlip = 0
+
+
+if inPreAdrMonitorConfirmation
+    if array.size(ArrayOfPreAdrMidpoints) > 0
+        LastAdrHigh := array.get(ArrayOfPreAdrHighs, array.size(ArrayOfPreAdrHighs)-1)
+        LastAdrLow := array.get(ArrayOfPreAdrLows, array.size(ArrayOfPreAdrLows)-1)
+        LastAdrMidpoint := array.get(ArrayOfPreAdrMidpoints, array.size(ArrayOfPreAdrMidpoints)-1)
+
+    if FunctionIsDisplacementCandle()
+        if close[1] < LastAdrMidpoint
+            isPreConfAdrBullish := close > LastAdrMidpoint
+
+
+        else if close[1] > LastAdrMidpoint
+            isPreConfAdrBearish := close < LastAdrMidpoint
+
+
+    if isPreConfAdrBullish
+        if AdrConfirmationDirection == "Long"
+            AdrBullCandleHigh := high
+            AdrBullCandleLow := low
+            AdrBullInvalidationOneThird := low+(high-low)*(1/3)
+            AdrBullCountIfImmediateFlip := 0
+
+        else if AdrConfirmationDirection == "Short"
+            AdrConfirmationDirection := "Long"
+            if AdrBullCountIfImmediateFlip == 0
+                AdrBullCountIfImmediateFlip := AdrBullCountIfImmediateFlip+1
+            else if AdrBullCountIfImmediateFlip == 1
+                AdrBullCandleHigh := high
+                AdrBullCandleLow := low
+                AdrBullInvalidationOneThird := low+(high-low)*(1/3)
+                AdrBullCountIfImmediateFlip := 0
+
+    else
+        BuyAdr := false
+
+    if isPreConfAdrBearish
+        if AdrConfirmationDirection == "Short"
+            AdrBearCandleHigh := high
+            AdrBearCandleLow := low
+            AdrBearInvalidationOneThird := high-(high-low)*(1/3)
+            AdrBearCountIfImmediateFlip := 0
+        
+        if AdrConfirmationDirection == "Long"
+            AdrConfirmationDirection := "Short"
+            if AdrBearCountIfImmediateFlip == 0
+                AdrBearCountIfImmediateFlip := AdrBearCountIfImmediateFlip+1
+            else if AdrBearCountIfImmediateFlip == 1
+                AdrBearCandleHigh := high
+                AdrBearCandleLow := low
+                AdrBearInvalidationOneThird := high-(high-low)*(1/3)
+                AdrBearCountIfImmediateFlip := 0
+    else
+        SellAdr := false 
+
+    if low < AdrBullCandleHigh and close > LastAdrMidpoint and close > AdrBearCandleHigh and not ShowOnlyRetestEntry
+        if close >= AdrBullInvalidationOneThird and AdrBullCountIfImmediateFlip == 0
+            AdrBullCountIfImmediateFlip := AdrBullCountIfImmediateFlip+1
+        else if close >= AdrBullInvalidationOneThird and AdrBullCountIfImmediateFlip == 1
+            BuyAdr := true
+            AdrBullCountIfImmediateFlip := 0
+    else if low[1] > LastAdrHigh and close >= LastAdrMidpoint and low <= LastAdrHigh
+        BuyAdr := true
+    else
+        BuyAdr := false
+
+    if high > AdrBearCandleLow and close < LastAdrMidpoint and close < AdrBullCandleLow and not ShowOnlyRetestEntry
+        if close <= AdrBearInvalidationOneThird and AdrBearCountIfImmediateFlip == 0
+            AdrBearCountIfImmediateFlip := AdrBearCountIfImmediateFlip+1
+        else if close <= AdrBearInvalidationOneThird and AdrBearCountIfImmediateFlip == 1
+            SellAdr := true
+            AdrBearCountIfImmediateFlip := 0
+    else if high[1] < LastAdrLow and close <= LastAdrMidpoint and high >= LastAdrLow
+        SellAdr := true
+    else
+        SellAdr := false
+else
+    BuyAdr := false
+    SellAdr := false
+
+
+barcolor(isPreConfAdrBearish ? PreconfLevelBearCandleColor : isPreConfAdrBullish ? PreconfLevelBullCandleColor : na)
+plotshape(BuyAdr, style=shape.circle, location=location.abovebar, color = color.new(color.green, 0))
+plotshape(SellAdr, style=shape.circle, location=location.belowbar, color = color.new(color.red, 0))
+
+
+if inPreOdrMonitorConfirmation
+    if array.size(ArrayOfPreOdrMidpoints) > 0
+        LastOdrHigh := array.get(ArrayOfPreOdrHighs, array.size(ArrayOfPreOdrHighs)-1)
+        LastOdrLow := array.get(ArrayOfPreOdrLows, array.size(ArrayOfPreOdrLows)-1)
+        LastOdrMidpoint := array.get(ArrayOfPreOdrMidpoints, array.size(ArrayOfPreOdrMidpoints)-1)
+
+    if FunctionIsDisplacementCandle()
+        if close[1] < LastOdrMidpoint
+            isPreConfOdrBullish := close > LastOdrMidpoint
+
+
+        else if close[1] > LastOdrMidpoint
+            isPreConfOdrBearish := close < LastOdrMidpoint
+
+
+    if isPreConfOdrBullish
+        if OdrConfirmationDirection == "Long"
+            OdrBullCandleHigh := high
+            OdrBullCandleLow := low
+            OdrBullInvalidationOneThird := low+(high-low)*(1/3)
+            OdrBullCountIfImmediateFlip := 0
+
+        else if OdrConfirmationDirection == "Short"
+            OdrConfirmationDirection := "Long"
+            if OdrBullCountIfImmediateFlip == 0
+                OdrBullCountIfImmediateFlip := OdrBullCountIfImmediateFlip+1
+            else if OdrBullCountIfImmediateFlip == 1
+                OdrBullCandleHigh := high
+                OdrBullCandleLow := low
+                OdrBullInvalidationOneThird := low+(high-low)*(1/3)
+                OdrBullCountIfImmediateFlip := 0
+
+    else
+        BuyOdr := false
+
+    if isPreConfOdrBearish
+        if OdrConfirmationDirection == "Short"
+            OdrBearCandleHigh := high
+            OdrBearCandleLow := low
+            OdrBearInvalidationOneThird := high-(high-low)*(1/3)
+            OdrBearCountIfImmediateFlip := 0
+        
+        if OdrConfirmationDirection == "Long"
+            OdrConfirmationDirection := "Short"
+            if OdrBearCountIfImmediateFlip == 0
+                OdrBearCountIfImmediateFlip := OdrBearCountIfImmediateFlip+1
+            else if OdrBearCountIfImmediateFlip == 1
+                OdrBearCandleHigh := high
+                OdrBearCandleLow := low
+                OdrBearInvalidationOneThird := high-(high-low)*(1/3)
+                OdrBearCountIfImmediateFlip := 0
+    else
+        SellOdr := false 
+
+    if low < OdrBullCandleHigh and close > LastOdrMidpoint and close > OdrBearCandleHigh and not ShowOnlyRetestEntry
+        if close >= OdrBullInvalidationOneThird and OdrBullCountIfImmediateFlip == 0
+            OdrBullCountIfImmediateFlip := OdrBullCountIfImmediateFlip+1
+        else if close >= OdrBullInvalidationOneThird and OdrBullCountIfImmediateFlip == 1
+            BuyOdr := true
+            OdrBullCountIfImmediateFlip := 0
+    else if low[1] > LastOdrHigh and close >= LastOdrMidpoint and low <= LastOdrHigh
+        BuyOdr := true
+    else
+        BuyOdr := false
+
+    if high > OdrBearCandleLow and close < LastOdrMidpoint and close < OdrBullCandleLow and not ShowOnlyRetestEntry
+        if close <= OdrBearInvalidationOneThird and OdrBearCountIfImmediateFlip == 0
+            OdrBearCountIfImmediateFlip := OdrBearCountIfImmediateFlip+1
+        else if close <= OdrBearInvalidationOneThird and OdrBearCountIfImmediateFlip == 1
+            SellOdr := true
+            OdrBearCountIfImmediateFlip := 0
+    else if high[1] < LastOdrLow and close <= LastOdrMidpoint and high >= LastOdrLow
+        SellOdr := true
+    else
+        SellOdr := false
+else
+    BuyOdr := false
+    SellOdr := false
+
+
+barcolor(isPreConfOdrBearish ? PreconfLevelBearCandleColor : isPreConfOdrBullish ? PreconfLevelBullCandleColor : na)
+plotshape(BuyOdr, style=shape.circle, location=location.abovebar, color = color.new(color.green, 0))
+plotshape(SellOdr, style=shape.circle, location=location.belowbar, color = color.new(color.red, 0))
+
+
+if inPreRdrMonitorConfirmation
+    if array.size(ArrayOfPreRdrMidpoints) > 0
+        LastRdrHigh := array.get(ArrayOfPreRdrHighs, array.size(ArrayOfPreRdrHighs)-1)
+        LastRdrLow := array.get(ArrayOfPreRdrLows, array.size(ArrayOfPreRdrLows)-1)
+        LastRdrMidpoint := array.get(ArrayOfPreRdrMidpoints, array.size(ArrayOfPreRdrMidpoints)-1)
+
+    if FunctionIsDisplacementCandle()
+        if close[1] < LastRdrMidpoint
+            isPreConfRdrBullish := close > LastRdrMidpoint
+
+
+        else if close[1] > LastRdrMidpoint
+            isPreConfRdrBearish := close < LastRdrMidpoint
+
+    if isPreConfRdrBullish
+        if RdrConfirmationDirection == "Long"
+            RdrBullCandleHigh := high
+            RdrBullCandleLow := low
+            RdrBullInvalidationOneThird := low+(high-low)*(1/3)
+            RdrBullCountIfImmediateFlip := 0
+
+        else if RdrConfirmationDirection == "Short"
+            RdrConfirmationDirection := "Long"
+            if RdrBullCountIfImmediateFlip == 0
+                RdrBullCountIfImmediateFlip := RdrBullCountIfImmediateFlip+1
+            else if RdrBullCountIfImmediateFlip == 1
+                RdrBullCandleHigh := high
+                RdrBullCandleLow := low
+                RdrBullInvalidationOneThird := low+(high-low)*(1/3)
+                RdrBullCountIfImmediateFlip := 0
+
+    else
+        BuyRdr := false
+
+    if isPreConfRdrBearish
+        if RdrConfirmationDirection == "Short"
+            RdrBearCandleHigh := high
+            RdrBearCandleLow := low
+            RdrBearInvalidationOneThird := high-(high-low)*(1/3)
+            RdrBearCountIfImmediateFlip := 0
+        
+        if RdrConfirmationDirection == "Long"
+            RdrConfirmationDirection := "Short"
+            if RdrBearCountIfImmediateFlip == 0
+                RdrBearCountIfImmediateFlip := RdrBearCountIfImmediateFlip+1
+            else if RdrBearCountIfImmediateFlip == 1
+                RdrBearCandleHigh := high
+                RdrBearCandleLow := low
+                RdrBearInvalidationOneThird := high-(high-low)*(1/3)
+                RdrBearCountIfImmediateFlip := 0
+    else
+        SellRdr := false 
+
+    if low < RdrBullCandleHigh and close > LastRdrMidpoint and close > RdrBearCandleHigh and not ShowOnlyRetestEntry
+        if close >= RdrBullInvalidationOneThird and RdrBullCountIfImmediateFlip == 0
+            RdrBullCountIfImmediateFlip := RdrBullCountIfImmediateFlip+1
+        else if close >= RdrBullInvalidationOneThird and RdrBullCountIfImmediateFlip == 1
+            BuyRdr := true
+            RdrBullCountIfImmediateFlip := 0
+    else if low[1] > LastRdrHigh and close >= LastRdrMidpoint and low <= LastRdrHigh
+        BuyRdr := true
+    else
+        BuyRdr := false
+
+    if high > RdrBearCandleLow and close < LastRdrMidpoint and close < RdrBullCandleLow and not ShowOnlyRetestEntry
+        if close <= RdrBearInvalidationOneThird and RdrBearCountIfImmediateFlip == 0
+            RdrBearCountIfImmediateFlip := RdrBearCountIfImmediateFlip+1
+        else if close <= RdrBearInvalidationOneThird and RdrBearCountIfImmediateFlip == 1
+            SellRdr := true
+            RdrBearCountIfImmediateFlip := 0
+    else if high[1] < LastRdrLow and close <= LastRdrMidpoint and high >= LastRdrLow
+        SellRdr := true
+    else
+        SellRdr := false
+else
+    BuyRdr := false
+    SellRdr := false
+
+barcolor(isPreConfRdrBearish ? PreconfLevelBearCandleColor : isPreConfRdrBullish ? PreconfLevelBullCandleColor : na)
+plotshape(BuyRdr, style=shape.circle, location=location.abovebar, color = color.new(color.green, 0))
+plotshape(SellRdr, style=shape.circle, location=location.belowbar, color = color.new(color.red, 0))
+
+
+
+
+// RANGE Small
+
+var float CurrentLowRangeSmall = na
+var float CurrentHighRangeSmall = na
+CurrentLowRangeSmall := FunctioroundDown(close,RangeSmall)
+CurrentHighRangeSmall := CurrentLowRangeSmall+RangeSmall
+
+
+var string LabelVortexSmall = na
+var array<float> RangesInPlaySmall = array.new<float>()
+var array<float> RangesInPlayValuesSmall = array.new<float>()
+var array<float> RangesInPlayCandleCloseFromRangeSmall = array.new<float>()
+var array<float> ThreeCandleFormationBullSmall = array.new<float>()
+var array<float> ThreeCandleFormationBearSmall = array.new<float>()
+var array<box> ArrayOfOBsSmall = array.new<box>()
+
+var float RangeInPlaySmall = na
+var float PrevRangeInPlaySmall = na
+
+var float ObHighSmall = na
+var float ObLowSmall = na
+var int ObBarIndexSmall = na
+
+var string LookForObSmall = na
+var string LowHighConfirmedSmall = na
+
+var array<line> ArrayOfLinesSmall = array.new_line(0)
+var array<label> ArrayOfLabelsSmall = array.new<label>()
+
+
+if not IncreaseRange3x
+    if RangeStyle == "PO3-LTF"      
+        for i = 0 to array.size(ArrayOfPo3LtfRanges)-1
+            CurrentRange = array.get(ArrayOfPo3LtfRanges, i)
+
+            Style = LineStyle
+            int Width = LineWidth
+
+            color Color = switch(CurrentRange)
+                -0.111 => OrangeColorLight
+                0.0 => BlueColorLight
+                0.03 => GrayColorDark
+                0.111 => BlueColorDark
+                0.17 => GrayColorDark
+                0.25 => GrayColorLight
+                0.29 => BlueColorLight
+                0.333 => GrayColorLight
+                0.382 => PurpleColorLight
+                0.41 => GrayColorDark
+                0.47 => GrayColorLight
+                0.5 => BlueColorLight
+                0.53 => GrayColorLight
+                0.59 => GrayColorDark
+                0.618 => PurpleColorLight
+                0.666 => GrayColorLight
+                0.71 => BlueColorLight
+                0.75 => GrayColorLight
+                0.83 => GrayColorDark
+                0.89 => BlueColorDark
+                0.97 => GrayColorDark
+                1.0 => BlueColorLight
+                1.111 => OrangeColorLight
+                => GrayColorDark
+
+            if ShowVortexLines
+                array.push(ArrayOfLinesSmall, line.new(DayStartTime, CurrentLowRangeSmall+(RangeSmall*CurrentRange) ,DayEndTime, CurrentLowRangeSmall+(RangeSmall*CurrentRange),color = Color, style = Style, width = Width, xloc = xloc.bar_time))
+                if ShowLabels
+                    array.push(ArrayOfLabelsSmall, label.new(DayEndTime, CurrentLowRangeSmall+(RangeSmall*CurrentRange),"          " + str.tostring(CurrentRange), style = label.style_label_center, xloc = xloc.bar_time, color =color.new(color.green, 100), textcolor = Color, size =size.small, textalign = text.align_right))
+
+
+            while array.size(ArrayOfLinesSmall) > array.size(ArrayOfPo3LtfRanges)*2
+                line.delete(array.shift(ArrayOfLinesSmall))
+            while array.size(ArrayOfLabelsSmall) > array.size(ArrayOfPo3LtfRanges)*2
+                if ShowLabels
+                    label.delete(array.shift(ArrayOfLabelsSmall))
+
+
+
+
+    for i = 0 to array.size(ArrayOfPo3LtfRanges)-1
+        CurrentRange = array.get(ArrayOfPo3LtfRanges,i )
+
+        if i == 0
+            PrevRangeInPlaySmall := RangeInPlaySmall
+            RangeInPlaySmall := na
+
+            while array.size(RangesInPlaySmall) > 0
+                array.shift(RangesInPlaySmall)
+                array.shift(RangesInPlayValuesSmall)
+                array.shift(RangesInPlayCandleCloseFromRangeSmall)           
+
+        CandleDirection := CandleDirection(CandleOpen,CandleClose)
+
+        if CandleHigh >= CurrentLowRangeSmall+(RangeSmall*CurrentRange) and CandleLow <= CurrentLowRangeSmall+(RangeSmall*CurrentRange)
+            array.push(RangesInPlaySmall, CurrentRange)
+            array.push(RangesInPlayValuesSmall,CurrentLowRangeSmall+(RangeSmall*CurrentRange))
+            array.push(RangesInPlayCandleCloseFromRangeSmall,math.abs(close-(CurrentLowRangeSmall+(RangeSmall*CurrentRange))))
+
+
+    MinArrayValueSmall = array.min(RangesInPlayCandleCloseFromRangeSmall)
+    if array.size(RangesInPlaySmall) > 0
+        for i = 0 to array.size(RangesInPlayCandleCloseFromRangeSmall)-1
+            if array.get(RangesInPlayCandleCloseFromRangeSmall, i) == MinArrayValueSmall
+                RangeInPlaySmall := array.get(RangesInPlaySmall, i)
+    else
+        RangeInPlaySmall := na
+
+
+
+    if close < open
+        array.push(ThreeCandleFormationBullSmall, close)
+    else if close > open
+        array.push(ThreeCandleFormationBullSmall, open)
+
+    if close > open
+        array.push(ThreeCandleFormationBearSmall, close)
+    else if close < open
+        array.push(ThreeCandleFormationBearSmall, open)
+
+
+    while array.size(ThreeCandleFormationBullSmall) > 3
+        array.shift(ThreeCandleFormationBullSmall)
+    while array.size(ThreeCandleFormationBearSmall) > 3
+        array.shift(ThreeCandleFormationBearSmall)
+
+
+
+
+    if not na(RangeInPlaySmall)
+        if PrevCandleLow > CandleLow and not(LookForObSmall == "BearOb") 
+            LookForObSmall := "BullOb" 
+        else if PrevCandleHigh < CandleHigh and not(LookForObSmall == "BullOb") 
+            LookForObSmall := "BearOb"
+
+    var float TempRangeSmall = na
+    var int LevelBreachedSmall = 0
+
+    if array.size(ThreeCandleFormationBullSmall) == 3 and LookForObSmall == "BullOb" and not(LowHighConfirmedSmall == "LowConfirmed")
+        if LevelBreachedSmall == 0
+            TempRangeSmall := RangeInPlaySmall
+        if array.min(ThreeCandleFormationBullSmall) == array.get(ThreeCandleFormationBullSmall, 1)
+            ObHighSmall := high[1]
+            ObLowSmall := low[1]
+            ObBarIndexSmall := bar_index[1]
+            LowHighConfirmedSmall := "LowConfirmed"
+        if close < CurrentLowRangeSmall+(RangeSmall*TempRangeSmall)        
+            LevelBreachedSmall := LevelBreachedSmall+1
+
+        if LevelBreachedSmall > 2
+            LevelBreachedSmall := 0
+            LookForObSmall := na
+            LowHighConfirmedSmall := na
+
+
+    else if array.size(ThreeCandleFormationBearSmall) == 3 and LookForObSmall == "BearOb" and not(LowHighConfirmedSmall == "HighConfirmed")
+        if LevelBreachedSmall == 0
+            TempRangeSmall := RangeInPlaySmall
+        if array.max(ThreeCandleFormationBearSmall) == array.get(ThreeCandleFormationBearSmall, 1)
+            ObHighSmall := high[1]
+            ObLowSmall := low[1]
+            ObBarIndexSmall := bar_index[1]
+            LowHighConfirmedSmall := "HighConfirmed"
+        if close > CurrentLowRangeSmall+(RangeSmall*TempRangeSmall)        
+            LevelBreachedSmall := LevelBreachedSmall+1
+
+
+            
+        if LevelBreachedSmall > 2
+            LevelBreachedSmall := 0
+            LookForObSmall := na
+            LowHighConfirmedSmall := na
+
+
+    if LowHighConfirmedSmall == "LowConfirmed" and ShowVortexBoxes
+        if close >  ObHighSmall
+            array.push(ArrayOfOBsSmall,box.new(ObBarIndexSmall,ObHighSmall,bar_index,ObLowSmall, xloc = xloc.bar_index,border_color = BoxBull_Border_Color, bgcolor = BoxBull_Fill_Color, border_width = BoxBull_Border_Size,text = LabelVortexSmall, text_size = size.auto, text_halign = text.align_right, text_valign = text.align_center, text_color = BoxBull_Border_Color))
+            LookForObSmall := na
+            LowHighConfirmedSmall := na
+        else if close < ObLowSmall
+            LookForObSmall := na
+            LowHighConfirmedSmall := na
+            array.push(ArrayOfOBsSmall,box.new(ObBarIndexSmall,ObHighSmall,bar_index,ObLowSmall, xloc = xloc.bar_index,border_color = BoxBear_Border_Color, bgcolor = BoxBear_Fill_Color, border_width = BoxBear_Border_Size,text = LabelVortexSmall, text_size = size.auto, text_halign = text.align_right, text_valign = text.align_center, text_color = BoxBear_Border_Color))
+
+
+    if LowHighConfirmedSmall == "HighConfirmed" and ShowVortexBoxes
+        if close <  ObLowSmall
+            array.push(ArrayOfOBsSmall,box.new(ObBarIndexSmall,ObHighSmall,bar_index,ObLowSmall, xloc = xloc.bar_index,border_color = BoxBear_Border_Color, bgcolor = BoxBear_Fill_Color, border_width = BoxBear_Border_Size,text = LabelVortexSmall, text_size = size.auto, text_halign = text.align_right, text_valign = text.align_center, text_color = BoxBear_Border_Color))
+            LookForObSmall := na
+            LowHighConfirmedSmall := na
+        else if close > ObHighSmall
+            LookForObSmall := na
+            LowHighConfirmedSmall := na
+            array.push(ArrayOfOBsSmall,box.new(ObBarIndexSmall,ObHighSmall,bar_index,ObLowSmall, xloc = xloc.bar_index,border_color = BoxBull_Border_Color, bgcolor = BoxBull_Fill_Color, border_width = BoxBull_Border_Size,text = LabelVortexSmall, text_size = size.auto, text_halign = text.align_right, text_valign = text.align_center, text_color = BoxBull_Border_Color))
+
+    if ExtendBoxesToCurrentPrice
+        if array.size(ArrayOfOBsSmall) > 0
+            for i = 0 to array.size(ArrayOfOBsSmall)-1
+                box.set_right(array.get(ArrayOfOBsSmall, i), bar_index)
+                box.set_right(array.get(ArrayOfOBsSmall, i),bar_index)   
+
+    if array.size(ArrayOfLinesSmall) > 0 and ExtendLinesInRealtime
+        for i = 0 to array.size(ArrayOfLinesSmall)-1
+            line.set_x2(array.get(ArrayOfLinesSmall, i), time)
+            if ShowLabels and array.size(ArrayOfLabelsSmall) > 0
+                label.set_x(array.get(ArrayOfLabelsSmall, i), time)
+
+// } -------- END LOGIC Vortex -------- 

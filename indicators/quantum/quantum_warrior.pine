@@ -1,0 +1,2107 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// ©quantum_warrior369
+
+//@version=6
+indicator(("TBR Quantum Warrior∞"), overlay=true,max_lines_count = 500,max_labels_count = 500, max_boxes_count = 500)
+
+import quantum_warrior369/LibraryQuantumWarrior369v6/1 as Quant
+Quant.BaseData BaseData = Quant.BaseData.new(Quant.GetTimezone(),Quant.GetTickerNameString(syminfo.ticker),Quant.CalculateTimeOffset(syminfo.ticker),Quant.CalculateTimeOffset(syminfo.ticker)*3600000)
+string Timezone = BaseData.Timezone
+string CurrentTicker = BaseData.CurrentTicker
+int TickerHourOffset = BaseData.TickerHourOffset
+int TickerTimeOffset = BaseData.TickerTimeOffset
+
+
+
+// { -------- START INPUTS --------
+General = "General"
+ShowCloseBox = input.bool(defval = true, title = "Show Box", inline = "1", group = General)
+ShowConfirmationCandles = input.bool(defval = true, title = "Show Base Candles", inline = "1", group = General)
+ExtendConfirmationCandles = input.bool(defval = false, title = "Extend Base Candles", inline = "1", group = General)
+ShowOpenLine = input.bool(defval = false, title = "Show High/Low Line", inline = "1", group = General)
+ExtendOpenCloseLine = input.bool(defval = false, title = "Extend H/L Lines", inline = "1", group = General)
+ChangeOpenCloseLineToBox = input.bool(defval = false, title = "H/L Lines As Box", inline = "1", group = General)
+ShowMidCluster = input.bool(defval = true, title = "Show Mid Cluster", inline = "1", group = General, tooltip = "Show DR/IDR Midpoint Lines")
+ExtendMidCluster = input.bool(defval = true, title = "Extend Mid Cluster", inline = "1", group = General)
+ShowDailyProjections = false // input.bool(defval = true, title = "Show Daily Projections", inline = "4", group = General)
+ShowProjectionMidpoint = false //input.bool(defval = true, title = "Show Daily Midpoint", inline = "4", group = General)
+// ShowDistributionTable = input.bool(defval = true, title = "Show Distribution Table", inline = "4", group = General)
+UseWickConfirmation = input.bool(defval = false, title = "Use Wick Confirmation", inline = "1", group = General)
+ShowCycleLabels = input.bool(defval = true, title = "Show Cycle Label", inline = "1", group = General)
+NumberOfHistoricalDrsToShow = input.int(1, title="Number of Historical OBs To Show", minval=0, inline = "2", group = General)
+ShowCloseLine = ShowOpenLine
+
+TimeBasedRanges_Group = "Time Based Ranges"
+ShowTimeCandles = input.bool(defval = true, title = "Show Time Candles", inline = "1", group = TimeBasedRanges_Group)
+ColorTimeCandles = input.bool(defval = true, title = "Color Time Candles", inline = "1", group = TimeBasedRanges_Group)
+ExtendTimeCandle = input.bool(defval = true, title = "Extend Time Candle", inline = "1", group = TimeBasedRanges_Group)
+ShowTimeTable = input.bool(defval = true, title = "Show Time Table", inline = "1", group = TimeBasedRanges_Group)
+ShowTimeLines = input.bool(defval = true, title = "Show Time Lines", inline = "1", group = TimeBasedRanges_Group)
+ShowPriceTimeOverlapLabels = input.bool(defval = true, title = "Show Converge Labels", inline = "1", group = TimeBasedRanges_Group)
+
+ShowAllTimeBasedRanges = input.bool(defval = true, title = "Show All Time Based Ranges", inline = "2", group = TimeBasedRanges_Group)
+ShowAlphaTbr = input.bool(defval = false, title = "Alpha", inline = "3", group = TimeBasedRanges_Group)
+ShowAdrTbr = input.bool(defval = false, title = "ADR", inline = "3", group = TimeBasedRanges_Group)
+ShowBravoTbr = input.bool(defval = false, title = "Bravo", inline = "3", group = TimeBasedRanges_Group)
+ShowCharlieTbr = input.bool(defval = true, title = "CHARLIE", inline = "3", group = TimeBasedRanges_Group)
+ShowDeltaTbr = input.bool(defval = false, title = "Delta", inline = "3", group = TimeBasedRanges_Group)
+ShowEchoTbr = input.bool(defval = false, title = "Echo", inline = "4", group = TimeBasedRanges_Group)
+ShowOdrTbr = input.bool(defval = false, title = "ODR", inline = "4", group = TimeBasedRanges_Group)
+ShowKiloTbr = input.bool(defval = false, title = "KILO", inline = "4", group = TimeBasedRanges_Group)
+ShowFoxtrotTbr = input.bool(defval = false, title = "Foxtrot", inline = "4", group = TimeBasedRanges_Group)
+ShowGolfTbr = input.bool(defval = false, title = "Golf", inline = "5", group = TimeBasedRanges_Group)
+ShowRdrTbr = input.bool(defval = false, title = "RDR", inline = "5", group = TimeBasedRanges_Group)
+ShowHotelTbr = input.bool(defval = false, title = "Hotel", inline = "5", group = TimeBasedRanges_Group)
+ShowIndiaTbr = input.bool(defval = false, title = "India", inline = "5", group = TimeBasedRanges_Group)
+ShowLimaTbr = input.bool(defval = false, title = "Lima", inline = "5", group = TimeBasedRanges_Group)
+ShowJulietTbr = input.bool(defval = false, title = "Juliet", inline = "5", group = TimeBasedRanges_Group)
+
+
+
+ShowHTFSessions_Group = "HTF Sessions"
+ShowHTF1Dr = input.bool(defval = false, title = "KILO", inline = "1", group = ShowHTFSessions_Group)
+ShowHTF2Dr = input.bool(defval = false, title = "LIMA", inline = "1", group = ShowHTFSessions_Group)
+ShowADRQ3Dr = input.bool(defval = true, title = "CHARLIE", inline = "1", group = ShowHTFSessions_Group)
+
+
+Intraday_Group = "Intraday Sessions"
+ShowADRQ1Dr = input.bool(defval = false, title = "Alpha", inline = "1", group = Intraday_Group)
+ShowADRQ2Dr = input.bool(defval = false, title = "Bravo", inline = "1", group = Intraday_Group)
+ShowADRQ4Dr = input.bool(defval = false, title = "Delta", inline = "1", group = Intraday_Group)
+ShowODRQ1Dr = input.bool(defval = false, title = "Echo", inline = "2", group = Intraday_Group)
+ShowODRQ2Dr = input.bool(defval = false, title = "Foxtrot", inline = "2", group = Intraday_Group)
+ShowRDRQ1Dr = input.bool(defval = false, title = "Golf", inline = "3", group = Intraday_Group)
+ShowRDRQ2Dr = input.bool(defval = false, title = "Hotel", inline = "3", group = Intraday_Group)
+ShowRDRQ3Dr = input.bool(defval = false, title = "India", inline = "3", group = Intraday_Group)
+ShowRDRQ4Dr = input.bool(defval = false, title = "Juliet", inline = "3", group = Intraday_Group)
+
+ShowM7Sessions_Group = "M7 Sessions"
+ShowADRDr = input.bool(defval = false, title = "ADR", inline = "1", group = ShowM7Sessions_Group)
+ShowODRDr = input.bool(defval = false, title = "ODR", inline = "1", group = ShowM7Sessions_Group)
+ShowRDRDr = input.bool(defval = false, title = "RDR", inline = "1", group = ShowM7Sessions_Group)
+
+
+Projections_Group = "Projections"
+ShowKiloProjections = input.bool(defval = false, title = "Show Kilo", inline = "1", group = Projections_Group)
+ShowLimaProjections = input.bool(defval = false, title = "Show Lima", inline = "1", group = Projections_Group)
+ShowCharlieProjections = input.bool(defval = false, title = "Show Charlie", inline = "1", group = Projections_Group)
+ShowWeeklyProjections = input.bool(defval = true, title = "Show Weekly", inline = "1", group = Projections_Group)
+
+
+
+//ShowProjectionMidpoint = input.bool(defval = false, title = "Show Daily Midpoint", inline = "2", group = Projections_Group)
+LinesToShow = input.string("Standard", options=["Standard","CEs", "Extremes", "All"], inline="2", title = "Lines Type", group=Projections_Group)
+ShowProjectionLabel = input.bool(defval = true, title = "Show Label", inline = "2", group = Projections_Group)
+
+
+//ShowSessions_Group = "Show Sessions"
+// ShowRDRSubcycles = false
+// HideAllAdrLines = true
+
+
+ExtendToMidDay_Group = "Extend To Mid Day"
+ExtendAlltoMidDay = input.bool(defval = false, title = "Extend All", inline = "1", group = ExtendToMidDay_Group)
+ExtendOpenAndCloseToMidDay = input.bool(defval = false, title = "H/L", inline = "1", group = ExtendToMidDay_Group)
+ExtendConfirmationCandlesToMidDay = input.bool(defval = false, title = "Base Candles", inline = "1", group = ExtendToMidDay_Group)
+ExtendMidClusterToMidDay = input.bool(defval = false, title = "Mid Clusters", inline = "1", group = ExtendToMidDay_Group)
+
+
+
+// ManualExtendLinesAndBoxes = input.bool(defval = false, title = "Manual Extend", inline = "2", group = ShowSessions_Group)
+// ExtendLinesAndBoxesNDays = input.int(3, title="Extend For N Days", minval=0, inline = "2", group = ShowSessions_Group)
+
+ShowLastTimeBasedFibs = 1
+ShowConfirmationCandleUnmitigatedBox = true
+
+
+
+
+Unmitigated_Group = "Mitigation Box"
+ShowUnmitigatedBox = true //input.bool(defval = true, title = "Show Unmitigated Box", inline = "1", group = Unmitigated_Group)
+ShowUnmitigatedBoxLabel = true //input.bool(defval = true, title = "Show Unmitigated Box Label", inline = "1", group = Unmitigated_Group)
+CalculateMitigation = true //input.bool(defval = true, title = "Calculate Mitigation", inline = "1", group = Unmitigated_Group)
+DeleteMitigatedBoxes = true //input.bool(defval = true, title = "Delete Mitigated Boxes", inline = "1", group = Unmitigated_Group)
+ShowFractalEq = true //input.bool(defval = true, title = "Show Fractal EQ", inline = "1", group = Unmitigated_Group)
+RemoveMitigatedFractalEq = true //input.bool(defval = true, title = "Remove Mitigated EQs", inline = "1", group = Unmitigated_Group)
+
+
+
+DeleteOldCycles = false
+ShowOnlyLastN = 3
+
+MatrixProjectionSettings = "Projection Settings"
+ProjectionType = input.string("FeigMalth", options= ["DR","FeigMalth"], inline="1", group=MatrixProjectionSettings, title = "Projection Type")
+ManualRangeProjection = input.bool(defval = false, title = "Manual", inline = "1", group = MatrixProjectionSettings)
+RangeStyle = input.string("OC", options= ["OC","IDR", "DR"], inline="1", group=MatrixProjectionSettings, title = "Anchor")
+ShowAllMatrixProjections = input.bool(defval = false, title = "Show All Projections", inline = "1", tooltip = "All Cycle projections will be shown. If turned on turning on Individual Projections in next Section will have no impact.", group = MatrixProjectionSettings)
+ExtendRangeProjection = input.string("Realtime", options= ["EndOfSession","OneDay", "Realtime"], inline="1", group=MatrixProjectionSettings, title = "Projection Type")
+ExtendProjectionsForward = false // input.bool(defval = false, title = "Extend Projections Forward", inline = "3", group = MatrixProjectionSettings, tooltip = "Extend All Projections Forward for one day. Suggest not to use it if Multiple Cycle Projections are Shown")
+
+// ShowAsBoxes = input.bool(defval = false, title = "Show As Boxes", inline = "1", group = MatrixProjectionSettings)
+
+DrMatrixProjections = "M7 Projections"
+ShowADRDrProjection = input.bool(defval = false, title = "ADR", inline = "1", group = DrMatrixProjections)
+ShowODRDrProjection = input.bool(defval = false, title = "ODR", inline = "1", group = DrMatrixProjections)
+ShowRDRDrProjection = input.bool(defval = false, title = "RDR", inline = "1", group = DrMatrixProjections)
+
+ShowHtfMatrixProjections = "DRxICT HTF Projections"
+ShowHTF1DrProjection = input.bool(defval = false, title = "Kilo", inline = "1", group = ShowHtfMatrixProjections)
+ShowHTF2DrProjection = input.bool(defval = false, title = "Lima", inline = "1", group = ShowHtfMatrixProjections)
+ShowADRQ3DrProjection = input.bool(defval = true, title = "Charlie", inline = "1", group = ShowHtfMatrixProjections)
+
+
+SessionMatrixProjections = "DRxICT Intraday Projections"
+ShowADRQ1DrProjection = input.bool(defval = false, title = "Alpha", inline = "1", group = SessionMatrixProjections)
+ShowADRQ2DrProjection = input.bool(defval = false, title = "Bravo", inline = "1", group = SessionMatrixProjections)
+ShowADRQ4DrProjection = input.bool(defval = false, title = "Delta", inline = "1", group = SessionMatrixProjections)
+
+ShowODRQ1DrProjection = input.bool(defval = false, title = "Echo", inline = "2", group = SessionMatrixProjections)
+ShowODRQ2DrProjection = input.bool(defval = false, title = "Foxtrot", inline = "2", group = SessionMatrixProjections)
+
+ShowRDRQ1DrProjection = input.bool(defval = false, title = "Golf", inline = "3", group = SessionMatrixProjections)
+ShowRDRQ2DrProjection = input.bool(defval = false, title = "Hotel", inline = "3", group = SessionMatrixProjections)
+ShowRDRQ3DrProjection = input.bool(defval = false, title = "India", inline = "3", group = SessionMatrixProjections)
+ShowRDRQ4DrProjection = input.bool(defval = false, title = "Juliet", inline = "3", group = SessionMatrixProjections)
+
+
+
+SessionShowLines = "DR Show Lines"
+var bool ShowFractalEqLine = false
+
+if ShowUnmitigatedBox and ShowFractalEq
+    ShowFractalEqLine := true
+
+
+ShowDrLine = false
+ShowIdrLine = false
+// ShowCloseBox = true
+ShowIdrBox = false
+
+ShowIdrMidpoint = false    
+ShowDrMidpoint = false
+
+
+FractalEqSettings = "Fractal EQ Line"
+ExtendFractalLinesInRealtime = false
+var bool DeleteMitigated = false
+AllignFractalsRight = false
+// AllignFractalsRight = false
+// DeleteMitigated = false
+// ExtendFractalLinesInRealtime = false
+
+if RemoveMitigatedFractalEq
+    DeleteMitigated := true
+
+
+DrClusters = "DR Clusters"
+ShowClusters = false
+ShowTuesdayCluster = false
+ShowBiggestCluster = false
+NumberOfClustersBack = 5
+
+ConfirmationCandles = "Confirmation Candles"
+ShowConfCandleBullBear = false
+ColorConfirmationCandleDirection = false
+ExtendConfirmationCandle = false
+
+
+HtfLiquidity = "HTF Liquidity"
+ShowLiquidityLines = input.bool(true, "Show HTF H&L", tooltip = "Show HTF Highs and Lows", inline = "1", group = HtfLiquidity)
+ShowOnlyLastHftLowHigh = input.bool(false, "Show Only Last H&L", tooltip = "Show HTF previous High and Low", inline = "1", group = HtfLiquidity)
+ShowLiquidityTfLabels = input.bool(true, "Show HTF Labels", tooltip = "Show HTF Labels", inline = "1", group = HtfLiquidity)
+ExtendUnmitigatedHL = input.bool(true, "Extend Unmitigated", tooltip = "Extend Unmitigated", inline = "1", group = HtfLiquidity)
+RemovePurgedHtfLiquidityLine = input.bool(true, "Remove Purged H&L", tooltip = "Remove Purged HTF H&L", inline = "1", group = HtfLiquidity)
+LiquidityTimeframe = input.timeframe("210", "HTF Liquidity TF", tooltip = "Select which timeframe should be displayed with their highs and lows", inline = "2", group = HtfLiquidity)
+ShowPurgeLabel = input.bool(true, "Show Purge Label", tooltip = "Show Purge Label with Liquidity Time", inline = "1", group = HtfLiquidity)
+LiquidityNumberOfHistoricalHLDaysBack = input.int(9, title="Days Back Calculation", inline = "1", group = HtfLiquidity)
+DaysOfLiquidityForCalculation = LiquidityNumberOfHistoricalHLDaysBack
+
+
+
+SessionColors = "Time Based OrderBlocks"
+
+
+DrLineColor = color.new(color.gray, 0)
+IdrLineColor = color.new(color.red, 20)
+IdrMidpointLineColor = color.new(color.gray, 20)
+
+FractalEqBoxUpColor = input.color(color.new(color.navy, 94), title="OB Box Up", inline = "1", group = SessionColors)
+FractalEqBoxUpBorderColor = input.color(color.new(color.navy, 33), title="Border", inline = "1", group = SessionColors)
+FractalEqBoxDownColor = input.color(color.new(color.maroon, 94), title="OB Box Down", inline = "2", group = SessionColors)
+FractalEqBoxDownBorderColor = input.color(color.new(color.maroon, 33), title="Border", inline = "2", group = SessionColors)
+ProjectionLinesColor = input.color(color.new(color.gray, 60), title="Projection Line Colors", inline = "2", group = SessionColors)
+WeeklyProjectionLinesColor = input.color(color.new(color.aqua, 60), title="Weekly Projection Line Colors", inline = "2", group = SessionColors)
+HighLineColor = input.color(color.new(color.navy, 30), title="High Line", inline = "3", group = SessionColors)
+LowLineColor = input.color(color.new(color.maroon, 30), title="Low Line", inline = "3", group = SessionColors)
+OpenEqLineStyleString = input.string(defval = "Solid", title = "Style", options = ["Solid", "Dotted", "Dashed"], inline = "3", group = SessionColors)
+CloseEqLineStyleString = OpenEqLineStyleString
+FractalEqBoxBorderSize = input.int(5, title="OB Border Size", minval=0, inline = "1", group = SessionColors)
+UnmitigatedBoxColor = input.color(color.new(color.gray, 94), title="Unmitigated Box Color", inline = "4", group = SessionColors)
+UnmitigatedBoxBorderColor = input.color(color.new(color.gray, 80), title="Unmitigated Box Border", inline = "4", group = SessionColors)
+FractalEqLineColor =  input.color(color.new(color.purple, 60), title=" EQ Line Color", inline = "5", group = SessionColors)
+MitigatedFractalEqLineColor =  input.color(color.new(color.gray, 60), title="Mitigated EQ Line Color", inline = "5", group = SessionColors)
+MidPointClusterFill = input.color(color.new(color.gray, 94), title="Midpoint Cluster", inline = "6", group = SessionColors)
+MidPointClusterBorder = input.color(color.new(color.gray, 80), title="Midpoint Cluster Border", inline = "6", group = SessionColors)
+TimeCandleLine = input.color(color.new(color.orange, 60), title="Time Range Lines", inline = "7", group = SessionColors)
+TimeCandleLine4p6 = input.color(color.new(color.purple, 60), title="Time Range Lines4", inline = "7", group = SessionColors)
+TimeCandleColorUp = input.color(color.new(color.blue, 0), title="Time Candle Color", inline = "8", group = SessionColors)
+TimeCandleColorDown = input.color(color.new(color.orange, 0), title="Time Candle Color", inline = "8", group = SessionColors)
+TimeCandleColor4p6 = input.color(color.new(color.purple, 0), title="Time Candle Color4", inline = "8", group = SessionColors)
+
+LineStylesGroup = "Line Styles"
+ProjectionLineStyleString = input.string(defval = "Solid", title = "Projection Line", options = ["Solid", "Dotted", "Dashed"], inline = "1", group = LineStylesGroup)
+ProjectionMidpointLineStyleString = input.string(defval = "Solid", title = "Projection Midpoint", options = ["Solid", "Dotted", "Dashed"], inline = "1", group = LineStylesGroup)
+
+
+
+UnmitigatedBoxBorderSize = 1
+
+
+IdrBoxUpColor = color.new(color.green, 90)
+IdrBoxUpBorderColor = color.new(color.green, 50)
+IdrBoxDownColor = color.new(color.red, 90)
+IdrBoxDownBorderColor = color.new(color.red, 50)
+MatrixProjectionColors = color.new(color.gray, 0)
+
+ClusterColors = "Cluster Colors"
+ClusterHighColor = color.new(color.blue, 90)
+ClusterHighBorderColor = color.new(color.blue, 50)
+ClusterLowColor = color.new(color.red, 90)
+ClusterLowBorderColor = color.new(color.red, 50)
+TuesdayClusterHighColor = color.new(color.aqua, 80)
+TuesdayClusterHighBorderColor = color.new(color.blue, 50)
+TuesdayClusterLowColor = color.new(color.aqua, 80)
+TuesdayClusterLowBorderColor = color.new(color.blue, 50)
+LargestClusterHighColor = color.new(color.orange, 80)
+LargestClusterHighBorderColor = color.new(color.red, 50)
+LargestClusterLowColor = color.new(color.orange, 80)
+LargestClusterLowBorderColor = color.new(color.red, 50)
+
+
+DrLineStyles = "Line Styles"
+FractalEqLineStyleString = "Dotted"
+DrLineLineStyleString = "Dolid"
+IdrLineLineStyleString = "Dashed"
+IdrMidpointLineStyleString = "Dotted"
+
+LiquidityColors_Group = "Liquidity Colors"
+LiquidityHighLineColor = input.color(color.new(color.blue, 20), title="High", inline = "1", group = LiquidityColors_Group)
+LiquidityCandleHighPurgedLineColor = input.color(color.new(color.blue, 70), title="High Purged", inline = "1", group = LiquidityColors_Group)
+LiquidityLowLineColor = input.color(color.new(color.red, 20), title="Low", inline = "1", group = LiquidityColors_Group)
+LiquidityCandleLowPurgedLineColor = input.color(color.new(color.red, 70), title="Low Purged", inline = "1", group = LiquidityColors_Group)
+
+LiquidityHighLowStyle = line.style_dashed
+LiquidityHighLowWidth = 1
+
+
+
+
+// START Confirmation Candle Hidden Parameters
+TransparentCollorFill = 90
+TransparentColorBorder = 50
+
+ConfrimationCandle_Group = "Base Candle Colors"
+BoxBull_Border_Size = 1
+BoxBull_Fill_Color = input.color(color.new(color.navy, 94), title="Bull Fill", inline = "5", group = ConfrimationCandle_Group)
+BoxBull_Border_Color = input.color(color.new(color.navy, 80), title="Bull Border", inline = "5", group = ConfrimationCandle_Group)
+BoxBear_Border_Size = 1
+BoxBear_Fill_Color = input.color(color.new(color.maroon, 94), title="Bear Fill", inline = "6", group = ConfrimationCandle_Group)
+BoxBear_Border_Color = input.color(color.new(color.maroon, 80), title="Bear Fill", inline = "6", group = ConfrimationCandle_Group)
+BoxInversion_Border_Size = 1
+BoxInversion_Fill_Color = color.new(color.purple, 94) //input.color(color.new(color.purple, 90), title="Inversion Fill", inline = "7", group = ConfrimationCandle_Group)
+BoxInversion_Border_Color = color.new(color.purple, 80) //input.color(color.new(color.purple, 0), title="Inversion Fill", inline = "7", group = ConfrimationCandle_Group)
+
+
+// Table
+TableTime_Group = "Time Table"
+TableBackgroundColorTime = input.color(color.new(#888a8a, 100), title="Background", group = TableTime_Group,inline = "1")
+TableTextColorTime = input.color(color.new(color.gray, 0), title="Text", group = TableTime_Group,inline = "1")
+TableFrameColorTime = input.color(color.new(color.gray, 75), title="Frame", group = TableTime_Group,inline = "1")
+TableBorderColorTime = input.color(color.new(color.gray, 75), title="Border", group = TableTime_Group,inline = "1")
+TablePositionRawTime = input.string("Top Right", options=["Top Left", "Top Center", "Top Right","Middle Left","Middle Center","Middle Right","Bottom Left","Bottom Center","Bottom Right"], group=TableTime_Group, title = "Position",inline = "2")
+TableTextSizeOptionsTime = input.string(defval="Tiny", title="Font Size", options=['Auto', 'Tiny', 'Small', 'Normal', 'Large', 'HUGE'], tooltip="Select Analysis Table Font Size", group=TableTime_Group,inline = "2")
+TableTextSizeTime = TableTextSizeOptionsTime == "Auto" ? size.auto : TableTextSizeOptionsTime == "Tiny" ? size.tiny : TableTextSizeOptionsTime == "Small" ? size.small : TableTextSizeOptionsTime == "Normal" ? size.normal : TableTextSizeOptionsTime == "Large" ? size.large : TableTextSizeOptionsTime == "HUGE" ? size.huge :"End"
+TablePositionTime = TablePositionRawTime=="Top Left" ? position.top_left : TablePositionRawTime=="Top Center" ? position.top_center : TablePositionRawTime=="Top Right" ? position.top_right: TablePositionRawTime=="Middle Left" ? position.middle_left : TablePositionRawTime=="Middle Center" ? position.middle_center : TablePositionRawTime=="Middle Right" ? position.middle_right : TablePositionRawTime=="Bottom Left" ? position.bottom_left : TablePositionRawTime=="Bottom Center" ? position.bottom_center : position.bottom_right
+TableBorderWidthTime = input.int(1, title="Border Width", minval=0, group = TableTime_Group,inline = "3")
+TableFrameWidthTime = input.int(1, title="Frame Width", minval=0, group = TableTime_Group,inline = "3")
+
+var TableTime = table.new(columns = 30, rows = 50, bgcolor = TableBackgroundColorTime,frame_color = TableFrameColorTime, border_width = TableBorderWidthTime, position = TablePositionTime, frame_width = TableFrameWidthTime, border_color = TableBorderColorTime)
+
+
+
+ConfirmationShapeBullColor = color.new(color.green, 0)
+ConfirmationShapeBearColor = color.new(color.red, 0)
+
+
+// END Confirmation Candle Hidden Parameters
+
+// } -------- END INPUTS --------
+
+
+
+
+
+// { -------- START VARIABLES --------
+
+
+
+
+
+
+
+
+// { START Gather LTF Data
+var array<Quant.CandleDataObject> ArrayUnprocessedCandles5Min = array.new<Quant.CandleDataObject>()
+
+
+// START Table
+ShowTable1 = true
+TableBackgroundColor1 = color.new(color.black, 0)
+TableTextColor1 = color.new(color.white, 0)
+TableFrameColor1 = color.new(color.black, 0)
+TableBorderColor1 = color.new(color.black, 0)
+TableBorderWidth1 = 1
+TableFrameWidth1 = 1
+TableTextSize1 = size.auto
+TablePosition1 = position.middle_left
+var Table1 = table.new(columns=15, rows=50, bgcolor=TableBackgroundColor1,frame_color=TableFrameColor1, border_width=TableBorderWidth1, position =  TablePosition1, frame_width = TableFrameWidth1, border_color = TableBorderColor1)
+// END Table
+
+
+UseTickerid = syminfo.tickerid
+var string CandleTimeframe = "5"
+ArrayUnprocessedCandles5Min := Quant.GetSecurityCandleDataUpdated(ArrayUnprocessedCandles5Min, UseTickerid,CandleTimeframe) 
+
+
+
+var array<float> ArrayOfMatrixRanges = na
+
+if ProjectionType == "DR"
+    ArrayOfMatrixRanges := array.from(0.5,1.0,2.5,5.0,7.5,8.0,10.0,13.0,17.5,22.5,-0.5,-1.0,-2.5,-5.0,-7.5,-8.0,-10.0,-13.0,-17.5, -22.5)
+else if ProjectionType == "FeigMalth"
+    ArrayOfMatrixRanges := array.from(0.5,0.67, 1.0, 1.6713777,2.0,2.5029078,3.0,3.5699,4.0,4.6692016,7.1398,9.338,14.2796,18.676, 28.5592,-0.5, -0.67, -1.0, -1.6713777,-2.0,-2.5029078,-3.0,-3.5699,-4.0,-4.6692016,-7.1398,-9.338,-14.2796,-18.676, -28.5592)
+
+
+
+
+type DailyProjectionLines
+    Quant.LineWithLabel Line1
+    Quant.LineWithLabel Line2
+    Quant.LineWithLabel Line3
+    Quant.LineWithLabel Line4
+    Quant.LineWithLabel Midpoint
+
+
+
+
+ 
+
+type HtfLiquidity
+    float HighValue
+    float LowValue
+    bool HighPurged
+    bool LowPurged
+    bool BullKeyConfirmed
+    bool BearKeyConfirmed
+    Quant.LineWithLabel HighLine
+    Quant.LineWithLabel LowLine
+    int OpenTime
+    float PurgedHighClose
+    float PurgedLowClose
+
+var array<HtfLiquidity> ArrayOfHtfLiquidity = array.new<HtfLiquidity>(0)
+
+type PurgeLabels
+    label Label
+    int Time
+
+var array<PurgeLabels> ArrayOfPurgeLabels = array.new<PurgeLabels>(0)
+
+
+var int NumberOfSessionsToShow = 0
+var array<Quant.SessionObject> ArrayOfFractalObjects = array.new<Quant.SessionObject>()
+var array<Quant.SessionDataObject> ArrayOfSessionDataObjects = array.new<Quant.SessionDataObject>()
+
+var array<Quant.SessionObject> ArrayOfClusterRdrObjects = array.new<Quant.SessionObject>()
+var array<float> ArrayRangeLinesToUse = array.new<float>()
+
+var int NumberOfRangeLines = na
+
+if barstate.isfirst
+    if ShowADRQ1Dr  
+        array.push(ArrayOfSessionDataObjects, Quant.SessionDataObject.new("Alpha","1845-1935","1935-2115","NotInSession",na,na,na,na,na,na,na,na,na,false, timestamp(Timezone, year, month, dayofmonth, 21, 15),false,na,ShowADRQ1DrProjection)),NumberOfSessionsToShow := NumberOfSessionsToShow+1
+    if ShowADRDr
+        array.push(ArrayOfSessionDataObjects, Quant.SessionDataObject.new("ADR","1930-2030","2030-0200","NotInSession",na,na,na,na,na,na,na,na,na,false, timestamp(Timezone, year, month, dayofmonth, 2, 0),false,na,ShowADRDrProjection)),NumberOfSessionsToShow := NumberOfSessionsToShow+1
+    if ShowADRQ2Dr
+        array.push(ArrayOfSessionDataObjects, Quant.SessionDataObject.new("Bravo","2130-2220","2220-0000","NotInSession",na,na,na,na,na,na,na,na,na,false, timestamp(Timezone, year, month, dayofmonth, 0, 0),false,na,ShowADRQ2DrProjection)),NumberOfSessionsToShow := NumberOfSessionsToShow+1
+    if ShowADRQ3Dr
+        array.push(ArrayOfSessionDataObjects, Quant.SessionDataObject.new("CHARLIE","2130-2235","2235-0245","NotInSession",na,na,na,na,na,na,na,na,na,false, timestamp(Timezone, year, month, dayofmonth, 2, 45),false,na,ShowADRQ3DrProjection)),NumberOfSessionsToShow := NumberOfSessionsToShow+1
+    if ShowADRQ4Dr
+        array.push(ArrayOfSessionDataObjects, Quant.SessionDataObject.new("Delta","0015-0105","0105-0245","NotInSession",na,na,na,na,na,na,na,na,na,false, timestamp(Timezone, year, month, dayofmonth, 2, 45),false,na,ShowADRQ4DrProjection)),NumberOfSessionsToShow := NumberOfSessionsToShow+1
+    if ShowODRQ1Dr
+        array.push(ArrayOfSessionDataObjects, Quant.SessionDataObject.new("Echo","0300-0355","0355-0545","NotInSession",na,na,na,na,na,na,na,na,na,false, timestamp(Timezone, year, month, dayofmonth, 5, 45),false,na,ShowODRQ1DrProjection)),NumberOfSessionsToShow := NumberOfSessionsToShow+1
+    if ShowODRDr
+        array.push(ArrayOfSessionDataObjects, Quant.SessionDataObject.new("ODR","0300-0400","0400-0830","NotInSession",na,na,na,na,na,na,na,na,na,false, timestamp(Timezone, year, month, dayofmonth, 8, 30),false,na,ShowODRDrProjection)),NumberOfSessionsToShow := NumberOfSessionsToShow+1
+    if ShowHTF1Dr
+        array.push(ArrayOfSessionDataObjects, Quant.SessionDataObject.new("KILO","0430-0935","0935-1600","NotInSession",na,na,na,na,na,na,na,na,na,false, timestamp(Timezone, year, month, dayofmonth, 16, 0),false,na,ShowHTF1DrProjection)),NumberOfSessionsToShow := NumberOfSessionsToShow+1
+    if ShowODRQ2Dr
+        array.push(ArrayOfSessionDataObjects, Quant.SessionDataObject.new("Foxtrot","0600-0650","0650-0815","NotInSession",na,na,na,na,na,na,na,na,na,false, timestamp(Timezone, year, month, dayofmonth, 8, 15),false,na,ShowODRQ2DrProjection)),NumberOfSessionsToShow := NumberOfSessionsToShow+1
+    if ShowRDRQ1Dr
+        array.push(ArrayOfSessionDataObjects, Quant.SessionDataObject.new("Golf","0845-0935","0935-1115","NotInSession",na,na,na,na,na,na,na,na,na,false, timestamp(Timezone, year, month, dayofmonth, 11, 15),false,na,ShowRDRQ1DrProjection)),NumberOfSessionsToShow := NumberOfSessionsToShow+1
+    if ShowRDRDr
+        array.push(ArrayOfSessionDataObjects, Quant.SessionDataObject.new("RDR","0930-1030","1030-1600","NotInSession",na,na,na,na,na,na,na,na,na,false, timestamp(Timezone, year, month, dayofmonth, 16, 0),false,na,ShowRDRDrProjection)),NumberOfSessionsToShow := NumberOfSessionsToShow+1
+    if ShowRDRQ2Dr
+        array.push(ArrayOfSessionDataObjects, Quant.SessionDataObject.new("Hotel","1130-1220","1220-1400","NotInSession",na,na,na,na,na,na,na,na,na,false, timestamp(Timezone, year, month, dayofmonth, 14, 0),false,na,ShowRDRQ2DrProjection)),NumberOfSessionsToShow := NumberOfSessionsToShow+1
+    if ShowRDRQ3Dr
+        array.push(ArrayOfSessionDataObjects, Quant.SessionDataObject.new("India","1130-1235","1235-1445","NotInSession",na,na,na,na,na,na,na,na,na,false, timestamp(Timezone, year, month, dayofmonth, 14, 45),false,na,ShowRDRQ3DrProjection)),NumberOfSessionsToShow := NumberOfSessionsToShow+1
+    if ShowHTF2Dr
+        array.push(ArrayOfSessionDataObjects, Quant.SessionDataObject.new("LIMA","1130-1235","1235-1645","NotInSession",na,na,na,na,na,na,na,na,na,false, timestamp(Timezone, year, month, dayofmonth, 16, 45),false,na,ShowHTF2DrProjection)),NumberOfSessionsToShow := NumberOfSessionsToShow+1
+    if ShowRDRQ4Dr
+        array.push(ArrayOfSessionDataObjects, Quant.SessionDataObject.new("Juliet","1415-1505","1505-1645","NotInSession",na,na,na,na,na,na,na,na,na,false, timestamp(Timezone, year, month, dayofmonth, 16, 45),false,na,ShowRDRQ4DrProjection)),NumberOfSessionsToShow := NumberOfSessionsToShow+1
+
+    if LinesToShow == "All"    
+        ArrayRangeLinesToUse := array.from(-0.111,0.0,0.03,0.111,0.17,0.25,0.29,0.333,0.382,0.41,0.47,0.5,0.53,0.59,0.618,0.666,0.71,0.75,0.83,0.89,0.97,1.0,1.111)
+        NumberOfRangeLines := 23
+    else if LinesToShow == "CEs"
+        ArrayRangeLinesToUse := array.from(0.0,0.03, 0.17,0.29,0.382,0.41,0.47,0.5,0.53,0.59,0.618,0.71,0.83,0.97,1.0)
+        NumberOfRangeLines := 15        
+    else if LinesToShow == "Extremes"
+        ArrayRangeLinesToUse := array.from(-0.111,0.0,0.111,0.17,0.382,0.5,0.618,0.83,0.89,1.0,1.111)
+        NumberOfRangeLines := 11
+    else
+        ArrayRangeLinesToUse := array.from(2.5,1.0,0.0,-1.0,-2.5)
+        NumberOfRangeLines := 5
+
+if ShowAllMatrixProjections
+    if ArrayOfSessionDataObjects.size() > 0
+        for i = 0 to array.size(ArrayOfSessionDataObjects)-1
+            CurrentObject = array.get(ArrayOfSessionDataObjects, i)
+            CurrentObject.ShowMatrixProjections := true
+
+
+
+// } -------- END VARIABLES --------
+
+
+// { -------- START FUNCTIONS --------
+
+
+
+
+
+// Quant.Session(_session) => 
+//     not na(time(timeframe.period, _session, Timezone))
+
+IsSessionOver(_Session) =>
+    inSess = not na(time(timeframe.period, _Session, Timezone))
+    not inSess and inSess[1]
+
+CalculatePoiMidpoint(_Open,_Close) =>
+    OcDiffMid = math.abs(_Open-_Close)/2
+    if _Open > _Close
+        _Close+OcDiffMid
+    else
+        _Open+OcDiffMid
+
+FunctionLineStyle(_Style) =>
+    switch _Style
+        "Dotted" => line.style_dotted
+        "Dashed" => line.style_dashed
+        => line.style_solid
+
+FractalEqLineStyle = FunctionLineStyle(FractalEqLineStyleString)
+DrLineLineStyle = FunctionLineStyle(DrLineLineStyleString)
+IdrLineLineStyle = FunctionLineStyle(IdrLineLineStyleString)
+OpenEqLineStyle = FunctionLineStyle(OpenEqLineStyleString)
+CloseEqLineStyle = FunctionLineStyle(CloseEqLineStyleString)
+IdrMidpointLineStyle = FunctionLineStyle(IdrMidpointLineStyleString)
+ProjectionLineStyle = FunctionLineStyle(ProjectionLineStyleString)
+ProjectionMidpointLineStyle = FunctionLineStyle(ProjectionMidpointLineStyleString)
+
+
+var array<Quant.LineWithLabel> WeeklyLines =  array.new<Quant.LineWithLabel>()
+
+CreateNewSession(_OpenTime,_OpenPrice,_CloseTime,_ClosePrice,_CycleEndTime, _High, _Low, _CloseHigh, _CloseLow, _SessionConfirmation, _CurrentArtefact) =>
+    line OpenLine = na
+    line CloseLine = na
+    line FractalEqLine = na
+    line DrHighLine = na
+    line DrLowLine = na
+    line IdrHighLine = na
+    line IdrLowLine = na
+    line IdrMidpointLine = na
+    line DrMidpointLine = na 
+    box CloseBoxCurrent = na
+    box IdrBoxCurrent = na
+    box UnmitigatedBoxCurrent = na
+    Quant.BoxWithMidline MidpointCluster = Quant.BoxWithMidline.new(na,na)
+    box ClusterHigh = na
+    line ClusterHighMidpoint = na
+    box ClusterLow = na
+    line ClusterLowMidpoint = na
+    DailyProjectionLines DailyProjectionLinesCurrent = DailyProjectionLines.new(na,na,na,na,na)
+    Quant.BoxWithMidline CloseBoxCurrentToExtend = Quant.BoxWithMidline.new(na,na)
+    array<Quant.LineWithLabel> KiloLines = array.new<Quant.LineWithLabel>()
+    array<Quant.LineWithLabel> LimaLines = array.new<Quant.LineWithLabel>()
+    array<Quant.LineWithLabel> CharlieLines = array.new<Quant.LineWithLabel>()
+
+
+    int RdrOpenTime = Quant.GetSessionTimes("0930-1030",true)
+    int KiloOpenTime = Quant.GetSessionTimes("0430-0935",true)
+
+    CycleEnd = timestamp(Timezone, year, month, dayofmonth, hour(_CycleEndTime), minute(_CycleEndTime))+TickerTimeOffset 
+
+    OpenTime = _OpenTime
+
+    if _OpenTime >  CycleEnd
+        CycleEnd := CycleEnd+BaseData.ONE_DAY
+    // else if CurrentTicker == "BTC" or CurrentTicker == "ETH"
+    //     CycleEnd := CycleEnd-(BaseData.ONE_HOUR*5)
+
+    color OpenColor = LowLineColor
+    color CloseColor = HighLineColor
+
+    if _OpenPrice > _ClosePrice
+        OpenColor := HighLineColor
+        CloseColor := LowLineColor
+
+
+    if ShowClusters
+        if (ShowTuesdayCluster) and str.contains ("Tue", str.format_time(time, "E")) and _CurrentArtefact.SessionString == "0930-1030"
+            ClusterHigh := box.new(_OpenTime,_High,CycleEnd,_CloseHigh, xloc = xloc.bar_time,border_color = TuesdayClusterHighBorderColor, bgcolor = TuesdayClusterHighColor, border_width = 1,text = "Tue", text_size = size.auto, text_halign = text.align_right, text_valign = text.align_center, text_color = TuesdayClusterHighBorderColor)
+            ClusterHighMidpoint := line.new(_OpenTime, _CloseHigh+(_High-_CloseHigh)/2, CycleEnd, _CloseHigh+(_High-_CloseHigh)/2, xloc.bar_time, color = TuesdayClusterHighBorderColor, style = line.style_dashed, width = 1)
+            ClusterLow := box.new(_OpenTime,_Low,CycleEnd,_CloseLow, xloc = xloc.bar_time,border_color = TuesdayClusterLowBorderColor, bgcolor = TuesdayClusterLowColor, border_width = 1,text = "Tue", text_size = size.auto, text_halign = text.align_right, text_valign = text.align_center, text_color = TuesdayClusterLowBorderColor)
+            ClusterLowMidpoint := line.new(_OpenTime, _CloseLow+(_Low-_CloseLow)/2, CycleEnd, _CloseLow+(_Low-_CloseLow)/2, xloc.bar_time, color = TuesdayClusterLowBorderColor, style = line.style_dashed, width = 1)
+        else if not _CurrentArtefact.SessionString == "1930-2030"
+            ClusterHigh := box.new(_OpenTime,_High,CycleEnd,_CloseHigh, xloc = xloc.bar_time,border_color = ClusterHighBorderColor, bgcolor = ClusterHighColor, border_width = 1, text_size = size.auto, text_halign = text.align_right, text_valign = text.align_center)
+            ClusterHighMidpoint := line.new(_OpenTime, _CloseHigh+(_High-_CloseHigh)/2, CycleEnd, _CloseHigh+(_High-_CloseHigh)/2, xloc.bar_time, color = ClusterHighBorderColor, style = line.style_dashed, width = 1)
+            ClusterLow := box.new(_OpenTime,_Low,CycleEnd,_CloseLow, xloc = xloc.bar_time,border_color = ClusterLowBorderColor, bgcolor = ClusterLowColor, border_width = 1, text_size = size.auto, text_halign = text.align_right, text_valign = text.align_center)
+            ClusterLowMidpoint := line.new(_OpenTime, _CloseLow+(_Low-_CloseLow)/2, CycleEnd, _CloseLow+(_Low-_CloseLow)/2, xloc.bar_time, color = ClusterLowBorderColor, style = line.style_dashed, width = 1)
+                    
+    if ShowTuesdayCluster and not ShowClusters and str.contains ("Tue", str.format_time(time, "E")) and _CurrentArtefact.SessionString == "0930-1030"
+        ClusterHigh := box.new(_OpenTime,_High,CycleEnd,_CloseHigh, xloc = xloc.bar_time,border_color = TuesdayClusterHighBorderColor, bgcolor = TuesdayClusterHighColor, border_width = 1,text = "Tue", text_size = size.auto, text_halign = text.align_right, text_valign = text.align_center, text_color = TuesdayClusterHighBorderColor)
+        ClusterHighMidpoint := line.new(_OpenTime, _CloseHigh+(_High-_CloseHigh)/2, CycleEnd, _CloseHigh+(_High-_CloseHigh)/2, xloc.bar_time, color = TuesdayClusterHighBorderColor, style = line.style_dashed, width = 1)
+        ClusterLow := box.new(_OpenTime,_Low,CycleEnd,_CloseLow, xloc = xloc.bar_time,border_color = TuesdayClusterLowBorderColor, bgcolor = TuesdayClusterLowColor, border_width = 1,text = "Tue", text_size = size.auto, text_halign = text.align_right, text_valign = text.align_center, text_color = TuesdayClusterLowBorderColor)
+        ClusterLowMidpoint := line.new(_OpenTime, _CloseLow+(_Low-_CloseLow)/2, CycleEnd, _CloseLow+(_Low-_CloseLow)/2, xloc.bar_time, color = TuesdayClusterLowBorderColor, style = line.style_dashed, width = 1)
+
+
+
+
+
+
+    Eq = CalculatePoiMidpoint(_OpenPrice, _ClosePrice)    
+    if ShowFractalEqLine //and not (_CurrentArtefact.SessionString == "1930-2030")
+        FractalEqLine := line.new(_OpenTime, Eq, _CloseTime, Eq, xloc.bar_time, color = FractalEqLineColor, style = FractalEqLineStyle, width = 1)
+
+    if ShowDrLine  //and not (_CurrentArtefact.SessionString == "1930-2030")
+        DrHighLine := line.new(_OpenTime, _High, CycleEnd, _High, xloc.bar_time, color = DrLineColor, style = DrLineLineStyle, width = 1)
+        DrLowLine := line.new(_OpenTime, _Low, CycleEnd, _Low, xloc.bar_time, color = DrLineColor, style = DrLineLineStyle, width = 1)
+    if ShowIdrLine //and not (_CurrentArtefact.SessionString == "1930-2030")
+        IdrHighLine := line.new(_OpenTime, _CloseHigh, CycleEnd, _CloseHigh, xloc.bar_time, color = IdrLineColor, style = IdrLineLineStyle, width = 1)
+        IdrLowLine := line.new(_OpenTime, _CloseLow, CycleEnd, _CloseLow, xloc.bar_time, color = IdrLineColor, style = IdrLineLineStyle, width = 1)
+    
+    if ShowKiloProjections and _CurrentArtefact.SessionString == "0430-0935" and not (ShowWeeklyProjections and str.contains("Tue", str.format_time(_CurrentArtefact.OpenTime, "E")))
+        for i = 0 to array.size(ArrayRangeLinesToUse)-1
+            LineValue = array.get(ArrayRangeLinesToUse, i)
+            string LineValueString = str.tostring(LineValue, "#.##")
+
+            if not ShowProjectionLabel
+                LineValueString := ""
+
+            float LineValueFloat = na
+            float RangeHalf = (_CloseHigh-_CloseLow)/2
+            float RangeZeroValue = na // _CloseLow+RangeHalf
+            float RangeCalc = na
+            if LinesToShow == "Standard"
+                if LineValue > 0
+                    RangeZeroValue := _CloseHigh
+                else if LineValue < 0 
+                    RangeZeroValue := _CloseLow
+                else
+                    RangeZeroValue := _CloseLow+RangeHalf
+
+                RangeCalc := (_CloseHigh-_CloseLow)
+                LineValueFloat := LineValue
+
+            else
+                RangeCalc := (_CloseHigh + (_CloseHigh-_CloseLow)*2.5)-(_CloseLow + (_CloseHigh-_CloseLow)*-2.5)
+                RangeZeroValue := _CloseLow + (_CloseHigh-_CloseLow)*-2.5
+                LineValueFloat := LineValue
+
+            int LineEnd = _OpenTime+BaseData.ONE_DAY
+            if ExtendProjectionsForward
+                LineEnd := _OpenTime+(2*BaseData.ONE_DAY)
+            if str.contains ("Fri", str.format_time(time, "E"))
+                LineEnd := _OpenTime+(3*BaseData.ONE_DAY)
+                if ExtendProjectionsForward
+                    LineEnd := _OpenTime+(4*BaseData.ONE_DAY)
+            else if str.contains ("Thu", str.format_time(time, "E"))
+                if ExtendProjectionsForward
+                    LineEnd := _OpenTime+(4*BaseData.ONE_DAY)
+
+            Line = line.new(_OpenTime,RangeZeroValue + RangeCalc*LineValueFloat, LineEnd,RangeZeroValue + RangeCalc*LineValueFloat, xloc.bar_time, color = ProjectionLinesColor, style = ProjectionLineStyle, width = 1)
+            Label = label.new(_OpenTime,RangeZeroValue + RangeCalc*LineValueFloat,LineValueString, xloc.bar_time, style = label.style_label_right, color =color.new(color.green, 100), textcolor = ProjectionLinesColor, size = size.small)
+
+            array.push(KiloLines, Quant.LineWithLabel.new(Line,Label))
+
+    if ShowLimaProjections and _CurrentArtefact.SessionString == "1130-1235"
+        for i = 0 to array.size(ArrayRangeLinesToUse)-1
+            LineValue = array.get(ArrayRangeLinesToUse, i)
+            string LineValueString = str.tostring(LineValue, "#.##")
+
+            if not ShowProjectionLabel
+                LineValueString := ""
+
+            float LineValueFloat = na
+            float RangeHalf = (_CloseHigh-_CloseLow)/2
+            float RangeZeroValue = na // _CloseLow+RangeHalf
+            float RangeCalc = na
+            if LinesToShow == "Standard"
+                if LineValue > 0
+                    RangeZeroValue := _CloseHigh
+                else if LineValue < 0 
+                    RangeZeroValue := _CloseLow
+                else
+                    RangeZeroValue := _CloseLow+RangeHalf
+
+                RangeCalc := (_CloseHigh-_CloseLow)
+                LineValueFloat := LineValue
+
+            else
+                RangeCalc := (_CloseHigh + (_CloseHigh-_CloseLow)*2.5)-(_CloseLow + (_CloseHigh-_CloseLow)*-2.5)
+                RangeZeroValue := _CloseLow + (_CloseHigh-_CloseLow)*-2.5
+                LineValueFloat := LineValue
+
+            int LineEnd = _OpenTime+BaseData.ONE_DAY
+            if ExtendProjectionsForward
+                LineEnd := _OpenTime+(2*BaseData.ONE_DAY)
+            if str.contains ("Fri", str.format_time(time, "E"))
+                LineEnd := _OpenTime+(3*BaseData.ONE_DAY)
+                if ExtendProjectionsForward
+                    LineEnd := _OpenTime+(4*BaseData.ONE_DAY)
+            else if str.contains ("Thu", str.format_time(time, "E"))
+                if ExtendProjectionsForward
+                    LineEnd := _OpenTime+(4*BaseData.ONE_DAY)
+
+            Line = line.new(_OpenTime,RangeZeroValue + RangeCalc*LineValueFloat, LineEnd,RangeZeroValue + RangeCalc*LineValueFloat, xloc.bar_time, color = ProjectionLinesColor, style = ProjectionLineStyle, width = 1)
+            Label = label.new(_OpenTime,RangeZeroValue + RangeCalc*LineValueFloat,LineValueString, xloc.bar_time, style = label.style_label_right, color =color.new(color.green, 100), textcolor = ProjectionLinesColor, size = size.small)
+
+            array.push(LimaLines, Quant.LineWithLabel.new(Line,Label))
+
+    if ShowCharlieProjections and _CurrentArtefact.SessionString == "2130-2235"
+        for i = 0 to array.size(ArrayRangeLinesToUse)-1
+            LineValue = array.get(ArrayRangeLinesToUse, i)
+            string LineValueString = str.tostring(LineValue, "#.##")
+
+            if not ShowProjectionLabel
+                LineValueString := ""
+
+            float LineValueFloat = na
+            float RangeHalf = (_CloseHigh-_CloseLow)/2
+            float RangeZeroValue = na // _CloseLow+RangeHalf
+            float RangeCalc = na
+            if LinesToShow == "Standard"
+                if LineValue > 0
+                    RangeZeroValue := _CloseHigh
+                else if LineValue < 0 
+                    RangeZeroValue := _CloseLow
+                else
+                    RangeZeroValue := _CloseLow+RangeHalf
+
+                RangeCalc := (_CloseHigh-_CloseLow)
+                LineValueFloat := LineValue
+
+            else
+                RangeCalc := (_CloseHigh + (_CloseHigh-_CloseLow)*2.5)-(_CloseLow + (_CloseHigh-_CloseLow)*-2.5)
+                RangeZeroValue := _CloseLow + (_CloseHigh-_CloseLow)*-2.5
+                LineValueFloat := LineValue
+
+            int LineEnd = _OpenTime+BaseData.ONE_DAY
+            if ExtendProjectionsForward
+                LineEnd := _OpenTime+(2*BaseData.ONE_DAY)
+            if str.contains ("Fri", str.format_time(time, "E"))
+                LineEnd := _OpenTime+(3*BaseData.ONE_DAY)
+                if ExtendProjectionsForward
+                    LineEnd := _OpenTime+(4*BaseData.ONE_DAY)
+            else if str.contains ("Thu", str.format_time(time, "E"))
+                if ExtendProjectionsForward
+                    LineEnd := _OpenTime+(4*BaseData.ONE_DAY)
+
+            Line = line.new(_OpenTime,RangeZeroValue + RangeCalc*LineValueFloat, LineEnd,RangeZeroValue + RangeCalc*LineValueFloat, xloc.bar_time, color = ProjectionLinesColor, style = ProjectionLineStyle, width = 1)
+            Label = label.new(_OpenTime,RangeZeroValue + RangeCalc*LineValueFloat,LineValueString, xloc.bar_time, style = label.style_label_right, color =color.new(color.green, 100), textcolor = ProjectionLinesColor, size = size.small)
+
+            array.push(CharlieLines, Quant.LineWithLabel.new(Line,Label))
+
+
+    if ShowWeeklyProjections and _CurrentArtefact.SessionString == "0430-0935" and str.contains("Tue", str.format_time(_CurrentArtefact.OpenTime, "E"))
+        for i = 0 to array.size(ArrayRangeLinesToUse)-1
+            LineValue = array.get(ArrayRangeLinesToUse, i)
+            string LineValueString = str.tostring(LineValue, "#.##")
+
+            if not ShowProjectionLabel
+                LineValueString := ""
+
+            float LineValueFloat = na
+            float RangeHalf = (_CloseHigh-_CloseLow)/2
+            float RangeZeroValue = na // _CloseLow+RangeHalf
+            float RangeCalc = na
+            if LinesToShow == "Standard"
+                if LineValue > 0
+                    RangeZeroValue := _CloseHigh
+                else if LineValue < 0 
+                    RangeZeroValue := _CloseLow
+                else
+                    RangeZeroValue := _CloseLow+RangeHalf
+
+                RangeCalc := (_CloseHigh-_CloseLow)
+                LineValueFloat := LineValue
+
+            else
+                RangeCalc := (_CloseHigh + (_CloseHigh-_CloseLow)*2.5)-(_CloseLow + (_CloseHigh-_CloseLow)*-2.5)
+                RangeZeroValue := _CloseLow + (_CloseHigh-_CloseLow)*-2.5
+                LineValueFloat := LineValue
+
+            int LineEnd = _OpenTime+BaseData.ONE_WEEK
+            if ExtendProjectionsForward
+                LineEnd := _OpenTime+(2*BaseData.ONE_WEEK)
+
+            Line = line.new(_OpenTime,RangeZeroValue + RangeCalc*LineValueFloat, LineEnd,RangeZeroValue + RangeCalc*LineValueFloat, xloc.bar_time, color = WeeklyProjectionLinesColor, style = ProjectionLineStyle, width = 1)
+            Label = label.new(_OpenTime,RangeZeroValue + RangeCalc*LineValueFloat,LineValueString, xloc.bar_time, style = label.style_label_right, color =color.new(color.green, 100), textcolor = WeeklyProjectionLinesColor, size = size.small)
+
+            array.push(WeeklyLines, Quant.LineWithLabel.new(Line,Label))
+
+    if ShowIdrMidpoint //and not (_CurrentArtefact.SessionString == "1930-2030")
+        Midpoint = _CloseLow + (_CloseHigh-_CloseLow)/2
+        IdrMidpointLine := line.new(_OpenTime, Midpoint, CycleEnd, Midpoint, xloc.bar_time, color = IdrMidpointLineColor, style = IdrMidpointLineStyle, width = 1)
+    if ShowDrMidpoint //and not (_CurrentArtefact.SessionString == "1930-2030")
+        DrMidpointLine := line.new(_OpenTime, CalculatePoiMidpoint(_High,_Low), CycleEnd, CalculatePoiMidpoint(_High,_Low), xloc.bar_time, color = IdrMidpointLineColor, style = IdrMidpointLineStyle, width = 1)
+    if ShowMidCluster //and not (_CurrentArtefact.SessionString == "1930-2030")
+        int ExtendTime = CycleEnd
+        if ExtendMidCluster
+            if _CurrentArtefact.SessionString == "2130-2235"
+                ExtendTime := KiloOpenTime+BaseData.ONE_DAY
+            else if _CurrentArtefact.SessionString == "1130-1235"
+                ExtendTime := KiloOpenTime+BaseData.ONE_DAY
+            else
+                if str.contains ("Tue", str.format_time(time, "E"))
+                    ExtendTime := KiloOpenTime+BaseData.ONE_WEEK
+                else
+                    ExtendTime := KiloOpenTime+BaseData.ONE_DAY
+
+
+        Midpoint = _CloseLow + (_CloseHigh-_CloseLow)/2
+        DrMid = CalculatePoiMidpoint(_High,_Low)
+        MidlineValue = CalculatePoiMidpoint(DrMid,Midpoint)
+        Box = box.new(_OpenTime,DrMid,ExtendTime,Midpoint, xloc = xloc.bar_time,border_color = MidPointClusterBorder, bgcolor = MidPointClusterFill, border_width = 1)
+        Midline = line.new(_OpenTime, MidlineValue, ExtendTime, MidlineValue, xloc.bar_time, color = MidPointClusterBorder, style = line.style_dotted, width = 1)
+        MidpointCluster := Quant.BoxWithMidline.new(Box, Midline) 
+
+    color BoxColor = na
+    color BoxBorder = na
+
+    color IdrBoxColor = na
+    color IdrBoxBorder = na
+
+
+    float MitigationHighLow = na
+    string FractalEqDirection = na
+    float MitigationLow = na
+    float MitigationHigh = na
+
+    if _OpenPrice < _ClosePrice
+        BoxColor := FractalEqBoxUpColor
+        BoxBorder := FractalEqBoxUpBorderColor
+        IdrBoxColor := IdrBoxUpColor
+        IdrBoxBorder := IdrBoxUpBorderColor
+
+        MitigationLow := _OpenPrice 
+        MitigationHigh := _ClosePrice
+
+        FractalEqDirection := "Bull"
+    else if _OpenPrice > _ClosePrice
+        BoxColor := FractalEqBoxDownColor
+        BoxBorder := FractalEqBoxDownBorderColor
+        IdrBoxColor := IdrBoxDownColor
+        IdrBoxBorder := IdrBoxDownBorderColor
+
+        MitigationLow := _ClosePrice
+        MitigationHigh := _OpenPrice
+
+        FractalEqDirection := "Bear"
+    else
+        BoxColor := color.new(color.gray, 90)
+        BoxBorder := color.new(color.gray, 50)
+        IdrBoxColor := color.new(color.gray, 90)
+        IdrBoxBorder := color.new(color.gray, 50)
+        MitigationLow := _ClosePrice
+        MitigationHigh := _OpenPrice
+
+    string BelowAboveString = na
+    string UnmitigatedAllign = text.align_bottom
+    if close > Eq
+        BelowAboveString := "Above"
+        MitigationHighLow := MitigationHigh
+        UnmitigatedAllign := text.align_bottom
+    else if close < Eq
+        BelowAboveString := "Below"
+        MitigationHighLow := MitigationLow
+        UnmitigatedAllign := text.align_top
+    else
+        BelowAboveString := "Mitigated"
+        UnmitigatedAllign := text.align_top
+
+    string Label = ""
+    // if ShowObLabel
+    //     Label := _CurrentArtefact.SessionName
+
+    if ShowCloseBox //and not (_CurrentArtefact.SessionString == "1930-2030") 
+        CloseBoxCurrent :=  box.new(_OpenTime,_OpenPrice, _CloseTime,_ClosePrice, xloc = xloc.bar_time, bgcolor = BoxColor, border_color = BoxBorder, border_width = FractalEqBoxBorderSize, text = Label, text_size = size.tiny, text_halign = text.align_left, text_valign = text.align_top, text_color = color.new(color.gray, 0))
+    if ShowIdrBox //and not (_CurrentArtefact.SessionString == "1930-2030")
+        IdrBoxCurrent := box.new(_OpenTime,_CloseHigh, _CloseTime,_CloseLow, xloc = xloc.bar_time, bgcolor = BoxColor, border_color = BoxBorder, border_width = 1)
+
+    if ChangeOpenCloseLineToBox //and not (_CurrentArtefact.SessionString == "1930-2030")
+        if _CurrentArtefact.SessionString == "2130-2235"
+            Box = box.new(_OpenTime,_OpenPrice, KiloOpenTime+BaseData.ONE_DAY,_ClosePrice, xloc = xloc.bar_time, bgcolor = BoxColor, border_color = BoxBorder, border_width = 1, text = Label, text_size = size.tiny, text_halign = text.align_left, text_valign = text.align_top, text_color = color.new(color.gray, 0))
+            Midline = line.new(_OpenTime, Eq, KiloOpenTime+BaseData.ONE_DAY, Eq, xloc.bar_time, color = FractalEqLineColor, style = FractalEqLineStyle, width = 1)
+            CloseBoxCurrentToExtend :=  Quant.BoxWithMidline.new(Box, Midline)        
+        else if _CurrentArtefact.SessionString == "1130-1235"
+            Box = box.new(_OpenTime,_OpenPrice, KiloOpenTime+BaseData.ONE_DAY,_ClosePrice, xloc = xloc.bar_time, bgcolor = BoxColor, border_color = BoxBorder, border_width = 1, text = Label, text_size = size.tiny, text_halign = text.align_left, text_valign = text.align_top, text_color = color.new(color.gray, 0))
+            Midline = line.new(_OpenTime, Eq, KiloOpenTime+BaseData.ONE_DAY, Eq, xloc.bar_time, color = FractalEqLineColor, style = FractalEqLineStyle, width = 1)
+            CloseBoxCurrentToExtend :=  Quant.BoxWithMidline.new(Box, Midline)  
+        else
+            int EndTime = na
+            if str.contains ("Tue", str.format_time(time, "E"))
+                EndTime := KiloOpenTime+BaseData.ONE_WEEK
+            else
+                EndTime := KiloOpenTime+BaseData.ONE_DAY
+            Box = box.new(_OpenTime,_OpenPrice, EndTime,_ClosePrice, xloc = xloc.bar_time, bgcolor = BoxColor, border_color = BoxBorder, border_width = 1, text = Label, text_size = size.tiny, text_halign = text.align_left, text_valign = text.align_top, text_color = color.new(color.gray, 0))
+            Midline = line.new(_OpenTime, Eq, EndTime, Eq, xloc.bar_time, color = FractalEqLineColor, style = FractalEqLineStyle, width = 1)
+            CloseBoxCurrentToExtend :=  Quant.BoxWithMidline.new(Box, Midline)  
+    else
+        if ShowOpenLine
+            int ExtendTime = CycleEnd
+            if ExtendOpenCloseLine
+                if _CurrentArtefact.SessionString == "2130-2235"
+                    ExtendTime := KiloOpenTime+BaseData.ONE_DAY
+                else if _CurrentArtefact.SessionString == "1130-1235"
+                    ExtendTime := KiloOpenTime+BaseData.ONE_DAY
+                else
+                    if str.contains ("Tue", str.format_time(time, "E"))
+                        ExtendTime := KiloOpenTime+BaseData.ONE_WEEK
+                    else
+                        ExtendTime := KiloOpenTime+BaseData.ONE_DAY
+
+            OpenLine := line.new(_OpenTime, _OpenPrice, ExtendTime, _OpenPrice, xloc.bar_time, color = OpenColor, style = OpenEqLineStyle, width = 1)
+            CloseLine := line.new(_OpenTime, _ClosePrice, ExtendTime, _ClosePrice, xloc.bar_time, color = CloseColor, style = CloseEqLineStyle, width = 1)
+
+
+
+
+    string UnmitigatedLabel = ''
+    if ShowUnmitigatedBoxLabel
+        UnmitigatedLabel := "0%"
+
+    if ShowUnmitigatedBox
+        UnmitigatedBoxCurrent := box.new(_OpenTime,_OpenPrice, _CloseTime,_ClosePrice, xloc = xloc.bar_time, bgcolor = UnmitigatedBoxColor, border_color = UnmitigatedBoxBorderColor,text = UnmitigatedLabel, text_color = FractalEqLineColor, text_halign = text.align_right, text_valign = UnmitigatedAllign,text_size = size.small, border_width = UnmitigatedBoxBorderSize)
+
+    array<Quant.MatrixProjection> AllMatrixProjections = array.new<Quant.MatrixProjection>()
+    if _CurrentArtefact.ShowMatrixProjections                
+        float MatrixRangeLow = na
+        float MatrixRange = na
+
+        if RangeStyle == "OC" and ManualRangeProjection
+            if _OpenPrice < _ClosePrice
+                MatrixRangeLow := _OpenPrice
+                MatrixRange := math.abs(_ClosePrice-_OpenPrice)
+            else
+                MatrixRangeLow := _ClosePrice
+                MatrixRange := math.abs(_ClosePrice-_OpenPrice)
+        else if RangeStyle == "IDR" and ManualRangeProjection
+            MatrixRangeLow := _CloseLow
+            MatrixRange := (_CloseHigh-_CloseLow)
+
+        else if RangeStyle == "DR" and ManualRangeProjection
+            MatrixRangeLow := _Low
+            MatrixRange := (_High-_Low)
+        else 
+            if math.abs(_ClosePrice-_OpenPrice)*0.4 > (_CloseHigh-_CloseLow)
+                if _OpenPrice < _ClosePrice
+                    MatrixRangeLow := _OpenPrice
+                    MatrixRange := math.abs(_ClosePrice-_OpenPrice)
+                else
+                    MatrixRangeLow := _ClosePrice
+                    MatrixRange := math.abs(_ClosePrice-_OpenPrice)
+            else
+                MatrixRangeLow := _CloseLow
+                MatrixRange := (_CloseHigh-_CloseLow)        
+
+
+        for i = 0 to array.size(ArrayOfMatrixRanges)-1
+            CurrentMatrixRange = array.get(ArrayOfMatrixRanges, i)
+
+            float CurrentRangeOffset = CurrentMatrixRange
+            if CurrentMatrixRange < 0
+                CurrentRangeOffset := CurrentRangeOffset
+            else if CurrentMatrixRange > 0
+                CurrentRangeOffset := CurrentRangeOffset+1
+
+            Range = MatrixRangeLow+MatrixRange*CurrentRangeOffset
+
+            array.push(AllMatrixProjections, Quant.MatrixProjection.new(Quant.CreateLineWithLabel(OpenTime,Range,CycleEnd,MatrixProjectionColors, line.style_dotted,1,str.tostring(math.round(CurrentMatrixRange*100)/100)),CurrentMatrixRange, Range))
+
+    array<Quant.ProjectionTime> EmptyProjTimeArray = array.new<Quant.ProjectionTime>()
+
+
+    Quant.TimeBasedFib TimeBasedFibObject = Quant.TimeBasedFib.new(false,na,false,false,EmptyProjTimeArray, false)
+
+    if ShowAllTimeBasedRanges
+        TimeBasedFibObject := Quant.TimeBasedFib.new(false,na,false,false,EmptyProjTimeArray, false)
+    else 
+        if _CurrentArtefact.SessionName == "Alpha" and ShowAlphaTbr
+            TimeBasedFibObject := Quant.TimeBasedFib.new(false,na,false,false,EmptyProjTimeArray, false)
+        if _CurrentArtefact.SessionName == "ADR" and ShowAdrTbr
+            TimeBasedFibObject := Quant.TimeBasedFib.new(false,na,false,false,EmptyProjTimeArray, false)
+        if _CurrentArtefact.SessionName == "Bravo" and ShowBravoTbr
+            TimeBasedFibObject := Quant.TimeBasedFib.new(false,na,false,false,EmptyProjTimeArray, false)
+        if _CurrentArtefact.SessionName == "CHARLIE" and ShowCharlieTbr
+            TimeBasedFibObject := Quant.TimeBasedFib.new(false,na,false,false,EmptyProjTimeArray, false)
+        if _CurrentArtefact.SessionName == "Delta" and ShowDeltaTbr
+            TimeBasedFibObject := Quant.TimeBasedFib.new(false,na,false,false,EmptyProjTimeArray, false)
+
+
+        if _CurrentArtefact.SessionName == "Echo" and ShowEchoTbr
+            TimeBasedFibObject := Quant.TimeBasedFib.new(false,na,false,false,EmptyProjTimeArray, false)
+        if _CurrentArtefact.SessionName == "ODR" and ShowOdrTbr
+            TimeBasedFibObject := Quant.TimeBasedFib.new(false,na,false,false,EmptyProjTimeArray, false)
+        if _CurrentArtefact.SessionName == "ODR" and ShowOdrTbr
+            TimeBasedFibObject := Quant.TimeBasedFib.new(false,na,false,false,EmptyProjTimeArray, false)
+        if _CurrentArtefact.SessionName == "KILO" and ShowKiloTbr
+            TimeBasedFibObject := Quant.TimeBasedFib.new(false,na,false,false,EmptyProjTimeArray, false)
+        if _CurrentArtefact.SessionName == "Foxtrot" and ShowFoxtrotTbr
+            TimeBasedFibObject := Quant.TimeBasedFib.new(false,na,false,false,EmptyProjTimeArray, false)
+        if _CurrentArtefact.SessionName == "Golf" and ShowGolfTbr
+            TimeBasedFibObject := Quant.TimeBasedFib.new(false,na,false,false,EmptyProjTimeArray, false)
+        if _CurrentArtefact.SessionName == "RDR" and ShowRdrTbr
+            TimeBasedFibObject := Quant.TimeBasedFib.new(false,na,false,false,EmptyProjTimeArray, false)
+        if _CurrentArtefact.SessionName == "Hotel" and ShowHotelTbr
+            TimeBasedFibObject := Quant.TimeBasedFib.new(false,na,false,false,EmptyProjTimeArray, false)
+        if _CurrentArtefact.SessionName == "India" and ShowIndiaTbr
+            TimeBasedFibObject := Quant.TimeBasedFib.new(false,na,false,false,EmptyProjTimeArray, false)            
+        if _CurrentArtefact.SessionName == "Lima" and ShowLimaTbr
+            TimeBasedFibObject := Quant.TimeBasedFib.new(false,na,false,false,EmptyProjTimeArray, false)
+        if _CurrentArtefact.SessionName == "ShowJulietTbr" and ShowJulietTbr
+            TimeBasedFibObject := Quant.TimeBasedFib.new(false,na,false,false,EmptyProjTimeArray, false)
+
+    label CycleLabel = na
+    if ShowCycleLabels
+        CycleLabel := label.new(_OpenTime,_High, text = _CurrentArtefact.SessionName, style = label.style_none, color = color.new(color.green, 100), textcolor = color.new(color.gray, 0), size = size.tiny, xloc = xloc.bar_time)
+
+
+
+    CurrentSessionObject = Quant.SessionObject.new(_CurrentArtefact.SessionName, OpenLine, CloseLine, FractalEqLine, DrHighLine, DrLowLine, IdrHighLine, IdrLowLine, IdrMidpointLine,DrMidpointLine,MidpointCluster, CloseBoxCurrent, IdrBoxCurrent, Eq, BelowAboveString, _OpenTime, na, na, na, na, na, na, false, _High, _Low, CycleEnd, false,"",_SessionConfirmation,"NotInSession", ClusterHigh, ClusterLow, ClusterHighMidpoint, ClusterLowMidpoint,_CloseHigh, _CloseLow,AllMatrixProjections,UnmitigatedBoxCurrent,close,FractalEqDirection,_OpenPrice,_ClosePrice,true,"", _CurrentArtefact.SessionString, _CurrentArtefact.SessionConfirmation, na,na, _CloseTime , CycleEnd, TimeBasedFibObject, KiloLines, LimaLines, CharlieLines, CloseBoxCurrentToExtend,CycleLabel)
+    array.push(ArrayOfFractalObjects, CurrentSessionObject)
+
+
+    ClusterArrayChanged = false
+
+    if ShowBiggestCluster and _CurrentArtefact.SessionString == "0930-1030"
+        array.push(ArrayOfClusterRdrObjects, CurrentSessionObject)
+        ClusterArrayChanged := true
+        if array.size(ArrayOfClusterRdrObjects) > NumberOfClustersBack 
+            CurrentCluster = array.shift(ArrayOfClusterRdrObjects)
+
+    [CurrentSessionObject,ClusterArrayChanged]
+
+
+
+var bool BullConfirmationMark = false
+var bool BearConfirmationMark = false
+
+
+
+
+// } -------- END FUNCTIONS --------
+
+
+// { --------------------- START QUANTUM DR CYCLE Ranges ---------------------
+
+var bool ClusterArrayHasChanged = false
+var array<int> ArrayOfTableIndexes = array.from(0,0,0)
+
+UseHTFCandleData = true 
+
+
+if array.size(ArrayOfSessionDataObjects) > 0
+    for i = 0 to array.size(ArrayOfSessionDataObjects)-1
+        CurrentArtefact = array.get(ArrayOfSessionDataObjects, i)
+        // [OpenCalc,HighCalc,LowCalc,CloseCalc,OpenTimeCalc,CloseTimeCalc,CloseHighCalc,CloseLowCalc,SessionState] = GetSecurityOHLCTTT(ArrayUnprocessedCandles5Min, Quant.GetSessionTimes(CurrentArtefact.SessionString,true), Quant.GetSessionTimes(CurrentArtefact.SessionString,false), CurrentArtefact)
+        Quant.GetSecurityOHLCDataObject(ArrayUnprocessedCandles5Min, Quant.GetSessionTimes(CurrentArtefact.SessionString,true), Quant.GetSessionTimes(CurrentArtefact.SessionString,false), CurrentArtefact)
+       
+
+        if CurrentArtefact.SessionState == "EndOfSession"
+            CurrentArtefact.FractalDrawn := true
+            CurrentArtefact.ConfirmedDirection := na
+           
+            [CurrentObject,ClusterArrayChanged] = CreateNewSession(CurrentArtefact.OpenTime,CurrentArtefact.Open,CurrentArtefact.CloseTime,CurrentArtefact.Close, CurrentArtefact.CycleEndTime, CurrentArtefact.High, CurrentArtefact.Low, CurrentArtefact.CloseHigh, CurrentArtefact.CloseLow,CurrentArtefact.SessionConfirmation, CurrentArtefact)
+            ClusterArrayHasChanged := ClusterArrayChanged    
+
+
+
+
+
+
+if array.size(ArrayOfFractalObjects) > 0
+    int RdrOpenTime = Quant.GetSessionTimes("0930-1030",true)
+    int KiloOpenTime = Quant.GetSessionTimes("0430-0935",true)
+
+    for i = 0 to array.size(ArrayOfFractalObjects)-1
+        CurrentArtefact = array.get(ArrayOfFractalObjects, i)
+        [OpenCalc,HighCalc,LowCalc,CloseCalc,CloseHighCalc,CloseLowCalc] = Quant.GetSecurityOHLCFractalObject(ArrayUnprocessedCandles5Min, Quant.GetSessionTimes(CurrentArtefact.SessionConfirmationString,true), Quant.GetSessionTimes(CurrentArtefact.SessionConfirmationString,false),CurrentArtefact)
+
+
+
+        if not CurrentArtefact.SessionConfirmedFractal
+            CurrentSessionState = CurrentArtefact.AfterSessionState
+                
+            if CurrentSessionState == "SessionStart"
+                CurrentArtefact.SessionConfirmedFractal := false
+                CurrentArtefact.ConfirmationDirectionDr := na 
+            if CurrentSessionState == "InSession" or CurrentSessionState == "SessionStart"
+                if not CurrentArtefact.SessionConfirmedFractal
+        
+                    if not UseWickConfirmation and CloseCalc > CurrentArtefact.HighFractal and not CurrentArtefact.SessionConfirmedFractal
+                        if ShowConfCandleBullBear
+                            BullConfirmationMark := true
+
+
+                        CurrentArtefact.SessionConfirmedFractal := true
+                        CurrentArtefact.ConfirmationDirectionDr := "Long" 
+                        CurrentArtefact.TimeProjections.ShouldProcess := true
+
+                        ConfirmationTime = time
+                        CandleHigh = HighCalc
+                        CandleLow = LowCalc
+
+                        if CurrentArtefact.TimeProjections.ShouldProcess
+                            CurrentArtefact.TimeProjections                     
+                            CurrentArtefact.TimeProjections.ConfirmationTime := time
+                            CurrentArtefact.TimeProjections.Confirmed := true
+
+
+                        if ShowConfirmationCandles //and not (CurrentArtefact.SessionString == "1930-2030")
+                            int ExtendTime = CurrentArtefact.CycleEndTimeFractal
+                            if ExtendConfirmationCandles
+                                if CurrentArtefact.SessionString == "2130-2235"
+                                    ExtendTime := KiloOpenTime+BaseData.ONE_DAY
+                                else if CurrentArtefact.SessionString == "1130-1235"
+                                    ExtendTime := KiloOpenTime+BaseData.ONE_DAY
+                                else
+                                    if str.contains ("Tue", str.format_time(time, "E"))
+                                        ExtendTime := KiloOpenTime+BaseData.ONE_WEEK
+                                    else
+                                        ExtendTime := KiloOpenTime+BaseData.ONE_DAY
+                    
+                            CurrentArtefact.ConfirmationCandle := box.new(ConfirmationTime,CandleHigh,ExtendTime,CandleLow, xloc = xloc.bar_time,border_color = BoxBull_Border_Color, bgcolor = BoxBull_Fill_Color, border_width = BoxBull_Border_Size, text_size = size.auto, text_halign = text.align_right, text_valign = text.align_center, text_color = BoxBull_Border_Color)
+                            CurrentArtefact.ConfirmationCandleMidline := line.new(ConfirmationTime,CandleHigh-(CandleHigh-CandleLow)/2 ,ExtendTime, CandleHigh-(CandleHigh-CandleLow)/2,color = BoxBull_Border_Color,style = line.style_dashed, xloc = xloc.bar_time)
+
+                            CurrentArtefact.ConfirmationMidpointValue := CandleHigh-(CandleHigh-CandleLow)/2
+                            CurrentArtefact.ConfirmationCandleHighValue := CandleHigh
+                            CurrentArtefact.ConfirmationCandleLowValue := CandleLow
+
+                            if ShowConfirmationCandleUnmitigatedBox
+                                UnmitigatedLabel = "100%"
+                                string UnmitigatedAllign = text.align_bottom
+                                CurrentArtefact.ConfirmationCandleUnmitigatedBox := box.new(ConfirmationTime,CandleHigh, CurrentArtefact.CycleEndTimeFractal,CandleLow, xloc = xloc.bar_time, bgcolor = UnmitigatedBoxColor, border_color = UnmitigatedBoxBorderColor,text = UnmitigatedLabel, text_color = FractalEqLineColor, text_halign = text.align_right, text_valign = UnmitigatedAllign,text_size = size.small, border_width = UnmitigatedBoxBorderSize)
+                                CurrentArtefact.ConfirmationCandleHighLowValue := CandleHigh
+
+                    else if UseWickConfirmation and HighCalc > CurrentArtefact.HighFractal and not CurrentArtefact.SessionConfirmedFractal
+                        if ShowConfCandleBullBear
+                            BullConfirmationMark := true
+
+                        CurrentArtefact.SessionConfirmedFractal := true
+                        CurrentArtefact.ConfirmationDirectionDr := "Long" 
+                        CurrentArtefact.TimeProjections.ShouldProcess := true
+
+                        ConfirmationTime = time
+                        CandleHigh = HighCalc
+                        CandleLow = LowCalc
+
+
+                        if CurrentArtefact.TimeProjections.ShouldProcess
+                            CurrentArtefact.TimeProjections                     
+                            CurrentArtefact.TimeProjections.ConfirmationTime := time
+                            CurrentArtefact.TimeProjections.Confirmed := true
+
+
+                        if ShowConfirmationCandles //and not (CurrentArtefact.SessionString == "1930-2030")
+                            int ExtendTime = CurrentArtefact.CycleEndTimeFractal
+                            if ExtendConfirmationCandles
+                                if CurrentArtefact.SessionString == "2130-2235"
+                                    ExtendTime := KiloOpenTime+BaseData.ONE_DAY
+                                else if CurrentArtefact.SessionString == "1130-1235"
+                                    ExtendTime := KiloOpenTime+BaseData.ONE_DAY
+                                else
+                                    if str.contains ("Tue", str.format_time(time, "E"))
+                                        ExtendTime := KiloOpenTime+BaseData.ONE_WEEK
+                                    else
+                                        ExtendTime := KiloOpenTime+BaseData.ONE_DAY
+                    
+                            CurrentArtefact.ConfirmationCandle := box.new(ConfirmationTime,CandleHigh,ExtendTime,CandleLow, xloc = xloc.bar_time,border_color = BoxBull_Border_Color, bgcolor = BoxBull_Fill_Color, border_width = BoxBull_Border_Size, text_size = size.auto, text_halign = text.align_right, text_valign = text.align_center, text_color = BoxBull_Border_Color)
+                            CurrentArtefact.ConfirmationCandleMidline := line.new(ConfirmationTime,CandleHigh-(CandleHigh-CandleLow)/2 ,ExtendTime, CandleHigh-(CandleHigh-CandleLow)/2,color = BoxBull_Border_Color,style = line.style_dashed, xloc = xloc.bar_time)
+
+                            CurrentArtefact.ConfirmationMidpointValue := CandleHigh-(CandleHigh-CandleLow)/2
+                            CurrentArtefact.ConfirmationCandleHighValue := CandleHigh
+                            CurrentArtefact.ConfirmationCandleLowValue := CandleLow
+
+                            if ShowConfirmationCandleUnmitigatedBox
+                                UnmitigatedLabel = "100%"
+                                string UnmitigatedAllign = text.align_bottom
+                                CurrentArtefact.ConfirmationCandleUnmitigatedBox := box.new(ConfirmationTime,CandleHigh, CurrentArtefact.CycleEndTimeFractal,CandleLow, xloc = xloc.bar_time, bgcolor = UnmitigatedBoxColor, border_color = UnmitigatedBoxBorderColor,text = UnmitigatedLabel, text_color = FractalEqLineColor, text_halign = text.align_right, text_valign = UnmitigatedAllign,text_size = size.small, border_width = UnmitigatedBoxBorderSize)
+                                CurrentArtefact.ConfirmationCandleHighLowValue := CandleHigh
+
+
+
+                    if not UseWickConfirmation and CloseCalc < CurrentArtefact.LowFractal and not CurrentArtefact.SessionConfirmedFractal and barstate.isconfirmed
+                        if ShowConfCandleBullBear
+                            BearConfirmationMark := true
+                        // TempCounter := TempCounter+1
+
+                        CurrentArtefact.SessionConfirmedFractal := true
+                        CurrentArtefact.ConfirmationDirectionDr := "Short"
+                        CurrentArtefact.TimeProjections.ShouldProcess := true
+
+
+
+                        ConfirmationTime = time//+TickerTimeOffset
+                        CandleHigh = HighCalc
+                        CandleLow = LowCalc
+
+
+                        if CurrentArtefact.TimeProjections.ShouldProcess
+                            CurrentArtefact.TimeProjections                     
+                            CurrentArtefact.TimeProjections.ConfirmationTime := time
+                            CurrentArtefact.TimeProjections.Confirmed := true
+
+
+                        if ShowConfirmationCandles //and not (CurrentArtefact.SessionString == "1930-2030")
+                            int ExtendTime = CurrentArtefact.CycleEndTimeFractal
+                            if ExtendConfirmationCandles
+                                if CurrentArtefact.SessionString == "2130-2235"
+                                    ExtendTime := KiloOpenTime+BaseData.ONE_DAY
+                                else if CurrentArtefact.SessionString == "1130-1235"
+                                    ExtendTime := KiloOpenTime+BaseData.ONE_DAY
+                                else
+                                    if str.contains ("Tue", str.format_time(time, "E"))
+                                        ExtendTime := KiloOpenTime+BaseData.ONE_WEEK
+                                    else
+                                        ExtendTime := KiloOpenTime+BaseData.ONE_DAY
+
+                            CurrentArtefact.ConfirmationCandle := box.new(ConfirmationTime,CandleHigh,ExtendTime,CandleLow, xloc = xloc.bar_time,border_color = BoxBear_Border_Color, bgcolor = BoxBear_Fill_Color, border_width = BoxBear_Border_Size, text_size = size.auto, text_halign = text.align_right, text_valign = text.align_center, text_color = BoxBear_Border_Color)
+                            CurrentArtefact.ConfirmationCandleMidline := line.new(ConfirmationTime,CandleHigh-(CandleHigh-CandleLow)/2 ,ExtendTime, CandleHigh-(CandleHigh-CandleLow)/2,color = BoxBear_Border_Color,style = line.style_dashed, xloc = xloc.bar_time)
+
+                            CurrentArtefact.ConfirmationMidpointValue := CandleHigh-(CandleHigh-CandleLow)/2
+                            CurrentArtefact.ConfirmationCandleHighValue := CandleHigh
+                            CurrentArtefact.ConfirmationCandleLowValue := CandleLow
+
+                            if ShowConfirmationCandleUnmitigatedBox
+                                UnmitigatedLabel = "100%"
+                                string UnmitigatedAllign = text.align_top
+                                CurrentArtefact.ConfirmationCandleUnmitigatedBox := box.new(ConfirmationTime,CandleHigh, CurrentArtefact.CycleEndTimeFractal,CandleLow, xloc = xloc.bar_time, bgcolor = UnmitigatedBoxColor, border_color = UnmitigatedBoxBorderColor,text = UnmitigatedLabel, text_color = FractalEqLineColor, text_halign = text.align_right, text_valign = UnmitigatedAllign,text_size = size.small, border_width = UnmitigatedBoxBorderSize)
+                                CurrentArtefact.ConfirmationCandleHighLowValue := CandleLow
+
+                    else if UseWickConfirmation and LowCalc < CurrentArtefact.LowFractal and not CurrentArtefact.SessionConfirmedFractal
+                        if ShowConfCandleBullBear
+                            BearConfirmationMark := true
+                        // TempCounter := TempCounter+1
+
+
+                        CurrentArtefact.ConfirmationDirectionDr := "Short"
+                        CurrentArtefact.SessionConfirmedFractal := true
+                        CurrentArtefact.TimeProjections.ShouldProcess := true
+
+
+                        ConfirmationTime = time//+TickerTimeOffset
+                        CandleHigh = HighCalc
+                        CandleLow = LowCalc
+                        CurrentArtefact.TimeProjections.ShouldProcess := true
+
+                        if CurrentArtefact.TimeProjections.ShouldProcess
+                            CurrentArtefact.TimeProjections                     
+                            CurrentArtefact.TimeProjections.ConfirmationTime := time
+                            CurrentArtefact.TimeProjections.Confirmed := true
+
+
+                        if ShowConfirmationCandles 
+                            int ExtendTime = CurrentArtefact.CycleEndTimeFractal
+                            if ExtendConfirmationCandles
+                                if CurrentArtefact.SessionString == "2130-2235"
+                                    ExtendTime := KiloOpenTime+BaseData.ONE_DAY
+                                else if CurrentArtefact.SessionString == "1130-1235"
+                                    ExtendTime := KiloOpenTime+BaseData.ONE_DAY
+                                else
+                                    if str.contains ("Tue", str.format_time(time, "E"))
+                                        ExtendTime := KiloOpenTime+BaseData.ONE_WEEK
+                                    else
+                                        ExtendTime := KiloOpenTime+BaseData.ONE_DAY
+
+                            CurrentArtefact.ConfirmationCandle := box.new(ConfirmationTime,CandleHigh,ExtendTime,CandleLow, xloc = xloc.bar_time,border_color = BoxBear_Border_Color, bgcolor = BoxBear_Fill_Color, border_width = BoxBear_Border_Size, text_size = size.auto, text_halign = text.align_right, text_valign = text.align_center, text_color = BoxBear_Border_Color)
+                            CurrentArtefact.ConfirmationCandleMidline := line.new(ConfirmationTime,CandleHigh-(CandleHigh-CandleLow)/2 ,ExtendTime, CandleHigh-(CandleHigh-CandleLow)/2,color = BoxBear_Border_Color,style = line.style_dashed, xloc = xloc.bar_time)
+
+                            CurrentArtefact.ConfirmationMidpointValue := CandleHigh-(CandleHigh-CandleLow)/2
+                            CurrentArtefact.ConfirmationCandleHighValue := CandleHigh
+                            CurrentArtefact.ConfirmationCandleLowValue := CandleLow
+
+                            if ShowConfirmationCandleUnmitigatedBox
+                                UnmitigatedLabel = "100%"
+                                string UnmitigatedAllign = text.align_top
+                                CurrentArtefact.ConfirmationCandleUnmitigatedBox := box.new(ConfirmationTime,CandleHigh, CurrentArtefact.CycleEndTimeFractal,CandleLow, xloc = xloc.bar_time, bgcolor = UnmitigatedBoxColor, border_color = UnmitigatedBoxBorderColor,text = UnmitigatedLabel, text_color = FractalEqLineColor, text_halign = text.align_right, text_valign = UnmitigatedAllign,text_size = size.small, border_width = UnmitigatedBoxBorderSize)
+                                CurrentArtefact.ConfirmationCandleHighLowValue := CandleLow
+
+
+
+            else if CurrentSessionState == "EndOfSession"
+                CurrentArtefact.SessionConfirmedFractal := true
+
+        if array.size(ArrayOfFractalObjects) >= 3
+            LastSession = array.get(ArrayOfFractalObjects, array.size(ArrayOfFractalObjects)-1)
+            LastSessionMin1 = array.get(ArrayOfFractalObjects, array.size(ArrayOfFractalObjects)-2)
+            LastSessionMin2 = array.get(ArrayOfFractalObjects, array.size(ArrayOfFractalObjects)-3)
+
+        if ShowConfirmationCandles and ShowConfirmationCandleUnmitigatedBox and not(CurrentArtefact.ConfirmationCandleMitigated) // and not (CurrentArtefact.SessionString == "1930-2030")
+            High = CurrentArtefact.ConfirmationCandleHighValue
+            Low = CurrentArtefact.ConfirmationCandleLowValue
+            CandleHighLowRange = (High-Low)
+            float RangeClosed = 0.00
+
+            if CurrentArtefact.ConfirmationDirectionDr == "Long" //and barstate.isconfirmed
+                if CloseCalc < CurrentArtefact.ConfirmationCandleHighLowValue
+                    CurrentArtefact.ConfirmationCandleHighLowValue := CloseCalc
+                    RangeClosedCalc = High-CloseCalc
+                    CurrentPercent = (RangeClosedCalc/CandleHighLowRange)
+
+                    RangeClosed := math.max(RangeClosed, CurrentPercent)
+
+                    color Color = color.new(color.purple, 0)
+                    if RangeClosed > 0.5
+                        Color := color.new(color.gray, 0)
+
+                    if RangeClosed >= 0 and RangeClosed < 1
+                        box.set_top(CurrentArtefact.ConfirmationCandleUnmitigatedBox, CurrentArtefact.ConfirmationCandleHighLowValue)
+                        box.set_text(CurrentArtefact.ConfirmationCandleUnmitigatedBox, str.tostring(1-RangeClosed, "#.##%"))
+                        box.set_text_color(CurrentArtefact.ConfirmationCandleUnmitigatedBox, Color)
+                    else
+                        RangeClosed := 1
+                        box.delete(CurrentArtefact.ConfirmationCandleUnmitigatedBox)
+
+            else if CurrentArtefact.ConfirmationDirectionDr == "Short" //and barstate.isconfirmed
+                if CloseCalc > CurrentArtefact.ConfirmationCandleHighLowValue
+                    CurrentArtefact.ConfirmationCandleHighLowValue := CloseCalc
+                    RangeClosedCalc = CloseCalc-Low
+                    CurrentPercent = (RangeClosedCalc/CandleHighLowRange)
+
+                    RangeClosed := math.max(RangeClosed, CurrentPercent)
+
+
+                    color Color = color.new(color.purple, 0)
+                    if RangeClosed > 0.5
+                        Color := color.new(color.gray, 0)
+
+                    if RangeClosed >= 0 and RangeClosed < 1
+                        box.set_bottom(CurrentArtefact.ConfirmationCandleUnmitigatedBox, CurrentArtefact.ConfirmationCandleHighLowValue)
+                        box.set_text(CurrentArtefact.ConfirmationCandleUnmitigatedBox, str.tostring(1-RangeClosed, "#.##%"))
+                        box.set_text_color(CurrentArtefact.ConfirmationCandleUnmitigatedBox, Color)
+                    else
+                        RangeClosed := 1
+                        box.delete(CurrentArtefact.ConfirmationCandleUnmitigatedBox)
+                
+
+
+
+
+
+
+ExtendClustersInRealtime = true
+
+var bool ExecuteTimeCandleCalc = false
+
+
+
+if array.size(ArrayOfFractalObjects) > NumberOfHistoricalDrsToShow*NumberOfSessionsToShow
+    DeleteArtefact = array.shift(ArrayOfFractalObjects)
+
+    line.delete(DeleteArtefact.Open)
+    line.delete(DeleteArtefact.Close)
+    line.delete(DeleteArtefact.FractalEq)
+    line.delete(DeleteArtefact.DrHigh)
+    line.delete(DeleteArtefact.DrLow)
+    line.delete(DeleteArtefact.IdrHigh)
+    line.delete(DeleteArtefact.IdrLow)
+    line.delete(DeleteArtefact.IdrMidpoint)
+    box.delete(DeleteArtefact.CloseBox)
+
+    box.delete(DeleteArtefact.IdrBox)
+    box.delete(DeleteArtefact.ConfirmationCandle)
+    line.delete(DeleteArtefact.ConfirmationCandleMidline)
+    box.delete(DeleteArtefact.UnmitigatedBox)
+    box.delete(DeleteArtefact.ConfirmationCandleUnmitigatedBox)
+    label.delete(DeleteArtefact.CycleLabel)
+
+    if ChangeOpenCloseLineToBox
+        box.delete(DeleteArtefact.CloseBoxCurrentToExtend.Box)
+        line.delete(DeleteArtefact.CloseBoxCurrentToExtend.Line)
+
+    if ShowClusters
+        box.delete(DeleteArtefact.ClusterHigh)
+        box.delete(DeleteArtefact.ClusterLow)
+        line.delete(DeleteArtefact.ClusterHighMidpoint)
+        line.delete(DeleteArtefact.ClusterLowMidpoint)
+
+
+    if ShowMidCluster
+        box.delete(DeleteArtefact.ClusterMidpoint.Box)
+        line.delete(DeleteArtefact.ClusterMidpoint.Line)
+
+    // if not na(DeleteArtefact.MatrixProjections)
+    if array.size(DeleteArtefact.MatrixProjections) > 0        
+        for i = 0 to array.size(DeleteArtefact.MatrixProjections)-1
+            CurrentArtefact = array.get(DeleteArtefact.MatrixProjections, i)
+            line.delete(CurrentArtefact.LineObject.Line)
+            label.delete(CurrentArtefact.LineObject.Label)
+
+    if ShowKiloProjections and DeleteArtefact.SessionString == "0430-0935"
+        for i = 0 to array.size(DeleteArtefact.KiloLines)-1
+            CurrentLineLabel = array.get(DeleteArtefact.KiloLines, i)
+            line.delete(CurrentLineLabel.Line)
+            label.delete(CurrentLineLabel.Label)
+    if ShowLimaProjections and DeleteArtefact.SessionString == "1130-1235"
+        for i = 0 to array.size(DeleteArtefact.LimaLines)-1
+            CurrentLineLabel = array.get(DeleteArtefact.LimaLines, i)
+            line.delete(CurrentLineLabel.Line)
+            label.delete(CurrentLineLabel.Label)
+    if ShowCharlieProjections and DeleteArtefact.SessionString == "2130-2235"
+        for i = 0 to array.size(DeleteArtefact.CharlieLines)-1
+            CurrentLineLabel = array.get(DeleteArtefact.CharlieLines, i)
+            line.delete(CurrentLineLabel.Line)
+            label.delete(CurrentLineLabel.Label)
+    // if ShowWeeklyProjections and DeleteArtefact.SessionString == "0430-0935"  and str.contains ("Tue", str.format_time(DeleteArtefact.OpenTime, "E"))
+    //     for i = 0 to array.size(DeleteArtefact.WeeklyLines)-1
+    //         CurrentLineLabel = array.get(DeleteArtefact.WeeklyLines, i)
+    //         line.delete(CurrentLineLabel.Line)
+    //         label.delete(CurrentLineLabel.Label)
+
+
+    // Delete Old Time Fib Artefacts
+    if ShowTimeCandles //and not (DeleteArtefact.SessionString == "1930-2030")
+        ProjectionTimes = DeleteArtefact.TimeProjections.ProjectionTimes
+        if array.size(ProjectionTimes) > 0
+            for i = 0 to array.size(ProjectionTimes)-1
+                Object = array.get(ProjectionTimes, i)
+                if not na(Object.VerticalLine)
+                    line.delete(Object.VerticalLine)
+                if not na(Object.High)
+                    line.delete(Object.High)
+                    line.delete(Object.Mid)
+                    line.delete(Object.Low)
+
+
+if DeleteOldCycles
+    if array.size(ArrayOfFractalObjects) > ShowOnlyLastN
+        DeleteArtefact = array.shift(ArrayOfFractalObjects)
+
+        line.delete(DeleteArtefact.Open)
+        line.delete(DeleteArtefact.Close)
+        line.delete(DeleteArtefact.FractalEq)
+        line.delete(DeleteArtefact.DrHigh)
+        line.delete(DeleteArtefact.DrLow)
+        line.delete(DeleteArtefact.IdrHigh)
+        line.delete(DeleteArtefact.IdrLow)
+        line.delete(DeleteArtefact.IdrMidpoint)
+        box.delete(DeleteArtefact.CloseBox)
+        box.delete(DeleteArtefact.IdrBox)
+        box.delete(DeleteArtefact.ConfirmationCandle)
+        line.delete(DeleteArtefact.ConfirmationCandleMidline)
+        if ShowClusters
+            box.delete(DeleteArtefact.ClusterHigh)
+            box.delete(DeleteArtefact.ClusterLow)
+            line.delete(DeleteArtefact.ClusterHighMidpoint)
+            line.delete(DeleteArtefact.ClusterLowMidpoint)
+
+        // if not na(DeleteArtefact.MatrixProjections)
+        if array.size(DeleteArtefact.MatrixProjections) > 0        
+            for i = 0 to array.size(DeleteArtefact.MatrixProjections)-1
+                CurrentArtefact = array.get(DeleteArtefact.MatrixProjections, i)
+                line.delete(CurrentArtefact.LineObject.Line)
+                label.delete(CurrentArtefact.LineObject.Label)
+
+
+
+
+
+var Quant.SessionObject PreviousBiggestRdr = na
+var Quant.SessionObject BigestRdrInArray = na
+
+if ShowBiggestCluster and array.size(ArrayOfClusterRdrObjects) > 0
+    PreviousBiggestRdr := BigestRdrInArray
+      
+    for i = 0 to array.size(ArrayOfClusterRdrObjects)-1 
+        CurrentRdr = array.get(ArrayOfClusterRdrObjects, i)  
+        if i == 0
+            BigestRdrInArray := array.get(ArrayOfClusterRdrObjects, 0) 
+        else
+            CloseHigh = CurrentRdr.CloseHigh
+            CloseLow = CurrentRdr.CloseLow
+
+            if (CloseHigh - CloseLow) > (BigestRdrInArray.CloseHigh - BigestRdrInArray.CloseLow)
+                BigestRdrInArray := CurrentRdr
+
+
+var ClusterWasInArrayOfFractals = false
+
+if not na(BigestRdrInArray) and not na(PreviousBiggestRdr)
+    PreviousBigestOpenTime = PreviousBiggestRdr.OpenTime
+    CurrentBiggestOpenTime = BigestRdrInArray.OpenTime
+    ClusterWasInArrayOfFractals := false 
+    for i = 0 to array.size(ArrayOfFractalObjects)-1
+        FractalObject = array.get(ArrayOfFractalObjects, i)
+        if PreviousBigestOpenTime == FractalObject.OpenTime
+            if (ShowTuesdayCluster) and str.contains ("Tue", str.format_time(FractalObject.OpenTime, "E"))
+                box.set_bgcolor(FractalObject.ClusterHigh, TuesdayClusterHighColor)
+                box.set_bgcolor(FractalObject.ClusterLow, TuesdayClusterLowColor)
+                box.set_border_color(FractalObject.ClusterHigh, TuesdayClusterHighBorderColor)
+                box.set_border_color(FractalObject.ClusterLow, TuesdayClusterLowBorderColor)
+                line.set_color(FractalObject.ClusterHighMidpoint, TuesdayClusterHighBorderColor)
+                line.set_color(FractalObject.ClusterLowMidpoint, TuesdayClusterLowBorderColor)
+            else
+                box.set_bgcolor(FractalObject.ClusterHigh, ClusterHighColor)
+                box.set_bgcolor(FractalObject.ClusterLow, ClusterLowColor)
+                box.set_border_color(FractalObject.ClusterHigh, ClusterHighBorderColor)
+                box.set_border_color(FractalObject.ClusterLow, ClusterLowBorderColor)
+                line.set_color(FractalObject.ClusterHighMidpoint, ClusterHighBorderColor)
+                line.set_color(FractalObject.ClusterLowMidpoint, ClusterLowBorderColor)
+                
+        if CurrentBiggestOpenTime == FractalObject.OpenTime
+            box.set_bgcolor(FractalObject.ClusterHigh, LargestClusterHighColor)
+            box.set_bgcolor(FractalObject.ClusterLow, LargestClusterLowColor)
+            ClusterWasInArrayOfFractals := true
+
+    if (not ClusterWasInArrayOfFractals) and not na(BigestRdrInArray)
+        OpenTime = BigestRdrInArray.OpenTime
+        High = BigestRdrInArray.HighFractal
+        Low = BigestRdrInArray.LowFractal
+        CloseHigh = BigestRdrInArray.CloseHigh
+        CloseLow = BigestRdrInArray.CloseLow
+
+        box.delete(PreviousBiggestRdr.ClusterHigh)
+        box.delete(PreviousBiggestRdr.ClusterLow)
+        line.delete(PreviousBiggestRdr.ClusterHighMidpoint)
+        line.delete(PreviousBiggestRdr.ClusterLowMidpoint)        
+
+        BigestRdrInArray.ClusterHigh := box.new(OpenTime,High,time,CloseHigh, xloc = xloc.bar_time,border_color = LargestClusterHighBorderColor, bgcolor = LargestClusterHighColor, border_width = 1, text_size = size.auto, text_halign = text.align_right, text_valign = text.align_center, text_color = BoxBull_Border_Color)
+        BigestRdrInArray.ClusterHighMidpoint := line.new(OpenTime, CloseHigh+(High-CloseHigh)/2, time, CloseHigh+(High-CloseHigh)/2, xloc.bar_time, color = LargestClusterHighBorderColor, style = line.style_dashed, width = 1)
+        BigestRdrInArray.ClusterLow := box.new(OpenTime,Low,time,CloseLow, xloc = xloc.bar_time,border_color = LargestClusterLowBorderColor, bgcolor = LargestClusterLowColor, border_width = 1, text_size = size.auto, text_halign = text.align_right, text_valign = text.align_center, text_color = BoxBull_Border_Color)
+        BigestRdrInArray.ClusterLowMidpoint := line.new(OpenTime, CloseLow+(Low-CloseLow)/2, time, CloseLow+(Low-CloseLow)/2, xloc.bar_time, color = LargestClusterLowBorderColor, style = line.style_dashed, width = 1)
+        
+
+
+
+
+
+var array<float> ArrayOfFeigenbaumMalthusianNumbers = array.from(1.6713777,2.5029078,3.5699,4.6692016,7.1398,9.338,14.2796,18.676,28.5592,37.354,57.1184,74.708)
+[High1Min,Low1Min,OpenTime1Min] = request.security_lower_tf(syminfo.tickerid, "1", [high,low,time])
+var bool ShouldColorTimeCandle = false
+var bool ShouldColorTimeCandle4p6 = true
+
+var color TimeCandleColor = na
+
+barcolor(ShouldColorTimeCandle ? TimeCandleColor : na, title="Time Candle Color")
+barcolor(ShouldColorTimeCandle4p6 ? TimeCandleColor4p6 : na, title="Time Candle 4.6 Color")
+ShouldColorTimeCandle := false
+ShouldColorTimeCandle4p6 := false
+
+if array.size(ArrayOfFractalObjects) > 0
+
+    int TimeMidDay = timestamp(Timezone, year, month, dayofmonth, 12+TickerHourOffset, 0, second)
+    if TimeMidDay < time
+        TimeMidDay := TimeMidDay+BaseData.ONE_DAY
+
+    for i = 0 to array.size(ArrayOfFractalObjects)-1
+        CurrentArtefact = array.get(ArrayOfFractalObjects, i)
+
+        if ColorConfirmationCandleDirection            
+            if CurrentArtefact.ConfirmationDirectionDr == "Long"
+                if close < CurrentArtefact.ConfirmationMidpointValue
+                    box.set_bgcolor(CurrentArtefact.ConfirmationCandle, BoxInversion_Fill_Color)
+                    box.set_border_color(CurrentArtefact.ConfirmationCandle, BoxInversion_Border_Color)
+                else
+                    box.set_bgcolor(CurrentArtefact.ConfirmationCandle, BoxBull_Fill_Color)
+                    box.set_border_color(CurrentArtefact.ConfirmationCandle, BoxBull_Border_Color)
+            else if CurrentArtefact.ConfirmationDirectionDr == "Short"
+                if close > CurrentArtefact.ConfirmationMidpointValue
+                    box.set_bgcolor(CurrentArtefact.ConfirmationCandle, BoxInversion_Fill_Color)
+                    box.set_border_color(CurrentArtefact.ConfirmationCandle, BoxInversion_Border_Color) 
+                else
+                    box.set_bgcolor(CurrentArtefact.ConfirmationCandle, BoxBear_Fill_Color)
+                    box.set_border_color(CurrentArtefact.ConfirmationCandle, BoxBear_Border_Color)
+        if ExtendConfirmationCandle and not ExtendAlltoMidDay and not ExtendConfirmationCandlesToMidDay
+            // CurrentArtefact = array.get(ArrayOfFractalObjects, i)
+            box.set_right(CurrentArtefact.ConfirmationCandle, time)
+            line.set_x2(CurrentArtefact.ConfirmationCandleMidline, time)
+
+        if ExtendClustersInRealtime and ShowClusters
+            // for i = 0 to array.size(ArrayOfFractalObjects)-1
+            // CurrentArtefact = array.get(ArrayOfFractalObjects, i)
+            box.set_right(CurrentArtefact.ClusterHigh, time)
+            box.set_right(CurrentArtefact.ClusterLow, time)
+            line.set_x2(CurrentArtefact.ClusterHighMidpoint, time)
+            line.set_x2(CurrentArtefact.ClusterLowMidpoint, time)
+        
+        if ExtendClustersInRealtime and ShowTuesdayCluster and not ShowClusters and not ExtendAlltoMidDay
+            box.set_right(CurrentArtefact.ClusterHigh, time)
+            box.set_right(CurrentArtefact.ClusterLow, time)
+            line.set_x2(CurrentArtefact.ClusterHighMidpoint, time)
+            line.set_x2(CurrentArtefact.ClusterLowMidpoint, time)
+
+
+
+
+        // Mitigation Box Logic
+        if ShowUnmitigatedBox
+            OpenPrice = CurrentArtefact.FractalOpen
+            ClosePrice = CurrentArtefact.FractalClose
+            float RangeClosed = 0.00
+
+            float OpenCloseLow = OpenPrice
+            float OpenCloseHigh = ClosePrice
+
+            if OpenCloseLow > OpenCloseHigh
+                OpenCloseLow := ClosePrice
+                OpenCloseHigh := OpenPrice
+
+            box.set_right(CurrentArtefact.UnmitigatedBox, time)
+            if ShowFractalEq
+                line.set_x2(CurrentArtefact.FractalEq, time)
+
+
+            FractalHighLow = math.abs(OpenPrice-ClosePrice)
+            Eq = OpenCloseLow + FractalHighLow/2
+
+            if CurrentArtefact.FreshFractal
+                if ClosePrice > Eq
+                    CurrentArtefact.FractalEndPriceAboveBelow := "Above"
+                else
+                    CurrentArtefact.FractalEndPriceAboveBelow := "Below" 
+                
+                CurrentArtefact.FreshFractal := false
+
+            if CurrentArtefact.FractalEndPriceAboveBelow == "Above"
+                CurrentArtefact.MaxHighLowValue := math.min(CurrentArtefact.MaxHighLowValue, low)
+                RangeClosedCalc = OpenCloseHigh-CurrentArtefact.MaxHighLowValue
+                CurrentPercent = (RangeClosedCalc/FractalHighLow)
+
+                RangeClosed := math.max(RangeClosed, CurrentPercent)
+                    
+                if RangeClosed > 0 and RangeClosed < 1
+                    if CalculateMitigation
+                        box.set_bottom(CurrentArtefact.UnmitigatedBox, CurrentArtefact.MaxHighLowValue)
+                    if ShowUnmitigatedBoxLabel
+                        box.set_text(CurrentArtefact.UnmitigatedBox, str.tostring(1-RangeClosed, "#.##%"))
+                else
+                    RangeClosed := 1
+                    if DeleteMitigatedBoxes
+                        box.delete(CurrentArtefact.UnmitigatedBox)
+                    else
+                        if CalculateMitigation
+                            if ShowUnmitigatedBoxLabel
+                                box.set_text(CurrentArtefact.UnmitigatedBox, str.tostring(1-RangeClosed, "#.##%"))
+                
+                if low < CurrentArtefact.EqValue
+                    if DeleteMitigated
+                        if ShowFractalEq
+                            line.delete(CurrentArtefact.FractalEq)
+                        if ShowUnmitigatedBoxLabel
+                            box.set_text_color(CurrentArtefact.UnmitigatedBox, MitigatedFractalEqLineColor)
+
+                    else
+                        if ShowFractalEq
+                            line.set_color(CurrentArtefact.FractalEq, MitigatedFractalEqLineColor)
+                        if ShowUnmitigatedBoxLabel     
+                            box.set_text_color(CurrentArtefact.UnmitigatedBox, MitigatedFractalEqLineColor)
+            else // Below
+                CurrentArtefact.MaxHighLowValue := math.max(CurrentArtefact.MaxHighLowValue, high)
+                RangeClosedCalc = CurrentArtefact.MaxHighLowValue-OpenCloseLow
+                CurrentPercent = (RangeClosedCalc/FractalHighLow)
+
+                RangeClosed := math.max(RangeClosed, CurrentPercent)
+                    
+                if RangeClosed > 0 and RangeClosed < 1
+                    if CalculateMitigation
+                        box.set_bottom(CurrentArtefact.UnmitigatedBox, CurrentArtefact.MaxHighLowValue)
+                    if ShowUnmitigatedBoxLabel 
+                        box.set_text(CurrentArtefact.UnmitigatedBox, str.tostring(1-RangeClosed, "#.##%"))
+                else
+                    RangeClosed := 1
+                    if DeleteMitigatedBoxes
+                        box.delete(CurrentArtefact.UnmitigatedBox)
+                    else
+                        if CalculateMitigation
+                            if ShowUnmitigatedBoxLabel   
+                                box.set_text(CurrentArtefact.UnmitigatedBox, str.tostring(1-RangeClosed, "#.##%"))                
+
+
+                if high > CurrentArtefact.EqValue
+                    if DeleteMitigated
+                        if ShowFractalEq
+                            line.delete(CurrentArtefact.FractalEq)
+                        if ShowUnmitigatedBoxLabel
+                            box.set_text_color(CurrentArtefact.UnmitigatedBox, MitigatedFractalEqLineColor)
+
+                    else
+                        if ShowFractalEq
+                            line.set_color(CurrentArtefact.FractalEq, MitigatedFractalEqLineColor)
+                        if ShowUnmitigatedBoxLabel     
+                            box.set_text_color(CurrentArtefact.UnmitigatedBox, MitigatedFractalEqLineColor)                
+
+
+
+            box.set_right(CurrentArtefact.UnmitigatedBox, time)
+            if ShowFractalEq
+                line.set_x2(CurrentArtefact.FractalEq, time)
+
+
+        // { START  Time Based Fib
+        TimeBasedObject = CurrentArtefact.TimeProjections
+        if ShowTimeCandles and CurrentArtefact.TimeProjections.ShouldProcess
+            CurrentArtefact.TimeProjections.ShouldProcess := false
+
+
+            ExecuteTimeCandleCalc := true
+            if TimeBasedObject.Confirmed and not(TimeBasedObject.Drawn)
+                for j = 0 to array.size(ArrayOfFeigenbaumMalthusianNumbers)-1
+
+
+                    CurrentFib = array.get(ArrayOfFeigenbaumMalthusianNumbers, j)
+                    Range = TimeBasedObject.ConfirmationTime-CurrentArtefact.OpenTime
+                    Time = math.round(CurrentArtefact.OpenTime+Range*CurrentFib)
+                    
+
+                    color Color = color.blue
+                    if j == 3
+                        Color := color.red
+
+                    bool WithinSession = false
+                    if Time <= CurrentArtefact.OpenTime+BaseData.ONE_DAY
+                        WithinSession := true
+
+
+                    line VerticalLine = na
+                    if ShowTimeLines and WithinSession 
+                        VerticalLine := line.new(Time,high,Time,low, extend=extend.both, color=Color, width=1, xloc=xloc.bar_time)
+
+                    ProjectonTime = Quant.ProjectionTime.new(Time, WithinSession, VerticalLine,true,na,na,na,false,CurrentFib)
+                    array.push(TimeBasedObject.ProjectionTimes, ProjectonTime)
+                TimeBasedObject.Drawn := true 
+
+        if TimeBasedObject.Drawn
+
+            if array.size(TimeBasedObject.ProjectionTimes) > 0
+
+                ProjectionTimeObject = TimeBasedObject.ProjectionTimes
+                TableIndex = 0 
+                for j = 0 to array.size(ProjectionTimeObject)-1
+                    CurrentObject = array.get(ProjectionTimeObject, j)
+
+                    if CurrentObject.WithinSession and j < array.size(ProjectionTimeObject)-1                                    
+                        Time = array.get(ProjectionTimeObject, j).Time
+                        TimeNext = array.get(ProjectionTimeObject, j+1).Time
+                        TableIndex := TableIndex+1
+
+                        if array.size(OpenTime1Min) > 0
+                            for k = 0 to array.size(OpenTime1Min)-1
+                                OpenTime1MinInt = array.get(OpenTime1Min, k)
+
+                                if hour(OpenTime1MinInt) == hour(Time) and minute(OpenTime1MinInt) == minute(Time) and dayofmonth(OpenTime1MinInt) == dayofmonth(Time) and not(CurrentObject.HighMidLowDrawn)
+
+                                    High1MinFloat = array.get(High1Min, k)
+                                    Low1MinFloat = array.get(Low1Min, k)
+                                    Midpoint = Low1MinFloat+(High1MinFloat-Low1MinFloat)/2
+
+                                    color ProjectonLineColor = TimeCandleLine
+
+                                    if ColorTimeCandles
+                                        if j == 3
+                                            ShouldColorTimeCandle4p6 := true
+                                            ProjectonLineColor := TimeCandleLine4p6
+                                        else
+                                            ShouldColorTimeCandle := true
+                                            if open < close
+                                                TimeCandleColor := TimeCandleColorUp
+                                            else 
+                                                TimeCandleColor := TimeCandleColorDown
+                                    line High = na
+                                    line Mid = na
+                                    line Low = na
+
+                                    if ExtendTimeCandle
+                                        High := line.new(OpenTime1MinInt,High1MinFloat,TimeNext,High1MinFloat, color=ProjectonLineColor, width=1, xloc=xloc.bar_time)
+                                        Mid := line.new(OpenTime1MinInt,Midpoint,TimeNext,Midpoint, color=ProjectonLineColor, width=1, xloc=xloc.bar_time, style = line.style_dotted)
+                                        Low := line.new(OpenTime1MinInt,Low1MinFloat,TimeNext,Low1MinFloat, color=ProjectonLineColor, width=1, xloc=xloc.bar_time)
+                                        
+                                    CurrentObject.High := High
+                                    CurrentObject.Mid := Mid
+                                    CurrentObject.Low := Low
+                                    CurrentObject.HighMidLowDrawn := true
+
+                TimeBasedObject.TableIndex := TableIndex
+                if TableIndex > 0
+                    if CurrentArtefact.SessionString == "0430-0935"
+                        array.set(ArrayOfTableIndexes, 0, TableIndex)
+                    else if CurrentArtefact.SessionString == "1130-1235"
+                        array.set(ArrayOfTableIndexes, 1, TableIndex)
+                    else if CurrentArtefact.SessionString == "2130-2235"
+                        array.set(ArrayOfTableIndexes, 2, TableIndex)
+
+
+        // } END Time Based Fib
+
+            
+        // Custom Instance Line Extending
+        if ExtendAlltoMidDay or ExtendOpenAndCloseToMidDay and not(ChangeOpenCloseLineToBox)
+            line.set_x2(CurrentArtefact.Open, TimeMidDay)
+            line.set_x2(CurrentArtefact.Close, TimeMidDay)
+        else if ExtendAlltoMidDay or ExtendOpenAndCloseToMidDay and ChangeOpenCloseLineToBox
+            box.set_right(CurrentArtefact.CloseBoxCurrentToExtend.Box, TimeMidDay)
+            line.set_x2(CurrentArtefact.CloseBoxCurrentToExtend.Line, TimeMidDay)
+
+        if ExtendAlltoMidDay or ExtendMidClusterToMidDay
+            box.set_right(CurrentArtefact.ClusterMidpoint.Box, TimeMidDay)
+            line.set_x2(CurrentArtefact.ClusterMidpoint.Line, TimeMidDay)
+        if ExtendAlltoMidDay or ExtendConfirmationCandlesToMidDay
+            box.set_right(CurrentArtefact.ConfirmationCandle, TimeMidDay)
+            line.set_x2(CurrentArtefact.ConfirmationCandleMidline, TimeMidDay)           
+
+
+
+
+
+
+
+if ExtendFractalLinesInRealtime and array.size(ArrayOfFractalObjects) > 0
+    for i = 0 to array.size(ArrayOfFractalObjects)-1
+        CurrentArtefact = array.get(ArrayOfFractalObjects, i)
+        line.set_x2(CurrentArtefact.FractalEq, time)  
+
+
+if AllignFractalsRight and array.size(ArrayOfFractalObjects) > 0
+    for i = 0 to array.size(ArrayOfFractalObjects)-1
+        CurrentArtefact = array.get(ArrayOfFractalObjects, i)
+        line.set_x1(CurrentArtefact.FractalEq, time[20])
+        line.set_x2(CurrentArtefact.FractalEq, time)  
+
+
+
+if array.size(WeeklyLines) > NumberOfSessionsToShow*NumberOfRangeLines
+    CurrentLine = array.shift(WeeklyLines)
+    line.delete(CurrentLine.Line)
+    label.delete(CurrentLine.Label)
+
+
+// // Draw Time Table
+FunctionDrawTable(_Array,_TableIndex,_SessionString,_TableName) =>
+    
+
+    int NumberOfRows = na
+    int Index = na  
+    if array.size(_Array) > 0
+        for i = array.size(_Array)-1 to 0
+            CurrentArtefact = array.get(_Array, i)
+            if CurrentArtefact.SessionString == _SessionString
+                Index := i
+                break
+
+    if not na(Index)
+        CurrentArtefact = array.get(_Array, Index)
+        ObjectIndex = CurrentArtefact.TimeProjections.TableIndex
+        MaxTableIndex = ArrayOfTableIndexes.max()
+
+        TimeBasedObject = CurrentArtefact.TimeProjections
+        if TimeBasedObject.Drawn and not(TimeBasedObject.TableDrawn) 
+            if array.size(TimeBasedObject.ProjectionTimes) > 0
+                ProjectionTimeObject = TimeBasedObject.ProjectionTimes
+
+                NumberOfRows := 0
+                for i = 0 to array.size(ProjectionTimeObject)-1
+                    CurrentObject = array.get(ProjectionTimeObject, i)
+
+                    if CurrentObject.WithinSession and i < array.size(ProjectionTimeObject)-1                               
+                        Time = array.get(ProjectionTimeObject, i).Time
+                        TimeNext = array.get(ProjectionTimeObject, i+1).Time
+
+                        if i == 0
+                            //table.cell(TableTime, 0, 0, "N: " + str.tostring("NA"), text_color = TableTextColorTime, text_size = TableTextSizeTime,text_halign =  text.align_left)
+                            table.cell(TableTime, 0, _TableIndex, _TableName, text_color = TableTextColorTime, text_size = TableTextSizeTime,text_halign =  text.align_left)
+                        table.cell(TableTime, i+1, 0, "T" + str.tostring(i+1), text_color = TableTextColorTime, text_size = TableTextSizeTime,text_halign =  text.align_left)
+                        table.cell(TableTime, i+1, _TableIndex, str.format_time(Time+TickerTimeOffset, "HH:mm"), text_color = TableTextColorTime, text_size = TableTextSizeTime,text_halign =  text.align_left)
+
+                if ObjectIndex < MaxTableIndex  
+                    for i = ObjectIndex to ObjectIndex+(MaxTableIndex-ObjectIndex)-1
+                        table.cell(TableTime, i+1, _TableIndex, "NA", text_color = TableTextColorTime, text_size = TableTextSizeTime,text_halign =  text.align_left)
+
+
+
+plotshape(BullConfirmationMark, color = ConfirmationShapeBullColor, location = location.abovebar, style = shape.circle, title = "Long Confirmation")
+plotshape(BearConfirmationMark, color = ConfirmationShapeBearColor, location = location.belowbar, style = shape.circle, title = "Short Confirmation")
+
+BullConfirmationMark := false
+BearConfirmationMark := false
+
+if  ShowTimeTable
+    if ShowADRQ1Dr
+        FunctionDrawTable(ArrayOfFractalObjects,1,"1845-1935","Alpha")
+    if ShowADRDr
+        FunctionDrawTable(ArrayOfFractalObjects,2,"1930-2030","ADR")
+    if ShowADRQ2Dr
+        FunctionDrawTable(ArrayOfFractalObjects,3,"2130-2220","Bravo")
+    if ShowADRQ3Dr
+        FunctionDrawTable(ArrayOfFractalObjects,4,"2130-2235","CHARLIE")
+    if ShowADRQ4Dr
+        FunctionDrawTable(ArrayOfFractalObjects,5,"0015-0105","Delta")
+    if ShowODRQ1Dr
+        FunctionDrawTable(ArrayOfFractalObjects,6,"0300-0355","Echo")
+    if ShowODRDr
+        FunctionDrawTable(ArrayOfFractalObjects,7,"0300-0400","ODR")
+    if ShowHTF1Dr
+        FunctionDrawTable(ArrayOfFractalObjects,8,"0430-0935","KILO")
+    if ShowODRQ2Dr
+        FunctionDrawTable(ArrayOfFractalObjects,9,"0600-0650","Foxtrot")
+    if ShowRDRQ1Dr
+        FunctionDrawTable(ArrayOfFractalObjects,10,"0845-0935","Golf")
+    if ShowRDRDr
+        FunctionDrawTable(ArrayOfFractalObjects,11,"0930-1030","RDR")
+    if ShowRDRQ2Dr
+        FunctionDrawTable(ArrayOfFractalObjects,12,"1130-1220","Hotel")
+    if ShowHTF2Dr
+        FunctionDrawTable(ArrayOfFractalObjects,15,"1130-1235","LIMA")
+    if ShowRDRQ3Dr
+        FunctionDrawTable(ArrayOfFractalObjects,13,"1130-1235","India")
+    if ShowRDRQ4Dr
+        FunctionDrawTable(ArrayOfFractalObjects,14,"1415-1505","Juliet")
+
+
+
+
+if ArrayOfFractalObjects.size() > 0
+    if ExtendRangeProjection != "EndOfSession" 
+        for i = 0 to ArrayOfFractalObjects.size()-1
+            Object = ArrayOfFractalObjects.get(i)
+
+            int ExtendTime = na
+            if ExtendRangeProjection == "OneDay" and barstate.isfirst
+                ExtendTime := Object.OpenTime+BaseData.ONE_DAY
+            else
+                ExtendTime := time
+            
+            if Object.MatrixProjections.size() > 0
+                for j = 0 to Object.MatrixProjections.size()-1
+                    Projection = Object.MatrixProjections.get(j)
+                    line.set_x2(Projection.LineObject.Line ,ExtendTime)
+                    label.set_x(Projection.LineObject.Label ,ExtendTime)
+
+    if ShowPriceTimeOverlapLabels and barstate.islast and ExecuteTimeCandleCalc
+        ExecuteTimeCandleCalc := false
+        for i = 0 to ArrayOfFractalObjects.size()-1
+            Object = ArrayOfFractalObjects.get(i)
+            if Object.MatrixProjections.size() > 0 and Object.TimeProjections.ProjectionTimes.size() > 0
+                for j = 0 to  Object.TimeProjections.ProjectionTimes.size()-1
+                    TimeObject = Object.TimeProjections.ProjectionTimes.get(j)
+                    for k = 0 to Object.MatrixProjections.size()-1
+                        MatrixObject =  Object.MatrixProjections.get(k)
+                        if Object.TimeProjections.ProjectionTimes.size() > 0
+                            if math.abs(MatrixObject.Value) == TimeObject.Value
+                                label.new(TimeObject.Time,MatrixObject.PriceValue,str.tostring(math.round(TimeObject.Value*100)/100), xloc.bar_time, style = label.style_label_center, color =color.new(color.green, 100), textcolor = ProjectionLinesColor, size = size.small)
+
+
+            // if Object.TimeProjections.ProjectionTimes.size() > 0
+            //     table.cell(Table1, 0, 20, ": " + str.format_time(Object.TimeProjections.ProjectionTimes.get(0).Time, "d-M-yy HH:mm"), text_color = TableTextColor1, text_size = TableTextSize1,text_halign =  text.align_left)
+            //     table.cell(Table1, 0, 21, ": " + str.tostring(Object.TimeProjections.ProjectionTimes.get(0).Value), text_color = TableTextColor1, text_size = TableTextSize1,text_halign =  text.align_left)
+
+
+
+// START HTF Liquidity
+
+isBuVI(index) =>
+    (open[index] > close[index+1] and low[index] <= high[index+1] and close[index] > close[index+1] and open[index] > open[index+1])
+
+isBeVI(index) =>
+    (open[index] < close[index+1] and open[index] < open[index+1] and high[index] >= low[index+1] and close[index] < close[index+1] and close[index] < open[index+1])
+
+isBuGap(index) =>  high[1] < low
+isBeGap(index) =>  low[1] > high
+
+var bool ShouldDrawBullKeyCandle = false
+var bool ShouldDrawBearKeyCandle = false
+
+[PurgeTf_OpenTime,PurgeTf_HighValue, PurgeTf_LowValue,PurgeTf_CloseTime] = request.security(syminfo.tickerid, LiquidityTimeframe, [time, high, low, time_close], barmerge.gaps_off, barmerge.lookahead_off)
+
+
+if ta.change(time(LiquidityTimeframe)) != 0 and barstate.isconfirmed
+    HighLabel = ""
+    LowLabel = ""
+    if ShowLiquidityTfLabels
+        HighLabel := LiquidityTimeframe+"H" +"/" + str.tostring((time-time)/BaseData.ONE_HOUR, "##.#")
+        LowLabel := LiquidityTimeframe+"L" +"/" + str.tostring((time-time)/BaseData.ONE_HOUR, "##.#")
+
+    HighLine = Quant.CreateLineWithLabel(PurgeTf_CloseTime, PurgeTf_HighValue,PurgeTf_CloseTime+timeframe.in_seconds(LiquidityTimeframe)*1000, LiquidityHighLineColor, LiquidityHighLowStyle, LiquidityHighLowWidth, HighLabel)
+    LowLine = Quant.CreateLineWithLabel(PurgeTf_CloseTime, PurgeTf_LowValue,PurgeTf_CloseTime+timeframe.in_seconds(LiquidityTimeframe)*1000, LiquidityLowLineColor, LiquidityHighLowStyle, LiquidityHighLowWidth, LowLabel)
+    if not ShowLiquidityLines
+        line.delete(HighLine.Line)
+        line.delete(LowLine.Line)
+        if ShowLiquidityTfLabels
+            label.delete(HighLine.Label)
+            label.delete(LowLine.Label)
+    array.push(ArrayOfHtfLiquidity, HtfLiquidity.new(PurgeTf_HighValue,PurgeTf_LowValue, false, false, false, false, HighLine, LowLine,PurgeTf_OpenTime, na, na))
+
+
+
+
+
+
+
+
+var int AlreadyDrawnLabel = na
+
+var float BullLiquidityPurged = na
+var float BearLiquidityPurged = na
+var int CountDays = 0
+
+
+
+if ta.change(time("D")) != 0
+    if CountDays == DaysOfLiquidityForCalculation-1
+        BullLiquidityPurged := 0.0
+        BearLiquidityPurged := 0.0
+        CountDays := 0
+    else
+        CountDays := CountDays + 1
+
+if ArrayOfHtfLiquidity.size() > 0
+    ArrayIndexSize = array.size(ArrayOfHtfLiquidity)-1		
+    for i = 0 to ArrayIndexSize
+        CurrentArtefact = array.get(ArrayOfHtfLiquidity,  i)
+
+        // Key Candle Logic
+        if i == ArrayIndexSize and not CurrentArtefact.BullKeyConfirmed and CurrentArtefact.LowPurged
+            if isBuVI(0) or isBuGap(0)             // open > close[1] and barstate.isconfirmed //open > CurrentArtefact.PurgedHighClose
+                CurrentArtefact.BullKeyConfirmed := true
+                ShouldDrawBullKeyCandle := true
+
+        if i == ArrayIndexSize and not CurrentArtefact.BearKeyConfirmed and CurrentArtefact.HighPurged
+            if isBeVI(0) or isBeGap(0)             //open < close[1] and barstate.isconfirmed // open < CurrentArtefact.PurgedLowClose
+                CurrentArtefact.BearKeyConfirmed := true
+                ShouldDrawBearKeyCandle := true
+
+        // H/L Manipulation        
+        if high > CurrentArtefact.HighValue and not CurrentArtefact.HighPurged
+            CurrentArtefact.HighPurged := true
+            CurrentArtefact.PurgedHighClose := close
+            if RemovePurgedHtfLiquidityLine
+                line.delete(CurrentArtefact.HighLine.Line)
+                label.delete(CurrentArtefact.HighLine.Label)               
+            else
+                line.set_color(CurrentArtefact.HighLine.Line, LiquidityCandleHighPurgedLineColor)
+                label.set_textcolor(CurrentArtefact.HighLine.Label, LiquidityCandleHighPurgedLineColor)
+            
+
+            if ShowPurgeLabel and not (AlreadyDrawnLabel == time)
+                AlreadyDrawnLabel := time
+                BullLiquidityPurged := BullLiquidityPurged + (time-CurrentArtefact.OpenTime)/BaseData.ONE_HOUR
+                array.push(ArrayOfPurgeLabels ,PurgeLabels.new(label.new(time, high,"P" + str.tostring((time-CurrentArtefact.OpenTime)/BaseData.ONE_HOUR, "##.#") + "/" + str.tostring(BullLiquidityPurged, "##.#"), xloc.bar_time, style = label.style_label_down, color =color.new(color.green, 100), textcolor = color.new(color.red, 0), size = size.small),time ))
+        else if low < CurrentArtefact.LowValue and not CurrentArtefact.LowPurged
+            CurrentArtefact.LowPurged := true
+            CurrentArtefact.PurgedLowClose := close
+            if RemovePurgedHtfLiquidityLine
+                line.delete(CurrentArtefact.LowLine.Line)
+                label.delete(CurrentArtefact.LowLine.Label)
+            else
+                line.set_color(CurrentArtefact.LowLine.Line, LiquidityCandleLowPurgedLineColor)
+                label.set_textcolor(CurrentArtefact.LowLine.Label, LiquidityCandleLowPurgedLineColor)
+            if ShowPurgeLabel and not (AlreadyDrawnLabel == time)
+                AlreadyDrawnLabel := time
+                BearLiquidityPurged := BearLiquidityPurged + (time-CurrentArtefact.OpenTime)/BaseData.ONE_HOUR
+                array.push(ArrayOfPurgeLabels ,PurgeLabels.new(label.new(time, low,"P" +  str.tostring((time-CurrentArtefact.OpenTime)/BaseData.ONE_HOUR, "##.#") + "/" + str.tostring(BearLiquidityPurged, "##.#"), xloc.bar_time, style = label.style_label_up, color =color.new(color.green, 100), textcolor = color.new(color.green, 0), size = size.small), time))
+        if ShowOnlyLastHftLowHigh
+            if i == ArrayIndexSize
+                "Do nothing"
+            else
+                line.delete(CurrentArtefact.HighLine.Line)
+                label.delete(CurrentArtefact.HighLine.Label)   
+                line.delete(CurrentArtefact.LowLine.Line)
+                label.delete(CurrentArtefact.LowLine.Label)            
+
+if ArrayOfHtfLiquidity.size() > 0
+    array<HtfLiquidity> NewArray = array.new<HtfLiquidity>()
+
+    for i = 0 to ArrayOfHtfLiquidity.size() - 1
+        Object = ArrayOfHtfLiquidity.get(i)
+        CutoffTime = time - (BaseData.ONE_DAY * LiquidityNumberOfHistoricalHLDaysBack)
+        
+
+
+        if Object.OpenTime < CutoffTime
+            line.delete(Object.HighLine.Line)
+            label.delete(Object.HighLine.Label)
+            line.delete(Object.LowLine.Line)
+            label.delete(Object.LowLine.Label)
+        else
+            array.push(NewArray, Object)
+
+    ArrayOfHtfLiquidity := NewArray
+
+
+
+if ArrayOfPurgeLabels.size() > 0
+    array<PurgeLabels> NewArray = array.new<PurgeLabels>()
+
+    for i = 0 to ArrayOfPurgeLabels.size() - 1
+        Object = ArrayOfPurgeLabels.get(i)
+        CutoffTime = time - (BaseData.ONE_DAY * LiquidityNumberOfHistoricalHLDaysBack)
+        
+
+        if Object.Time < CutoffTime
+            label.delete(Object.Label)
+        else
+            array.push(NewArray, Object)
+
+    ArrayOfPurgeLabels := NewArray
+
+
+if ExtendUnmitigatedHL and array.size(ArrayOfHtfLiquidity) > 0
+    for i = 0 to array.size(ArrayOfHtfLiquidity)-1
+        CurrentArtefact = array.get(ArrayOfHtfLiquidity, i)
+        if not CurrentArtefact.HighPurged
+            line.set_x2(CurrentArtefact.HighLine.Line, time)
+            if ShowLiquidityTfLabels
+                label.set_x(CurrentArtefact.HighLine.Label, time)
+                label.set_text(CurrentArtefact.HighLine.Label, LiquidityTimeframe+"H" +"/" + str.tostring((time-CurrentArtefact.OpenTime)/BaseData.ONE_HOUR, "##.#"))
+        if not CurrentArtefact.LowPurged
+            line.set_x2(CurrentArtefact.LowLine.Line, time)
+            if ShowLiquidityTfLabels
+                label.set_x(CurrentArtefact.LowLine.Label, time)
+                label.set_text(CurrentArtefact.LowLine.Label, LiquidityTimeframe+"L" +"/" + str.tostring((time-CurrentArtefact.OpenTime)/BaseData.ONE_HOUR, "##.#"))         
+
+
+
+
+// END HTF Liquidity
+
+
+
+    
+
+
+// } --------------------- END QUANTUM DR CYCLE Ranges ---------------------
+
+
+
+
+
+

@@ -1,0 +1,892 @@
+//@version=5
+indicator("Session Orderblocks", overlay = true)
+
+// === USER INPUTS ===
+// Session window in exchange (chart) timezone. Format "HHMM-HHMM" e.g. "0700-1100"
+string sessStr   = input.session("0700-1100", "Session window", group="Session")
+
+// Style settings
+bool   showLines      = input.bool(true,  "Show orderblock open-price line", group="Visibility")
+int    lineExtendBars = input.int(5, "Line length (bars)", minval = 0, group="Style")
+
+// Line colors
+color bullLineColor      = input.color(color.new(color.green,  0),  "Bearish OB line",  group="Colors")
+color bearLineColor      = input.color(color.new(color.maroon, 0),  "Bullish OB line",  group="Colors")
+
+// Run line colors (dotted)
+color bullRunLineColor   = input.color(color.new(color.green,  50), "Bearish run line", group="Colors")
+color bearRunLineColor   = input.color(color.new(color.maroon,50), "Bullish run line", group="Colors")
+
+// Box (confirmation candle) settings
+bool   showBullOBBox = input.bool(true,  "Show bearish OB box",   group="Visibility")
+bool   showBearOBBox = input.bool(false, "Show bullish OB box",   group="Visibility")
+color  bullBoxColor  = input.color(color.new(color.green,  0), "Bearish OB box fill", group="Colors")
+color  bearBoxColor  = input.color(color.new(color.maroon, 0), "Bullish OB box fill", group="Colors")
+
+// Run-block box settings
+bool   showBullRunBox = input.bool(true,  "Show bearish RUN box",  group="Visibility")
+bool   showBearRunBox = input.bool(false, "Show bullish RUN box", group="Visibility")
+color  bullRunBoxColor = input.color(color.new(color.green,  20), "Bearish RUN box fill", group="Colors")
+color  bearRunBoxColor = input.color(color.new(color.maroon,20), "Bullish RUN box fill", group="Colors")
+
+// Box (confirmation candle) settings
+int    boxExtendBars  = input.int(20, "Box length (bars)", minval = 1, group="Style")
+int    boxTransp      = input.int(85, "Box transparency %", minval = 0, maxval = 100, group="Style")
+
+// Toggle to extend boxes live
+bool   liveExtendBoxes = input.bool(true, "Extend boxes live", group="Visibility")
+
+// Midpoint line settings
+bool   showMidLine     = input.bool(true, "Show 50% midpoint line", group="Visibility")
+
+// Midpoint line visual settings
+string midLineStyleStr = input.string("dashed", "Midpoint line style", options = ["solid", "dashed", "dotted"], group="Style")
+int    midLineWidth    = input.int(1, "Midpoint line width", minval = 1, maxval = 4, group="Style")
+
+// Open-price line visual settings
+string obOpenStyleStr  = input.string("solid",  "OB open-line style",  options=["solid","dashed","dotted"], group="Style")
+int    obOpenWidth     = input.int(1, "OB open-line width", minval=1, maxval=4, group="Style")
+
+string runOpenStyleStr = input.string("dotted", "RUN open-line style", options=["solid","dashed","dotted"], group="Style")
+int    runOpenWidth    = input.int(1, "RUN open-line width", minval=1, maxval=4, group="Style")
+
+// Label vertical offset inputs
+int labelOffsetTicks = input.int(5, "Label offset (ticks)", minval = 1, group="Style")
+float labelOff = labelOffsetTicks * syminfo.mintick
+
+// helper to convert style string to line style enum
+fStyle(str)=> str=="solid"?line.style_solid:str=="dashed"?line.style_dashed:line.style_dotted
+
+// Midpoint line colors
+color  bullMidColor    = input.color(color.new(color.green, 50), "Bearish midpoint line color", group="Colors")
+color  bearMidColor    = input.color(color.new(color.maroon,50), "Bullish midpoint line color", group="Colors")
+
+// Propulsion-block visibility
+bool   showBullPropBox = input.bool(true,  "Show bearish propulsion block", group="Visibility")
+bool   showBearPropBox = input.bool(false, "Show bullish propulsion block", group="Visibility")
+
+// Propulsion-block colors
+color  bullPropColor   = input.color(color.new(color.blue,   0), "Bearish propulsion box fill", group="Colors")
+color  bearPropColor   = input.color(color.new(color.orange, 0), "Bullish propulsion box fill", group="Colors")
+
+// ADD: visibility toggles for propulsion blocks off RUN boxes
+bool   showBullRunPropBox = input.bool(true,  "Show bearish RUN propulsion block",  group="Visibility")
+bool   showBearRunPropBox = input.bool(false, "Show bullish RUN propulsion block", group="Visibility")
+
+// --- Invalidated-box settings ---
+bool  showInvalidated    = input.bool(true,  "Show invalidated OBs", group="Visibility")
+int   keepInvalidated    = input.int(5, "Max invalidated boxes to keep", minval = 0, group="Style")
+color invalidatedBullClr = input.color(color.new(color.gray,  50), "Bearish invalidated color", group="Colors")
+color invalidatedBearClr = input.color(color.new(color.gray,  50), "Bullish invalidated color", group="Colors")
+int   invalidatedTransp  = input.int(90, "Invalidated transparency %", minval = 0, maxval = 100, group="Style")
+
+// === HELPER SERIES ===
+// `inSession` is true on bars inside the user-defined session
+bool inSession  = not na(time(timeframe.period, sessStr))
+// Detect first bar of each new session
+bool newSession = inSession and not inSession[1]
+
+// === VARS TO TRACK STATE ACROSS BARS ===
+var float hiHigh    = na
+var float hiLow     = na
+var float hiClose   = na
+var float hiOpen    = na
+var int   hiBarIdx  = na
+var bool  hiCrossed = false
+var line  hiLine    = na
+var box   hiBox     = na
+var int   hiCrossBar = na
+
+var float loLow     = na
+var float loHigh    = na
+var float loClose   = na
+var float loOpen    = na
+var int   loBarIdx  = na
+var bool  loCrossed = false
+var line  loLine    = na
+var box   loBox     = na
+var int   loCrossBar = na
+
+var float hiSeqHigh = na
+var float hiSeqLow  = na
+var float loSeqHigh = na
+var float loSeqLow  = na
+
+var line  hiLineRun   = na
+var line  loLineRun   = na
+var box   hiBoxRun    = na
+var box   loBoxRun    = na
+var float hiSeqLowOpen = na
+var float loSeqHighOpen = na
+
+var int hiSeqStartIdx = na
+var int loSeqStartIdx = na
+
+var int   hiRunLen = na
+var int   loRunLen = na
+
+// Add new vars after runLen vars
+var float hiInvThresh = na
+var float hiRunInvThresh = na
+var float loInvThresh = na
+var float loRunInvThresh = na
+
+// === New vars for Propulsion Blocks ===
+var float hiPropOpen = na
+var float hiPropHigh = na
+var float hiPropLow = na
+var float hiPropClose = na
+var int   hiPropBarIdx = na
+var bool  hiPropConfirmed = false
+var float hiPropInvThresh = na
+var box   hiPropBox = na
+
+var float loPropOpen = na
+var float loPropHigh = na
+var float loPropLow = na
+var float loPropClose = na
+var int   loPropBarIdx = na
+var bool  loPropConfirmed = false
+var float loPropInvThresh = na
+var box   loPropBox = na
+
+// --- Vars for propulsion blocks based on RUN boxes ---
+var float hiRunPropOpen = na
+var float hiRunPropHigh = na
+var float hiRunPropLow  = na
+var float hiRunPropClose = na
+var int   hiRunPropBarIdx = na
+var bool  hiRunPropConfirmed = false
+var float hiRunPropInvThresh = na
+var box   hiRunPropBox = na
+
+var float loRunPropOpen = na
+var float loRunPropHigh = na
+var float loRunPropLow  = na
+var float loRunPropClose = na
+var int   loRunPropBarIdx = na
+var bool  loRunPropConfirmed = false
+var float loRunPropInvThresh = na
+var box   loRunPropBox = na
+
+// Midpoint line handles
+var line hiMidLine = na
+var line hiRunMidLine = na
+var line loMidLine = na
+var line loRunMidLine = na
+var line hiPropMidLine = na
+var line loPropMidLine = na
+var line hiRunPropMidLine = na
+var line loRunPropMidLine = na
+
+// Label handles
+var label hiOBLabel = na
+var label loOBLabel = na
+var label hiRunLabel = na
+var label loRunLabel = na
+
+// Store past invalidated boxes separately for bullish and bearish so each side keeps its own history
+var box[] bullInvBoxes = array.new_box()
+var box[] bearInvBoxes = array.new_box()
+
+// === Helper functions ===
+fExtendVisuals() =>
+    if liveExtendBoxes and showLines
+        if not na(hiLine)
+            line.set_xy2(hiLine, hiBarIdx + boxExtendBars, hiOpen)
+        if not na(loLine)
+            line.set_xy2(loLine, loBarIdx + boxExtendBars, loOpen)
+        if not na(hiLineRun)
+            line.set_xy2(hiLineRun, hiBarIdx + boxExtendBars, hiSeqLowOpen)
+        if not na(loLineRun)
+            line.set_xy2(loLineRun, loBarIdx + boxExtendBars, loSeqHighOpen)
+    if liveExtendBoxes and showMidLine
+        line[] mids = array.from(hiMidLine, loMidLine, hiRunMidLine, loRunMidLine, hiPropMidLine, loPropMidLine, hiRunPropMidLine, loRunPropMidLine)
+        float[] ys  = array.from(hiInvThresh, loInvThresh, hiRunInvThresh, loRunInvThresh, hiPropInvThresh, loPropInvThresh, hiRunPropInvThresh, loRunPropInvThresh)
+        for i = 0 to array.size(mids)-1
+            line ln = array.get(mids,i)
+            float yv = array.get(ys,i)
+            if not na(ln)
+                line.set_xy2(ln, bar_index + lineExtendBars, yv)
+    if liveExtendBoxes
+        box[] bxArr = array.from(hiBox, loBox, hiBoxRun, loBoxRun, hiPropBox, loPropBox, hiRunPropBox, loRunPropBox)
+        for i = 0 to array.size(bxArr)-1
+            box bx = array.get(bxArr,i)
+            if not na(bx)
+                box.set_right(bx, bar_index + boxExtendBars)
+    if liveExtendBoxes
+        label[] lbls = array.from(hiOBLabel, loOBLabel, hiRunLabel, loRunLabel)
+        int[] xs = array.from(hiBarIdx, loBarIdx, hiBarIdx, loBarIdx)
+        for i = 0 to array.size(lbls)-1
+            label lb = array.get(lbls,i)
+            if not na(lb)
+                label.set_x(lb, array.get(xs,i) + boxExtendBars)
+
+fMaintainInvalidated() =>
+    if showInvalidated
+        for i = 0 to array.size(bullInvBoxes)-1
+            box b = array.get(bullInvBoxes,i)
+            if not na(b) and liveExtendBoxes
+                box.set_right(b, bar_index + boxExtendBars)
+        for i = 0 to array.size(bearInvBoxes)-1
+            box b = array.get(bearInvBoxes,i)
+            if not na(b) and liveExtendBoxes
+                box.set_right(b, bar_index + boxExtendBars)
+    else
+        while array.size(bullInvBoxes) > 0
+            box bd = array.shift(bullInvBoxes)
+            if not na(bd)
+                box.delete(bd)
+        while array.size(bearInvBoxes) > 0
+            box bd = array.shift(bearInvBoxes)
+            if not na(bd)
+                box.delete(bd)
+
+// === RESET AT START OF EACH SESSION ===
+if newSession
+    // reset price level state
+    hiHigh    := na
+    hiLow     := na
+    hiClose   := na
+    hiOpen    := na
+    hiBarIdx  := na
+    hiCrossed := false
+    loLow     := na
+    loHigh    := na
+    loClose   := na
+    loOpen    := na
+    loBarIdx  := na
+    loCrossed := false
+
+    // delete ALL visuals from prior session
+    if not na(hiLine)
+        line.delete(hiLine)
+    if not na(hiLineRun)
+        line.delete(hiLineRun)
+    if not na(hiBox)
+        box.delete(hiBox)
+    if not na(hiBoxRun)
+        box.delete(hiBoxRun)
+
+    if not na(loLine)
+        line.delete(loLine)
+    if not na(loLineRun)
+        line.delete(loLineRun)
+    if not na(loBox)
+        box.delete(loBox)
+    if not na(loBoxRun)
+        box.delete(loBoxRun)
+
+    // reset handles
+    hiLine := na
+    hiLineRun := na
+    hiBox := na
+    hiBoxRun := na
+    loLine := na
+    loLineRun := na
+    loBox := na
+    loBoxRun := na
+
+    // reset run length trackers
+    hiRunLen := na
+    loRunLen := na
+
+    // in session reset, also reset thresholds
+    hiRunLen := na
+    loRunLen := na
+    hiInvThresh := na
+    hiRunInvThresh := na
+    loInvThresh := na
+    loRunInvThresh := na
+
+    // reset propulsion block state
+    hiPropOpen := na
+    hiPropHigh := na
+    hiPropLow := na
+    hiPropClose := na
+    hiPropBarIdx := na
+    hiPropConfirmed := false
+    hiPropInvThresh := na
+    if not na(hiPropBox)
+        box.delete(hiPropBox)
+    hiPropBox := na
+
+    loPropOpen := na
+    loPropHigh := na
+    loPropLow := na
+    loPropClose := na
+    loPropBarIdx := na
+    loPropConfirmed := false
+    loPropInvThresh := na
+    if not na(loPropBox)
+        box.delete(loPropBox)
+    loPropBox := na
+
+    // clear any pending bullish propulsion candidate
+    hiPropBarIdx := na
+    hiPropConfirmed := false
+    hiPropOpen := na
+    hiPropInvThresh := na
+    if not na(hiPropBox)
+        box.delete(hiPropBox)
+    hiPropBox := na
+
+    // delete midpoint lines
+    if not na(hiMidLine)
+        line.delete(hiMidLine)
+    if not na(hiRunMidLine)
+        line.delete(hiRunMidLine)
+    if not na(loMidLine)
+        line.delete(loMidLine)
+    if not na(loRunMidLine)
+        line.delete(loRunMidLine)
+    if not na(hiPropMidLine)
+        line.delete(hiPropMidLine)
+    if not na(loPropMidLine)
+        line.delete(loPropMidLine)
+    hiMidLine := na
+    hiRunMidLine := na
+    loMidLine := na
+    loRunMidLine := na
+    hiPropMidLine := na
+    loPropMidLine := na
+
+    // delete labels
+    if not na(hiOBLabel)
+        label.delete(hiOBLabel)
+    if not na(loOBLabel)
+        label.delete(loOBLabel)
+    if not na(hiRunLabel)
+        label.delete(hiRunLabel)
+    if not na(loRunLabel)
+        label.delete(loRunLabel)
+    hiOBLabel := na
+    loOBLabel := na
+    hiRunLabel := na
+    loRunLabel := na
+
+    // ADD: reset run propulsion state and visuals
+    hiRunPropOpen := na
+    hiRunPropHigh := na
+    hiRunPropLow := na
+    hiRunPropClose := na
+    hiRunPropBarIdx := na
+    hiRunPropConfirmed := false
+    hiRunPropInvThresh := na
+    if not na(hiRunPropBox)
+        box.delete(hiRunPropBox)
+    hiRunPropBox := na
+
+    loRunPropOpen := na
+    loRunPropHigh := na
+    loRunPropLow := na
+    loRunPropClose := na
+    loRunPropBarIdx := na
+    loRunPropConfirmed := false
+    loRunPropInvThresh := na
+    if not na(loRunPropBox)
+        box.delete(loRunPropBox)
+    loRunPropBox := na
+
+    // delete run-prop midpoint lines
+    if not na(hiRunPropMidLine)
+        line.delete(hiRunPropMidLine)
+    if not na(loRunPropMidLine)
+        line.delete(loRunPropMidLine)
+    hiRunPropMidLine := na
+    loRunPropMidLine := na
+
+// === UPDATE EXTREMES WITHIN SESSION ===
+if inSession
+    // Highest HIGH on an up-close candle
+    if close > open and not hiCrossed
+        if na(hiClose) or close > hiClose
+            hiHigh   := high
+            hiLow    := low
+            hiClose  := close
+            hiOpen   := open
+            hiBarIdx := bar_index
+            // reset invalidation state for bullish OB and compute run extremes
+            hiCrossed := false
+            hiCrossBar := na  // clear prior crossover so old bar loses colour
+
+            // --- compute consecutive up-close sequence ending here ---
+            float seqHigh = high
+            float seqLow  = low
+            int   back    = 1
+            bool  cont    = true
+            while cont and back <= bar_index
+                cont := close[back] > open[back]
+                if cont
+                    seqHigh := math.max(seqHigh, high[back])
+                    seqLow  := math.min(seqLow,  low[back])
+                    back += 1
+            hiSeqHigh := seqHigh
+            hiSeqLow  := seqLow
+            hiSeqStartIdx := hiBarIdx - (back - 1)
+            hiRunLen := back
+
+            // always clear previous bullish visuals before drawing new ones
+            if not na(hiLine)
+                line.delete(hiLine)
+            if not na(hiLineRun)
+                line.delete(hiLineRun)
+            if not na(hiBox)
+                box.delete(hiBox)
+            if not na(hiBoxRun)
+                box.delete(hiBoxRun)
+
+            // draw/open line immediately (optional)
+            if showLines
+                hiLine := line.new(hiBarIdx, hiOpen, hiBarIdx + boxExtendBars, hiOpen, xloc = xloc.bar_index, extend = extend.none, color = bullLineColor, style = fStyle(obOpenStyleStr), width = obOpenWidth)
+                if not na(hiOBLabel)
+                    label.delete(hiOBLabel)
+                hiOBLabel := label.new(hiBarIdx + boxExtendBars, hiOpen + labelOff, "Potential OB", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_right, textcolor=bullLineColor, color=color.new(color.black,100))
+
+            // Capture lowest open in the up-close run
+            float openMin = open
+            for j = 1 to back-1
+                openMin := math.min(openMin, open[j])
+            hiSeqLowOpen := openMin
+            // Draw/run open line
+            if not na(hiLineRun)
+                line.delete(hiLineRun)
+            if hiRunLen > 1 and showLines
+                hiLineRun := line.new(hiSeqStartIdx, hiSeqLowOpen, hiBarIdx + boxExtendBars, hiSeqLowOpen, xloc = xloc.bar_index, extend = extend.none, color = bullRunLineColor, style = fStyle(runOpenStyleStr), width = runOpenWidth)
+                if not na(hiRunLabel)
+                    label.delete(hiRunLabel)
+                hiRunLabel := label.new(hiBarIdx + boxExtendBars, hiSeqLowOpen + labelOff, "CISD", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_right, textcolor=bullRunLineColor, color=color.new(color.black,100))
+            else
+                if not na(hiRunLabel)
+                    label.delete(hiRunLabel)
+                    hiRunLabel := na
+                hiLineRun := na
+
+    // Lowest LOW on a down-close candle
+    if close < open and not loCrossed
+        if na(loClose) or close < loClose
+            loLow   := low
+            loHigh  := high
+            loClose := close
+            loOpen  := open
+            loBarIdx := bar_index
+            // reset invalidation state for bearish OB and compute run extremes
+            loCrossed := false
+            loCrossBar := na
+
+            // --- compute consecutive down-close sequence ending here ---
+            float dSeqHigh = high
+            float dSeqLow  = low
+            int   dBack    = 1
+            bool  dCont    = true
+            while dCont and dBack <= bar_index
+                dCont := close[dBack] < open[dBack]
+                if dCont
+                    dSeqHigh := math.max(dSeqHigh, high[dBack])
+                    dSeqLow  := math.min(dSeqLow,  low[dBack])
+                    dBack += 1
+            loSeqHigh := dSeqHigh
+            loSeqLow  := dSeqLow
+            loSeqStartIdx := loBarIdx - (dBack - 1)
+            loRunLen := dBack
+
+            // clear previous bearish visuals before drawing new ones
+            if not na(loLine)
+                line.delete(loLine)
+            if not na(loLineRun)
+                line.delete(loLineRun)
+            if not na(loBox)
+                box.delete(loBox)
+            if not na(loBoxRun)
+                box.delete(loBoxRun)
+
+            if showLines
+                loLine := line.new(loBarIdx, loOpen, loBarIdx + boxExtendBars, loOpen, xloc = xloc.bar_index, extend = extend.none, color = bearLineColor, style = fStyle(obOpenStyleStr), width = obOpenWidth)
+                if not na(loOBLabel)
+                    label.delete(loOBLabel)
+                loOBLabel := label.new(loBarIdx + boxExtendBars, loOpen + labelOff, "Potential OB", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_right, textcolor=bearLineColor, color=color.new(color.black,100))
+
+            // Capture highest open in down-close run
+            float openMax = open
+            for j = 1 to dBack-1
+                openMax := math.max(openMax, open[j])
+            loSeqHighOpen := openMax
+            if not na(loLineRun)
+                line.delete(loLineRun)
+            if loRunLen > 1 and showLines
+                loLineRun := line.new(loSeqStartIdx, loSeqHighOpen, loBarIdx + boxExtendBars, loSeqHighOpen, xloc = xloc.bar_index, extend = extend.none, color = bearRunLineColor, style = fStyle(runOpenStyleStr), width = runOpenWidth)
+                if not na(loRunLabel)
+                    label.delete(loRunLabel)
+                loRunLabel := label.new(loBarIdx + boxExtendBars, loSeqHighOpen + labelOff, "CISD", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_right, textcolor=bearRunLineColor, color=color.new(color.black,100))
+            else
+                if not na(loRunLabel)
+                    label.delete(loRunLabel)
+                    loRunLabel := na
+                loLineRun := na
+
+// === CHECK STATE CHANGE (CROSS) ===
+// -- Detect CONFIRMATION of bullish OB (price trades below open) --
+if not hiCrossed and not na(hiOpen) and close < hiOpen
+    hiCrossed   := true
+    hiCrossBar  := bar_index // crossing bar index (informational)
+    if showLines and not na(hiOBLabel)
+        label.set_text(hiOBLabel, "OB")
+        label.set_x(hiOBLabel, hiBarIdx + boxExtendBars)
+    // Draw confirmation box now
+    if showBullOBBox and na(hiBox)
+        hiBox := box.new(hiBarIdx, hiHigh, hiBarIdx + boxExtendBars, hiLow, xloc = xloc.bar_index, bgcolor = color.new(bullBoxColor, boxTransp), border_color = bullBoxColor)
+        hiInvThresh := (hiOpen + hiClose) / 2.0
+        if showMidLine
+            if not na(hiMidLine)
+                line.delete(hiMidLine)
+            hiMidLine := line.new(hiBarIdx, hiInvThresh, hiBarIdx + boxExtendBars, hiInvThresh, xloc=xloc.bar_index, extend=extend.none, color=bullMidColor, style=fStyle(midLineStyleStr), width=midLineWidth)
+
+// -- Detect CONFIRMATION of bearish OB (price trades above open) --
+if not loCrossed and not na(loOpen) and close > loOpen
+    loCrossed   := true
+    loCrossBar  := bar_index
+    if showLines and not na(loOBLabel)
+        label.set_text(loOBLabel, "OB")
+        label.set_x(loOBLabel, loBarIdx + boxExtendBars)
+    if showBearOBBox and na(loBox)
+        loBox := box.new(loBarIdx, loHigh, loBarIdx + boxExtendBars, loLow, xloc = xloc.bar_index, bgcolor = color.new(bearBoxColor, boxTransp), border_color = bearBoxColor)
+        loInvThresh := (loOpen + loClose) / 2.0
+        if showMidLine
+            if not na(loMidLine)
+                line.delete(loMidLine)
+            loMidLine := line.new(loBarIdx, loInvThresh, loBarIdx + boxExtendBars, loInvThresh, xloc=xloc.bar_index, extend=extend.none, color=bearMidColor, style=fStyle(midLineStyleStr), width=midLineWidth)
+
+// === EXTEND LINES EACH BAR ===
+// keep lines current by adjusting their right point
+if inSession
+    fExtendVisuals()
+
+// create run box on crossing lowest open (bullish)
+if hiRunLen > 1 and not na(hiSeqLowOpen) and close < hiSeqLowOpen and na(hiBoxRun) and showBullRunBox
+    hiBoxRun := box.new(hiSeqStartIdx, hiSeqHigh, hiBarIdx + boxExtendBars, hiSeqLow, xloc = xloc.bar_index, bgcolor = color.new(bullRunBoxColor, boxTransp), border_color = bullRunBoxColor)
+    hiRunInvThresh := (hiSeqLowOpen + hiClose) / 2.0
+    if showMidLine
+        if not na(hiRunMidLine)
+            line.delete(hiRunMidLine)
+        hiRunMidLine := line.new(hiSeqStartIdx, hiRunInvThresh, hiBarIdx + boxExtendBars, hiRunInvThresh, xloc=xloc.bar_index, extend=extend.none, color=bullMidColor, style=fStyle(midLineStyleStr), width=midLineWidth)
+    if not na(hiRunLabel)
+        label.delete(hiRunLabel)
+    hiRunLabel := na
+
+// bearish run box when price crosses above highest open
+if loRunLen > 1 and not na(loSeqHighOpen) and close > loSeqHighOpen and na(loBoxRun) and showBearRunBox
+    loBoxRun := box.new(loSeqStartIdx, loSeqHigh, loBarIdx + boxExtendBars, loSeqLow, xloc = xloc.bar_index, bgcolor = color.new(bearRunBoxColor, boxTransp), border_color = bearRunBoxColor)
+    loRunInvThresh := (loSeqHighOpen + loClose) / 2.0
+    if showMidLine
+        if not na(loRunMidLine)
+            line.delete(loRunMidLine)
+        loRunMidLine := line.new(loSeqStartIdx, loRunInvThresh, loBarIdx + boxExtendBars, loRunInvThresh, xloc=xloc.bar_index, extend=extend.none, color=bearMidColor, style=fStyle(midLineStyleStr), width=midLineWidth)
+    if not na(loRunLabel)
+        label.delete(loRunLabel)
+    loRunLabel := na
+
+// === PROPULSION BLOCK LOGIC ===
+
+// --- Detect candidate bullish propulsion block (highest-close candle that trades into confirmed bullish OB) ---
+if not na(hiBox) and hiCrossed and not hiPropConfirmed and bar_index > hiCrossBar and close > open
+    bool hitBullOB = (low <= hiHigh and high >= hiLow) and high <= hiHigh
+    if hitBullOB
+        // If no candidate yet, or this candle has a higher close than the current candidate, replace it
+        if na(hiPropBarIdx) or close > hiPropClose
+            hiPropBarIdx := bar_index
+            hiPropOpen   := open
+            hiPropHigh   := high
+            hiPropLow    := low
+            hiPropClose  := close
+            // remove any previously drawn but unconfirmed visuals (none are drawn yet)
+            // keep hiPropConfirmed as false until confirmation condition below
+            hiPropConfirmed := false
+
+// Confirm bullish propulsion block once price trades back below its open
+if not na(hiPropBarIdx) and not hiPropConfirmed and close < hiPropOpen
+    hiPropConfirmed := true
+    if showBullPropBox and na(hiPropBox)
+        hiPropBox := box.new(hiPropBarIdx, hiPropHigh, hiPropBarIdx + boxExtendBars, hiPropLow, xloc = xloc.bar_index, bgcolor = color.new(bullPropColor, boxTransp), border_color = bullPropColor)
+    hiPropInvThresh := (hiPropOpen + hiPropClose) / 2.0
+    if showMidLine
+        if not na(hiPropMidLine)
+            line.delete(hiPropMidLine)
+        hiPropMidLine := line.new(hiPropBarIdx, hiPropInvThresh, hiPropBarIdx + boxExtendBars, hiPropInvThresh, xloc=xloc.bar_index, extend=extend.none, color=bullMidColor, style=fStyle(midLineStyleStr), width=midLineWidth)
+
+// Extend bullish propulsion box
+if liveExtendBoxes and showBullPropBox and not na(hiPropBox)
+    box.set_right(hiPropBox, bar_index + boxExtendBars)
+
+// --- Detect candidate bearish propulsion block (lowest-close candle that trades into confirmed bearish OB) ---
+if not na(loBox) and loCrossed and not loPropConfirmed and bar_index > loCrossBar and close < open
+    bool hitBearOB = (high >= loLow and low <= loHigh) and low >= loLow
+    if hitBearOB
+        if na(loPropBarIdx) or close < loPropClose
+            loPropBarIdx := bar_index
+            loPropOpen   := open
+            loPropHigh   := high
+            loPropLow    := low
+            loPropClose  := close
+            loPropConfirmed := false
+
+// Confirm bearish propulsion block once price trades back above its open
+if not na(loPropBarIdx) and not loPropConfirmed and close > loPropOpen
+    loPropConfirmed := true
+    if showBearPropBox and na(loPropBox)
+        loPropBox := box.new(loPropBarIdx, loPropHigh, loPropBarIdx + boxExtendBars, loPropLow, xloc = xloc.bar_index, bgcolor = color.new(bearPropColor, boxTransp), border_color = bearPropColor)
+    loPropInvThresh := (loPropOpen + loPropClose) / 2.0
+    if showMidLine
+        if not na(loPropMidLine)
+            line.delete(loPropMidLine)
+        loPropMidLine := line.new(loPropBarIdx, loPropInvThresh, loPropBarIdx + boxExtendBars, loPropInvThresh, xloc=xloc.bar_index, extend=extend.none, color=bearMidColor, style=fStyle(midLineStyleStr), width=midLineWidth)
+
+// Extend bearish propulsion box
+if liveExtendBoxes and showBearPropBox and not na(loPropBox)
+    box.set_right(loPropBox, bar_index + boxExtendBars)
+
+// ===== INVALIDATION CHECKS EACH BAR =====
+// invalidate bullish OB if price closes back above 50% body of OB candle
+if not na(hiInvThresh) and close > hiInvThresh and not na(hiBox)
+    // delete bullish visuals
+    if not na(hiLine)
+        line.delete(hiLine)
+
+    if showInvalidated
+        // fade colour, keep visible
+        box.set_bgcolor(hiBox, color.new(invalidatedBullClr, invalidatedTransp))
+        box.set_border_color(hiBox, invalidatedBullClr)
+        array.push(bullInvBoxes, hiBox)
+        // enforce size limit
+        if array.size(bullInvBoxes) > keepInvalidated * 2
+            box old = array.shift(bullInvBoxes)
+            box.delete(old)
+    else
+        box.delete(hiBox)
+    hiBox := na
+    hiLine := na
+    hiInvThresh := na
+    hiCrossed := false
+    hiCrossBar := na
+    // reset bullish tracking so a lower high can be picked as a fresh OB later in session
+    hiHigh := na
+    hiLow := na
+    hiOpen := na
+    hiClose := na
+    hiBarIdx := na
+    hiSeqHigh := na
+    hiSeqLow := na
+    hiSeqLowOpen := na
+    hiRunLen := na
+    // also reset any unconfirmed bullish propulsion candidate
+    hiPropBarIdx := na
+    hiPropConfirmed := false
+    hiPropOpen := na
+    hiPropInvThresh := na
+    if not na(hiPropBox)
+        box.delete(hiPropBox)
+    hiPropBox := na
+
+// invalidate bullish RUN OB if price closes back above its 50% body midpoint
+if not na(hiRunInvThresh) and close > hiRunInvThresh and not na(hiBoxRun)
+    if not na(hiLineRun)
+        line.delete(hiLineRun)
+
+    if showInvalidated
+        box.set_bgcolor(hiBoxRun, color.new(invalidatedBullClr, invalidatedTransp))
+        box.set_border_color(hiBoxRun, invalidatedBullClr)
+        array.push(bullInvBoxes, hiBoxRun)
+        if array.size(bullInvBoxes) > keepInvalidated * 2
+            box old = array.shift(bullInvBoxes)
+            box.delete(old)
+    else
+        box.delete(hiBoxRun)
+    hiBoxRun := na
+    hiLineRun := na
+    hiRunInvThresh := na
+
+// invalidate bearish OB if price closes below 50% body of OB candle
+if not na(loInvThresh) and close < loInvThresh and not na(loBox)
+    // delete bearish visuals
+    if not na(loLine)
+        line.delete(loLine)
+
+    if showInvalidated
+        box.set_bgcolor(loBox, color.new(invalidatedBearClr, invalidatedTransp))
+        box.set_border_color(loBox, invalidatedBearClr)
+        array.push(bearInvBoxes, loBox)
+        if array.size(bearInvBoxes) > keepInvalidated * 2
+            box old = array.shift(bearInvBoxes)
+            box.delete(old)
+    else
+        box.delete(loBox)
+    loBox := na
+    loLine := na
+    loInvThresh := na
+    loCrossed := false
+    loCrossBar := na
+    // reset bearish tracking so a higher low can become new OB within session
+    loLow := na
+    loHigh := na
+    loOpen := na
+    loClose := na
+    loBarIdx := na
+    loSeqHigh := na
+    loSeqLow := na
+    loSeqHighOpen := na
+    loRunLen := na
+    // also reset any unconfirmed bearish propulsion candidate
+    loPropBarIdx := na
+    loPropConfirmed := false
+    loPropOpen := na
+    loPropInvThresh := na
+    if not na(loPropBox)
+        box.delete(loPropBox)
+    loPropBox := na
+
+// invalidate bearish RUN OB if price closes below its 50% body midpoint
+if not na(loRunInvThresh) and close < loRunInvThresh and not na(loBoxRun)
+    if not na(loLineRun)
+        line.delete(loLineRun)
+
+    if showInvalidated
+        box.set_bgcolor(loBoxRun, color.new(invalidatedBearClr, invalidatedTransp))
+        box.set_border_color(loBoxRun, invalidatedBearClr)
+        array.push(bearInvBoxes, loBoxRun)
+        if array.size(bearInvBoxes) > keepInvalidated * 2
+            box old = array.shift(bearInvBoxes)
+            box.delete(old)
+    else
+        box.delete(loBoxRun)
+    loBoxRun := na
+    loLineRun := na
+    loRunInvThresh := na
+
+// invalidate bullish propulsion block if price closes back above its 50% midpoint
+if not na(hiPropInvThresh) and close > hiPropInvThresh and not na(hiPropBox)
+    if showInvalidated
+        box.set_bgcolor(hiPropBox, color.new(invalidatedBullClr, invalidatedTransp))
+        box.set_border_color(hiPropBox, invalidatedBullClr)
+        array.push(bullInvBoxes, hiPropBox)
+        if array.size(bullInvBoxes) > keepInvalidated * 2
+            box old = array.shift(bullInvBoxes)
+            box.delete(old)
+    else
+        box.delete(hiPropBox)
+    hiPropBox := na
+    hiPropInvThresh := na
+    hiPropBarIdx := na
+    hiPropConfirmed := false
+
+// invalidate bearish propulsion block if price closes back below its 50% midpoint
+if not na(loPropInvThresh) and close < loPropInvThresh and not na(loPropBox)
+    if showInvalidated
+        box.set_bgcolor(loPropBox, color.new(invalidatedBearClr, invalidatedTransp))
+        box.set_border_color(loPropBox, invalidatedBearClr)
+        array.push(bearInvBoxes, loPropBox)
+        if array.size(bearInvBoxes) > keepInvalidated * 2
+            box old = array.shift(bearInvBoxes)
+            box.delete(old)
+    else
+        box.delete(loPropBox)
+    loPropBox := na
+    loPropInvThresh := na
+    loPropBarIdx := na
+    loPropConfirmed := false
+
+// keep invalidated boxes extending or purge them depending on toggle
+fMaintainInvalidated()
+
+// ADD: -------- RUN PROPULSION BLOCK LOGIC --------
+// --- Detect candidate bullish RUN propulsion block (first up-close candle that trades into confirmed bullish RUN box) ---
+if hiCrossed and not na(hiBoxRun) and not hiRunPropConfirmed and bar_index > hiCrossBar and close > open
+    bool hitBullRun = (low <= hiSeqHigh and high >= hiSeqLow) and high <= hiSeqHigh
+    if hitBullRun
+        if na(hiRunPropBarIdx) or close > hiRunPropClose
+            hiRunPropBarIdx := bar_index
+            hiRunPropOpen   := open
+            hiRunPropHigh   := high
+            hiRunPropLow    := low
+            hiRunPropClose  := close
+            hiRunPropConfirmed := false
+
+// Confirm bullish RUN propulsion block once price trades back below its open
+if not na(hiRunPropBarIdx) and not hiRunPropConfirmed and close < hiRunPropOpen
+    hiRunPropConfirmed := true
+    if showBullRunPropBox and na(hiRunPropBox)
+        hiRunPropBox := box.new(hiRunPropBarIdx, hiRunPropHigh, hiRunPropBarIdx + boxExtendBars, hiRunPropLow, xloc = xloc.bar_index, bgcolor = color.new(bullPropColor, boxTransp), border_color = bullPropColor)
+    hiRunPropInvThresh := (hiRunPropOpen + hiRunPropClose) / 2.0
+    if showMidLine
+        if not na(hiRunPropMidLine)
+            line.delete(hiRunPropMidLine)
+        hiRunPropMidLine := line.new(hiRunPropBarIdx, hiRunPropInvThresh, hiRunPropBarIdx + boxExtendBars, hiRunPropInvThresh, xloc=xloc.bar_index, extend=extend.none, color=bullMidColor, style=fStyle(midLineStyleStr), width=midLineWidth)
+
+// Extend bullish RUN propulsion box
+if liveExtendBoxes and showBullRunPropBox and not na(hiRunPropBox)
+    box.set_right(hiRunPropBox, bar_index + boxExtendBars)
+
+// --- Detect candidate bearish RUN propulsion block (first down-close candle that trades into confirmed bearish RUN box) ---
+if loCrossed and not na(loBoxRun) and not loRunPropConfirmed and bar_index > loCrossBar and close < open
+    bool hitBearRun = (high >= loSeqLow and low <= loSeqHigh) and low >= loSeqLow
+    if hitBearRun
+        if na(loRunPropBarIdx) or close < loRunPropClose
+            loRunPropBarIdx := bar_index
+            loRunPropOpen   := open
+            loRunPropHigh   := high
+            loRunPropLow    := low
+            loRunPropClose  := close
+            loRunPropConfirmed := false
+
+// Confirm bearish RUN propulsion block once price trades back above its open
+if not na(loRunPropBarIdx) and not loRunPropConfirmed and close > loRunPropOpen
+    loRunPropConfirmed := true
+    if showBearRunPropBox and na(loRunPropBox)
+        loRunPropBox := box.new(loRunPropBarIdx, loRunPropHigh, loRunPropBarIdx + boxExtendBars, loRunPropLow, xloc = xloc.bar_index, bgcolor = color.new(bearPropColor, boxTransp), border_color = bearPropColor)
+    loRunPropInvThresh := (loRunPropOpen + loRunPropClose) / 2.0
+    if showMidLine
+        if not na(loRunPropMidLine)
+            line.delete(loRunPropMidLine)
+        loRunPropMidLine := line.new(loRunPropBarIdx, loRunPropInvThresh, loRunPropBarIdx + boxExtendBars, loRunPropInvThresh, xloc=xloc.bar_index, extend=extend.none, color=bearMidColor, style=fStyle(midLineStyleStr), width=midLineWidth)
+
+// Extend bearish RUN propulsion box
+if liveExtendBoxes and showBearRunPropBox and not na(loRunPropBox)
+    box.set_right(loRunPropBox, bar_index + boxExtendBars)
+
+// ADD: invalidate bullish RUN propulsion block if price closes back above its 50% midpoint
+if not na(hiRunPropInvThresh) and close > hiRunPropInvThresh and not na(hiRunPropBox)
+    if showInvalidated
+        box.set_bgcolor(hiRunPropBox, color.new(invalidatedBullClr, invalidatedTransp))
+        box.set_border_color(hiRunPropBox, invalidatedBullClr)
+        array.push(bullInvBoxes, hiRunPropBox)
+        if array.size(bullInvBoxes) > keepInvalidated * 2
+            box old = array.shift(bullInvBoxes)
+            box.delete(old)
+    else
+        box.delete(hiRunPropBox)
+    hiRunPropBox := na
+    hiRunPropInvThresh := na
+    hiRunPropBarIdx := na
+    hiRunPropConfirmed := false
+
+// ADD: invalidate bearish RUN propulsion block if price closes back below its 50% midpoint
+if not na(loRunPropInvThresh) and close < loRunPropInvThresh and not na(loRunPropBox)
+    if showInvalidated
+        box.set_bgcolor(loRunPropBox, color.new(invalidatedBearClr, invalidatedTransp))
+        box.set_border_color(loRunPropBox, invalidatedBearClr)
+        array.push(bearInvBoxes, loRunPropBox)
+        if array.size(bearInvBoxes) > keepInvalidated * 2
+            box old = array.shift(bearInvBoxes)
+            box.delete(old)
+    else
+        box.delete(loRunPropBox)
+    loRunPropBox := na
+    loRunPropInvThresh := na
+    loRunPropBarIdx := na
+    loRunPropConfirmed := false
+
+// keep invalidated boxes extending or purge them depending on toggle
+fMaintainInvalidated()
+
+// Propulsion-block box visibility
+//     until a new OB is formed or the session resets (handled by fExtendVisuals above)
+
+// Label vertical offset

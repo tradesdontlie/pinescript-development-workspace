@@ -1,0 +1,3033 @@
+//@version=5
+// Version: 1.0.0 | Created: 2025-06-23 14:48:06 | Type: major
+
+//  
+//  ██████   ██   ██    ██████    ██████   ████████  
+// ██        ██   ██   ██    ██  ██           ██     
+// ██  ███   ██   ██   ██    ██  ██           ██     
+// ██   ██   ███████   ██    ██   ██████      ██     
+// ██   ██   ██   ██   ██    ██        ██     ██     
+// ██   ██   ██   ██   ██    ██        ██     ██     
+//  ██████   ██   ██    ██████    ██████      ██     
+//  
+// ██    ██   ██████   ██████   ███████  ███████  ██   ██
+// ██    ██  ██    ██  ██   ██     ██    ██        ██ ██ 
+// ██    ██  ██    ██  ██████      ██    ██████     ███  
+//  ██  ██   ██    ██  ██  ██      ██    ██        ██ ██ 
+//   ████     ██████   ██   ██     ██    ███████  ██   ██
+
+import Trades-Dont-Lie/GhostMMXM_Core/9 as core
+
+// ==========================================
+// HELPER FUNCTIONS (moved here to be available early)
+// ==========================================
+
+// Helper to map string to position constant
+f_to_position(string _pos) =>
+    switch _pos
+        'Top Left' => position.top_left
+        'Top Center' => position.top_center
+        'Top Right' => position.top_right
+        'Middle Left' => position.middle_left
+        'Middle Center' => position.middle_center
+        'Middle Right' => position.middle_right
+        'Bottom Left' => position.bottom_left
+        'Bottom Center' => position.bottom_center
+        => position.bottom_right
+
+// Helper to map string to size constant
+f_to_size(string _sz) =>
+    switch _sz
+        'tiny' => size.tiny
+        'small' => size.small
+        'normal' => size.normal
+        'large' => size.large
+        => size.huge
+
+// Helper to map string to line style constant
+f_to_line_style(string _s) =>
+    switch _s
+        'solid' => line.style_solid
+        'dotted' => line.style_dotted
+        => line.style_dashed
+
+// Helper to map string to label style constant
+f_to_label_style(string _s) =>
+    switch _s
+        'left' => label.style_label_left
+        'right' => label.style_label_right
+        'center' => label.style_label_center
+        'up' => label.style_label_up
+        => label.style_label_down
+
+// CRITICAL: Dynamic array resizing helpers to prevent bounds errors (type-specific)
+f_resizeFloatArray(array<float> arr, int targetSize, float defaultValue) =>
+    currentSize = array.size(arr)
+    if currentSize < targetSize
+        // Add elements directly instead of while loop
+        for i = currentSize to targetSize - 1
+            array.push(arr, defaultValue)
+    else if currentSize > targetSize
+        // Remove elements directly instead of while loop
+        for i = currentSize - 1 to targetSize by -1
+            array.pop(arr)
+    arr
+
+f_resizeBoolArray(array<bool> arr, int targetSize, bool defaultValue) =>
+    currentSize = array.size(arr)
+    if currentSize < targetSize
+        for i = currentSize to targetSize - 1
+            array.push(arr, defaultValue)
+    else if currentSize > targetSize
+        for i = currentSize - 1 to targetSize by -1
+            array.pop(arr)
+    arr
+
+f_resizeStringArray(array<string> arr, int targetSize, string defaultValue) =>
+    currentSize = array.size(arr)
+    if currentSize < targetSize
+        for i = currentSize to targetSize - 1
+            array.push(arr, defaultValue)
+    else if currentSize > targetSize
+        for i = currentSize - 1 to targetSize by -1
+            array.pop(arr)
+    arr
+
+f_resizeIntArray(array<int> arr, int targetSize, int defaultValue) =>
+    currentSize = array.size(arr)
+    if currentSize < targetSize
+        for i = currentSize to targetSize - 1
+            array.push(arr, defaultValue)
+    else if currentSize > targetSize
+        for i = currentSize - 1 to targetSize by -1
+            array.pop(arr)
+    arr
+
+f_resizeLabelArray(array<label> arr, int targetSize) =>
+    currentSize = array.size(arr)
+    if currentSize < targetSize
+        for i = currentSize to targetSize - 1
+            array.push(arr, na)
+    else if currentSize > targetSize
+        for i = currentSize - 1 to targetSize by -1
+            array.pop(arr)
+    arr
+
+f_resizeLineArray(array<line> arr, int targetSize) =>
+    currentSize = array.size(arr)
+    if currentSize < targetSize
+        for i = currentSize to targetSize - 1
+            array.push(arr, na)
+    else if currentSize > targetSize
+        for i = currentSize - 1 to targetSize by -1
+            array.pop(arr)
+    arr
+
+indicator(title = 'TBR Ghost Vortex Beta v0.9', overlay = true, max_boxes_count = 500, max_lines_count = 500, max_labels_count = 500)
+
+// ==========================================
+// INPUT SETTINGS
+// ==========================================
+
+
+// ---- C2 Extension Toggles (Delta Premium/Discount) ----
+C2ExtGrp = 'Delta Settings'
+ShowC2ExtBelowBox = input.bool(true, title = 'Delta Discount', group = C2ExtGrp, inline = 'c2_ext_toggles', tooltip = "Controls Delta Premium/Discount zones. These represent areas beyond the initial C2 cycle range.")
+ShowC2ExtAboveBox = input.bool(true, title = 'Delta Premium', group = C2ExtGrp, inline = 'c2_ext_toggles')
+C2ExtA1Multiplier = input.float(0.03, title = 'Delta size amplifer', group = C2ExtGrp, minval = 0.01, step = 0.01)
+
+// ---- Global Cycle-box Visibility Toggles ----
+CycleBoxDisplay = 'Ghost Box Display'
+ShowWickBoxes = input.bool(true, title = 'Show Wick Boxes', group = CycleBoxDisplay, inline = 'disp_toggles', tooltip = "Controls the visibility of the primary cycle boxes (A1-A5, C2-C4, M2). 'Wick Boxes' are based on the full range of the cycle, 'Body Boxes'are based on the body to body.")
+ShowBodyBoxes = input.bool(false, title = 'Show Body Boxes', group = CycleBoxDisplay, inline = 'disp_toggles')
+
+// ---- Individual Cycle Box Toggles ----
+ShowA1Boxes = input.bool(true, title = 'A1', group = CycleBoxDisplay, inline = 'cycle_toggles1')
+ShowA2Boxes = input.bool(false, title = 'A2', group = CycleBoxDisplay, inline = 'cycle_toggles1')
+ShowA3Boxes = input.bool(false, title = 'A3', group = CycleBoxDisplay, inline = 'cycle_toggles1')
+ShowA4Boxes = input.bool(false, title = 'A4', group = CycleBoxDisplay, inline = 'cycle_toggles1')
+ShowA5Boxes = input.bool(false, title = 'A5', group = CycleBoxDisplay, inline = 'cycle_toggles1')
+ShowC2Boxes = input.bool(true, title = 'C2', group = CycleBoxDisplay, inline = 'cycle_toggles2')
+ShowC3Boxes = input.bool(false, title = 'C3', group = CycleBoxDisplay, inline = 'cycle_toggles2')
+ShowC4Boxes = input.bool(false, title = 'C4', group = CycleBoxDisplay, inline = 'cycle_toggles2')
+ShowM2Boxes = input.bool(false, title = 'M2', group = CycleBoxDisplay, inline = 'cycle_toggles2')
+
+
+// ---- Ghost Projection Line Toggles ----
+GhostLinesGrp = 'Ghost Projection Lines'
+ShowGhostA1 = input.bool(true, title = 'Ghost A1', group = GhostLinesGrp, inline = 'ghost_toggles1', tooltip = "Controls the visibility of the unrealised projection lines based on cycle ranges. These lines update dynamically and when the range is realised it will mitgate the line even outside the session. See previous sessions C3/C4 levels to mitgated to complete that sessions distorbution.")
+ShowGhostA2 = input.bool(false, title = 'Ghost A2', group = GhostLinesGrp, inline = 'ghost_toggles1')
+ShowGhostA3 = input.bool(false, title = 'Ghost A3', group = GhostLinesGrp, inline = 'ghost_toggles1')
+ShowGhostA4 = input.bool(false, title = 'Ghost A4', group = GhostLinesGrp, inline = 'ghost_toggles1')
+ShowGhostA5 = input.bool(false, title = 'Ghost A5', group = GhostLinesGrp, inline = 'ghost_toggles1')
+ShowGhostC2 = input.bool(true, title = 'Ghost C2', group = GhostLinesGrp, inline = 'ghost_toggles2')
+ShowGhostC3 = input.bool(true, title = 'Ghost C3', group = GhostLinesGrp, inline = 'ghost_toggles2')
+ShowGhostC4 = input.bool(true, title = 'Ghost C4', group = GhostLinesGrp, inline = 'ghost_toggles2')
+ShowGhostM2 = input.bool(false, title = 'Ghost M2', group = GhostLinesGrp, inline = 'ghost_toggles3')
+ShowGhostC2ExtLimits = input.bool(true, title = 'C2 Extension Limits', group = GhostLinesGrp, inline = 'ghost_toggles3')
+
+// ---- Doubled Ghost Lines (C3 and C4 only) ----
+ShowGhostC3Doubled = input.bool(false, title = 'Ghost C3 2x', group = GhostLinesGrp, inline = 'ghost_doubled_toggles', tooltip = "Shows doubled C3 ghost lines using 2x the C3 target value.")
+ShowGhostC4Doubled = input.bool(false, title = 'Ghost C4 2x', group = GhostLinesGrp, inline = 'ghost_doubled_toggles')
+
+// ---- Cycle EQ Lines ----
+CycleEqLinesGrp = 'Cycle EQ Lines'
+ShowEqA1 = input.bool(true, title = 'A1 EQ', group = CycleEqLinesGrp, inline = 'eq_toggles1', tooltip = "Controls the visibility of equilibrium (EQ) lines, which represent the 50% level of completed ghost boxes.")
+ShowEqA2 = input.bool(false, title = 'A2 EQ', group = CycleEqLinesGrp, inline = 'eq_toggles1')
+ShowEqA3 = input.bool(false, title = 'A3 EQ', group = CycleEqLinesGrp, inline = 'eq_toggles1')
+ShowEqA4 = input.bool(false, title = 'A4 EQ', group = CycleEqLinesGrp, inline = 'eq_toggles1')
+ShowEqA5 = input.bool(false, title = 'A5 EQ', group = CycleEqLinesGrp, inline = 'eq_toggles1')
+ShowEqC2 = input.bool(true, title = 'C2 EQ', group = CycleEqLinesGrp, inline = 'eq_toggles2')
+ShowEqC3 = input.bool(false, title = 'C3 EQ', group = CycleEqLinesGrp, inline = 'eq_toggles2')
+ShowEqC4 = input.bool(false, title = 'C4 EQ', group = CycleEqLinesGrp, inline = 'eq_toggles2')
+ShowEqM2 = input.bool(false, title = 'M2 EQ', group = CycleEqLinesGrp, inline = 'eq_toggles2')
+ExtendEqLinesToCurrentBar = input.bool(true, title = 'Extend EQ Lines to Current Bar', group = CycleEqLinesGrp)
+
+// ---- Session Toggles ----
+HTFSessionGrp = 'HTF Sessions'
+ShowDaily = input.bool(false, title = 'Daily', group = HTFSessionGrp, inline = 'htf_row1')
+ShowWeekly = input.bool(false, title = 'Weekly', group = HTFSessionGrp, inline = 'htf_row1')
+ShowMonthly = input.bool(false, title = 'Monthly', group = HTFSessionGrp, inline = 'htf_row1')
+
+DRParentSessionGrp = 'DR Parent Sessions'
+ShowADR = input.bool(false, title = 'ADR', group = DRParentSessionGrp, inline = 'dr_parent_row1')
+ShowODR = input.bool(false, title = 'ODR', group = DRParentSessionGrp, inline = 'dr_parent_row1')
+ShowRDR = input.bool(false, title = 'RDR', group = DRParentSessionGrp, inline = 'dr_parent_row1')
+
+ParentSessionGrp = 'Parent Sessions'
+ShowHTF1 = input.bool(false, title = 'Kilo', group = ParentSessionGrp, inline = 'parent_row1')
+ShowHTF2 = input.bool(false, title = 'Lima', group = ParentSessionGrp, inline = 'parent_row1')
+ShowADRQ3 = input.bool(false, title = 'Charlie', group = ParentSessionGrp, inline = 'parent_row1')
+
+IntradaySessionGrp = 'Intraday Sessions'
+ShowAllIntraday = input.bool(true, title = "Show All Intraday", group = IntradaySessionGrp)
+ShowADRQ1 = input.bool(false, title = 'Alpha', group = IntradaySessionGrp, inline = 'intraday_row1')
+ShowADRQ2 = input.bool(false, title = 'Bravo', group = IntradaySessionGrp, inline = 'intraday_row1')
+ShowADRQ4 = input.bool(false, title = 'Delta', group = IntradaySessionGrp, inline = 'intraday_row1')
+ShowODRQ1 = input.bool(false, title = 'Echo', group = IntradaySessionGrp, inline = 'intraday_row2')
+ShowODRQ2 = input.bool(false, title = 'Foxtrot', group = IntradaySessionGrp, inline = 'intraday_row2')
+ShowRDRQ1 = input.bool(false, title = 'Golf', group = IntradaySessionGrp, inline = 'intraday_row2')
+ShowRDRQ2 = input.bool(false, title = 'Hotel', group = IntradaySessionGrp, inline = 'intraday_row3')
+ShowRDRQ3 = input.bool(false, title = 'India', group = IntradaySessionGrp, inline = 'intraday_row3')
+ShowRDRQ4 = input.bool(false, title = 'Juliet', group = IntradaySessionGrp, inline = 'intraday_row3')
+
+// ---- Macro Sessions ----
+MacroSessionGrp = 'Macros'
+
+// RTH and ETH Session Groups
+ShowRTH = input.bool(false, title = 'RTH Sessions (50-10)', group = MacroSessionGrp, inline = 'macro_groups', tooltip = "Controls the visibility of Macro sessions.")
+ShowETH = input.bool(false, title = 'ETH Sessions (20-40)', group = MacroSessionGrp, inline = 'macro_groups')
+
+// Individual Kitt's Macro Sessions
+ShowYankee = input.bool(false, title = 'Yankee', group = MacroSessionGrp, inline = 'kitts_macros')
+ShowZulu = input.bool(false, title = 'Zulu', group = MacroSessionGrp, inline = 'kitts_macros')
+ShowMike = input.bool(false, title = 'Mike', group = MacroSessionGrp, inline = 'kitts_macros2')
+ShowNovember = input.bool(false, title = 'November', group = MacroSessionGrp, inline = 'kitts_macros2')
+
+
+// ---- FVG Settings ----
+FVGSettingsGrp = 'FVG Settings'
+ShowFVGs = input.bool(false, title = 'Show FVGs', group = FVGSettingsGrp, tooltip = "Controls Fair Value Gap (FVG) detection and display. FVGs are price inefficiencies that can act as magnets or areas of future interest.")
+fvgMinTickSize = input.int(4, title = 'Min FVG Size (Ticks)', minval = 1, group = FVGSettingsGrp)
+fvgBullColor = input.color(color.new(color.green, 75), title = 'Bullish FVG Color', group = FVGSettingsGrp, inline = 'fvgcolors')
+fvgBearColor = input.color(color.new(color.red, 75), title = 'Bearish FVG Color', group = FVGSettingsGrp, inline = 'fvgcolors')
+fvgShowOnlyFirstInSession = input.bool(true, title = 'Show Only 1st FVG in Session', group = FVGSettingsGrp)
+fvgShowOnlyFirstInC2Ext = input.bool(true, title = 'Show Only 1st FVG in Delta box.', group = FVGSettingsGrp)
+fvgShowFirstTypeOverall = input.bool(false, title = 'Overall Type Filter', group = FVGSettingsGrp, tooltip = "From original OG GHOST V1: Only show one type (bull OR bear) per session, not both. Prevents mixed FVG types in same session.")
+fvgExtendBoxes = input.bool(false, title = 'Extend FVG Boxes', group = FVGSettingsGrp)
+
+// C2 Extension FVG Colors
+fvgC2ExtBullFillColor = input.color(color.new(color.blue, 85), title = 'Delta Bull FVG Fill', group = FVGSettingsGrp, inline = 'fvg_c2ext_colors')
+fvgC2ExtBullBorderColor = input.color(color.new(color.blue, 100), title = 'Delta Bull FVG Border', group = FVGSettingsGrp, inline = 'fvg_c2ext_colors')
+fvgC2ExtBearFillColor = input.color(color.new(color.orange, 85), title = 'Delta. Bear FVG Fill', group = FVGSettingsGrp, inline = 'fvg_c2ext_colors2')
+fvgC2ExtBearBorderColor = input.color(color.new(color.orange, 100), title = 'Delta Bear FVG Border', group = FVGSettingsGrp, inline = 'fvg_c2ext_colors2')
+
+// ---- FVG Mitigation Settings ----
+EnableFVGMitigation = input.bool(false, title = 'Enable FVG Mitigation', group = FVGSettingsGrp, tooltip = "When enabled, FVGs will be removed when price fills the gap.")
+
+// A5 Size Multiplier
+A5SizeMultiplier = input.float(0.24, title = 'A5 Size Amplifer', minval = 0.01, step = 0.01, group = " Ghost box size amplifers", tooltip = "Allows users to amplify the size of specific ghost boxes (A5, M2, C2). This can be used to project larger or smaller potential ranges.")
+
+// M2 Size Multiplier
+M2SizeMultiplier = input.float(1.0, title = 'M2 Size Amplifer', minval = 0.01, step = 0.01, group = " Ghost box size amplifers")
+
+// C2 Size Multiplier
+C2SizeMultiplier = input.float(1.0, title = 'C2 Size Amplifer', minval = 0.01, step = 0.01, group = " Ghost box size amplifers")
+
+
+// ---- Cycle Box Colors ----
+CycleColorGrp = 'Cycle Box Colors'
+ColorA1Wick = input.color(color.new(color.blue, 80), title = 'A1 Wick', group = CycleColorGrp, inline = 'a1_colors', tooltip = "Customize the colors for each type of cycle box (A1-A5, C2-C4, M2, and C2 Extensions).")
+ColorA1Body = input.color(color.new(color.orange, 80), title = 'A1 Body', group = CycleColorGrp, inline = 'a1_colors')
+ColorC2Wick = input.color(color.new(color.green, 80), title = 'C2 Wick', group = CycleColorGrp, inline = 'c2_colors')
+ColorC2Body = input.color(color.new(color.green, 80), title = 'C2 Body', group = CycleColorGrp, inline = 'c2_colors')
+ColorC3Wick = input.color(color.new(color.purple, 80), title = 'C3 Wick', group = CycleColorGrp, inline = 'c3_colors')
+ColorC3Body = input.color(color.new(color.purple, 80), title = 'C3 Body', group = CycleColorGrp, inline = 'c3_colors')
+ColorC4Wick = input.color(color.new(#007a0c, 80), title = 'C4 Wick', group = CycleColorGrp, inline = 'c4_colors')
+ColorC4Body = input.color(color.new(color.red, 80), title = 'C4 Body', group = CycleColorGrp, inline = 'c4_colors')
+
+// A2-A5 colors (chained cycles)
+ColorA2Wick = input.color(color.new(color.teal, 80), title = 'A2 Wick', group = CycleColorGrp, inline = 'a2_colors')
+ColorA2Body = input.color(color.new(color.teal, 80), title = 'A2 Body', group = CycleColorGrp, inline = 'a2_colors')
+ColorA3Wick = input.color(color.new(color.green, 80), title = 'A3 Wick', group = CycleColorGrp, inline = 'a3_colors')
+ColorA3Body = input.color(color.new(color.green, 80), title = 'A3 Body', group = CycleColorGrp, inline = 'a3_colors')
+ColorA4Wick = input.color(color.new(color.orange, 80), title = 'A4 Wick', group = CycleColorGrp, inline = 'a4_colors')
+ColorA4Body = input.color(color.new(color.orange, 80), title = 'A4 Body', group = CycleColorGrp, inline = 'a4_colors')
+ColorA5Wick = input.color(color.new(color.fuchsia, 80), title = 'A5 Wick', group = CycleColorGrp, inline = 'a5_colors')
+ColorA5Body = input.color(color.new(color.fuchsia, 70), title = 'A5 Body', group = CycleColorGrp, inline = 'a5_colors')
+
+// M2 colors (chained from C2)
+ColorM2Wick = input.color(color.new(color.yellow, 80), title = 'M2 Wick', group = CycleColorGrp, inline = 'm2_colors')
+ColorM2Body = input.color(color.new(color.yellow, 70), title = 'M2 Body', group = CycleColorGrp, inline = 'm2_colors')
+
+// C2 Extension colors (Delta Premium/Discount)
+ColorC2ExtBelow = input.color(color.new(color.navy, 70), title = 'Delta Discount', group = CycleColorGrp, inline = 'c2_ext_colors')
+ColorC2ExtAbove = input.color(color.new(#680000, 70), title = 'Delta Premium', group = CycleColorGrp, inline = 'c2_ext_colors')
+
+// ---- Ghost Projection Colors ----
+GhostColorGrp = 'Ghost Projection Colors'
+ColorA1Ghost = input.color(color.new(color.blue, 70), title = 'A1 Ghost', group = GhostColorGrp, inline = 'g1', tooltip = "Customize the colors for each type of ghost projection line.")
+ColorA2Ghost = input.color(color.new(color.teal, 70), title = 'A2 Ghost', group = GhostColorGrp, inline = 'g1')
+ColorA3Ghost = input.color(color.new(color.green, 70), title = 'A3 Ghost', group = GhostColorGrp, inline = 'g1')
+ColorA4Ghost = input.color(color.new(color.orange, 70), title = 'A4 Ghost', group = GhostColorGrp, inline = 'g1')
+ColorA5Ghost = input.color(color.new(color.fuchsia, 70), title = 'A5 Ghost', group = GhostColorGrp, inline = 'g1')
+ColorC2Ghost = input.color(color.new(color.green, 70), title = 'C2 Ghost', group = GhostColorGrp, inline = 'g2')
+ColorC3Ghost = input.color(color.new(color.purple, 70), title = 'C3 Ghost', group = GhostColorGrp, inline = 'g3')
+ColorC4Ghost = input.color(color.new(#007a0c, 70), title = 'C4 Ghost', group = GhostColorGrp, inline = 'g4')
+ColorM2Ghost = input.color(color.new(color.yellow, 70), title = 'M2 Ghost', group = GhostColorGrp, inline = 'g5')
+
+// ---- Doubled Ghost Colors ----
+ColorC3GhostDoubled = input.color(color.new(color.purple, 50), title = 'C3 2x Ghost', group = GhostColorGrp, inline = 'g_doubled')
+ColorC4GhostDoubled = input.color(color.new(#007a0c, 50), title = 'C4 2x Ghost', group = GhostColorGrp, inline = 'g_doubled')
+
+// ---- Cycle EQ Line Colors ----
+CycleEqColorGrp = 'Cycle EQ Line Colors'
+ColorA1Eq = input.color(color.new(color.blue, 30), title = 'A1 EQ', group = CycleEqColorGrp, inline = 'eq1', tooltip = "Customize the colors for each type of cycle equilibrium (EQ) line and the color for mitigated EQ lines.")
+ColorA2Eq = input.color(color.new(color.teal, 30), title = 'A2 EQ', group = CycleEqColorGrp, inline = 'eq1')
+ColorA3Eq = input.color(color.new(color.green, 30), title = 'A3 EQ', group = CycleEqColorGrp, inline = 'eq1')
+ColorA4Eq = input.color(color.new(color.orange, 30), title = 'A4 EQ', group = CycleEqColorGrp, inline = 'eq1')
+ColorA5Eq = input.color(color.new(color.fuchsia, 30), title = 'A5 EQ', group = CycleEqColorGrp, inline = 'eq1')
+ColorC2Eq = input.color(color.new(color.green, 30), title = 'C2 EQ', group = CycleEqColorGrp, inline = 'eq2')
+ColorC3Eq = input.color(color.new(color.purple, 30), title = 'C3 EQ', group = CycleEqColorGrp, inline = 'eq3')
+ColorC4Eq = input.color(color.new(#007a0c, 30), title = 'C4 EQ', group = CycleEqColorGrp, inline = 'eq4')
+ColorM2Eq = input.color(color.new(color.yellow, 30), title = 'M2 EQ', group = CycleEqColorGrp, inline = 'eq5')
+ColorMitigatedEq = input.color(color.new(color.gray, 80), title = 'Mitigated EQ', group = CycleEqColorGrp, inline = 'eq_mit')
+
+// ---- Ghost Line Appearance ----
+GhostAppearanceGrp = 'Ghost Line Appearance'
+GhostLineStyleInput = input.string('solid', title = 'Line Style', options = ['solid', 'dotted', 'dashed'], group = GhostAppearanceGrp, tooltip = "Controls the visual style (solid, dotted, dashed), width, and label visibility for all ghost projection lines.")
+GhostLineWidth = input.int(3, title = 'Line Width', minval = 1, maxval = 4, group = GhostAppearanceGrp)
+ShowGhostLabels = input.bool(true, title = 'Show Labels', group = GhostAppearanceGrp)
+
+// ---- Ghost Line Label Settings ----
+GhostLabelGrp = 'Ghost Line Label Settings'
+GhostLabelSize = input.string('small', title = 'Label Size', options = ['tiny', 'small', 'normal', 'large', 'huge'], group = GhostLabelGrp, tooltip = "Controls the size, color, position and offset of ghost line labels.")
+GhostLabelPosition = input.string('center', title = 'Label Position', options = ['left', 'right', 'center', 'up', 'down'], group = GhostLabelGrp)
+GhostLabelOffset = input.float(0.5, title = 'Label Offset', minval = 0.0, maxval = 1.0, step = 0.1, group = GhostLabelGrp, tooltip = "Position along the line: 0.0 = start, 0.5 = middle, 1.0 = end")
+GhostLabelColor = input.color(color.rgb(0, 0, 0), title = 'Label Text Color', group = GhostLabelGrp)
+GhostLabelBackgroundColor = input.color(color.new(color.black, 20), title = 'Label Background Color', group = GhostLabelGrp)
+ShowSessionNameInLabel = input.bool(true, title = 'Show Session Name', group = GhostLabelGrp, inline = 'label_content')
+ShowCycleNameInLabel = input.bool(true, title = 'Show Cycle Name', group = GhostLabelGrp, inline = 'label_content')
+ShowPriceInLabel = input.bool(false, title = 'Show Price', group = GhostLabelGrp, inline = 'label_content')
+LabelTextSeparator = input.string(' ', title = 'Text Separator', group = GhostLabelGrp, tooltip = "Character(s) used to separate label components")
+
+// ---- Historical Ghost Lines Settings ----
+HistoryGrp = 'Historical Ghost Lines'
+EnableHistoricalGhosts = input.bool(true, title = 'Enable Historical Ghost Lines', group = HistoryGrp, tooltip = "Manages the display and retention of ghost lines and EQ lines from previous, completed sessions. Allows customization of how long they are kept, their color, and fading behavior.")
+HistoricalGhostDays = input.int(10, title = 'Days to Keep', minval = 1, maxval = 10, group = HistoryGrp, inline = 'hist_settings')
+MaxHistoricalGhosts = input.int(100, title = 'Max Historical Lines', minval = 20, maxval = 500, group = HistoryGrp, inline = 'hist_settings')
+HistoricalGhostColor = input.color(color.new(color.gray, 60), title = 'Historical Ghost Color', group = HistoryGrp, inline = 'hist_colors')
+FadeHistoricalGhosts = input.bool(true, title = 'Fade by Age', group = HistoryGrp, inline = 'hist_colors')
+KeepOriginalColors = input.bool(true, title = 'Keep Original Colors', group = HistoryGrp, inline = 'hist_color_options')
+HistoricalTransparency = input.int(60, title = 'Historical Transparency', minval = 0, maxval = 95, group = HistoryGrp, inline = 'hist_color_options')
+
+// ---- Data Table Settings ----
+TableSettings = 'Data Table Settings'
+ShowDataTable = input.bool(false, title = 'Show Data Table', group = TableSettings, tooltip = "Controls the display of a basic data table showing key target values for active sessions.")
+TablePositionInput = input.string('Bottom Right', 'Table Position', ['Top Left', 'Top Center', 'Top Right', 'Middle Left', 'Middle Center', 'Middle Right', 'Bottom Left', 'Bottom Center', 'Bottom Right'], group = TableSettings)
+TableFontSizeInput = input.string('small', 'Font Size', ['tiny', 'small', 'normal', 'large', 'huge'], group = TableSettings)
+TableBGColor = input.color(color.new(color.black, 80), title = 'Table Background', group = TableSettings)
+TableTextColor = input.color(color.white, title = 'Text Color', group = TableSettings)
+TableBorderColor = input.color(color.white, title = 'Border Color', group = TableSettings)
+
+
+
+// ---- T1/T2 Time Lines Settings ----
+TimelineSettings = 'T1/T2 Time Lines'
+ShowTimeLines = input.bool(true, title = 'Show T1/T2 Time Lines', group = TimelineSettings, tooltip = "Controls the visibility and appearance of T1 (Manipulation) and T2 (Distribution) vertical time lines. These lines mark key time points within active sessions, derived from the session's start time and specific target durations.")
+ShowTimeLabels = input.bool(true, title = 'Show Time Labels', group = TimelineSettings, inline = 'timeline_options')
+ShowOnlyActiveSessionTimelines = input.bool(true, title = 'Only Active Sessions', group = TimelineSettings, inline = 'timeline_options')
+T1LineColor = input.color(#5c5c5ccc, title = 'T1 (Manipulation) Color', group = TimelineSettings, inline = 'timeline_colors')
+T2LineColor = input.color(color.rgb(82, 83, 82, 20), title = 'T2 (Distribution) Color', group = TimelineSettings, inline = 'timeline_colors')
+
+// Additional T1/T2 line style settings
+T1LineStyleInput = input.string('dotted', title = 'T1 Line Style', options = ['solid', 'dotted', 'dashed'], group = TimelineSettings, inline = 'timeline_styles')
+T2LineStyleInput = input.string('dotted', title = 'T2 Line Style', options = ['solid', 'dotted', 'dashed'], group = TimelineSettings, inline = 'timeline_styles')
+T1LineWidth = input.int(1, title = 'T1 Line Width', minval = 1, maxval = 4, group = TimelineSettings, inline = 'timeline_widths')
+T2LineWidth = input.int(1, title = 'T2 Line Width', minval = 1, maxval = 4, group = TimelineSettings, inline = 'timeline_widths')
+TimelineLabelSize = input.string('small', title = 'Label Size', options = ['tiny', 'small', 'normal', 'large', 'huge'], group = TimelineSettings)
+
+// Convert style strings to constants
+var _t1LineStyleConst = f_to_line_style(T1LineStyleInput)
+var _t2LineStyleConst = f_to_line_style(T2LineStyleInput)
+var _timelineLabelSizeConst = f_to_size(TimelineLabelSize)
+
+// ==========================================
+// SESSION CONFIGURATIONS
+// ==========================================
+
+// All session configurations now handled by the library
+
+// Session end time constants (Alpha through Lima + TBR sessions)
+const int s1_ADRQ1_END_HOUR_CONST = 21
+const int s1_ADRQ1_END_MINUTE_CONST = 15
+const int s3_ADRQ2_END_HOUR_CONST = 0
+const int s3_ADRQ2_END_MINUTE_CONST = 0
+const int s2_ADR_END_HOUR_CONST = 2
+const int s2_ADR_END_MINUTE_CONST = 0
+const int s4_ADRQ3_END_HOUR_CONST = 2
+const int s4_ADRQ3_END_MINUTE_CONST = 45
+const int s5_ADRQ4_END_HOUR_CONST = 2
+const int s5_ADRQ4_END_MINUTE_CONST = 45
+const int s6_ODRQ1_END_HOUR_CONST = 5
+const int s6_ODRQ1_END_MINUTE_CONST = 45
+const int s7_ODR_END_HOUR_CONST = 8
+const int s7_ODR_END_MINUTE_CONST = 30
+const int s8_HTF1_END_HOUR_CONST = 16
+const int s8_HTF1_END_MINUTE_CONST = 0
+const int s9_ODRQ2_END_HOUR_CONST = 8
+const int s9_ODRQ2_END_MINUTE_CONST = 15
+const int s10_RDRQ1_END_HOUR_CONST = 11
+const int s10_RDRQ1_END_MINUTE_CONST = 15
+const int s11_RDR_END_HOUR_CONST = 16
+const int s11_RDR_END_MINUTE_CONST = 0
+const int s12_RDRQ2_END_HOUR_CONST = 14
+const int s12_RDRQ2_END_MINUTE_CONST = 0
+const int s13_RDRQ3_END_HOUR_CONST = 14
+const int s13_RDRQ3_END_MINUTE_CONST = 45
+const int s14_HTF2_END_HOUR_CONST = 16
+const int s14_HTF2_END_MINUTE_CONST = 45
+const int s15_RDRQ4_END_HOUR_CONST = 16
+const int s15_RDRQ4_END_MINUTE_CONST = 45
+const int s16_DAILY_END_HOUR_CONST = 18
+const int s16_DAILY_END_MINUTE_CONST = 0
+const int s17_WEEKLY_END_HOUR_CONST = 18
+const int s17_WEEKLY_END_MINUTE_CONST = 0
+const int s18_MONTHLY_END_HOUR_CONST = 18
+const int s18_MONTHLY_END_MINUTE_CONST = 0
+
+// ==========================================
+// HELPER FUNCTIONS
+// ==========================================
+
+var _tablePositionConst = f_to_position(TablePositionInput)
+var _tableTextSizeConst = f_to_size(TableFontSizeInput)
+var _ghostLineStyleConst = f_to_line_style(GhostLineStyleInput)
+var _ghostLabelStyleConst = f_to_label_style(GhostLabelPosition)
+
+
+
+// ==========================================
+// SESSION SETUP
+// ==========================================
+
+// Initialize session configurations using the library
+var array<core.SessionConfig> SESSION_CFGS = array.new<core.SessionConfig>()
+var array<core.SessionState> SESSION_STATES = array.new<core.SessionState>()
+
+// ---- Ghost Line Price Tracking for Mitigation (Wick-based) ----
+var array<float> ghostA1UpPrices = array.new<float>()
+var array<float> ghostA1DownPrices = array.new<float>()
+var array<float> ghostC2UpPrices = array.new<float>()
+var array<float> ghostC2DownPrices = array.new<float>()
+var array<float> ghostC3UpPrices = array.new<float>()
+var array<float> ghostC3DownPrices = array.new<float>()
+var array<float> ghostC4UpPrices = array.new<float>()
+var array<float> ghostC4DownPrices = array.new<float>()
+var array<float> ghostC2ExtLimitUpperPrices = array.new<float>()
+var array<float> ghostC2ExtLimitLowerPrices = array.new<float>()
+
+// ---- Doubled Ghost Line Price Tracking (Wick-based) ----
+var array<float> ghostC3DoubledUpPrices = array.new<float>()
+var array<float> ghostC3DoubledDownPrices = array.new<float>()
+var array<float> ghostC4DoubledUpPrices = array.new<float>()
+var array<float> ghostC4DoubledDownPrices = array.new<float>()
+
+// ---- Ghost Line Price Tracking for Mitigation (Body-based) ----
+var array<float> ghostA1UpPricesBody = array.new<float>()
+var array<float> ghostA1DownPricesBody = array.new<float>()
+var array<float> ghostC2UpPricesBody = array.new<float>()
+var array<float> ghostC2DownPricesBody = array.new<float>()
+var array<float> ghostC3UpPricesBody = array.new<float>()
+var array<float> ghostC3DownPricesBody = array.new<float>()
+var array<float> ghostC4UpPricesBody = array.new<float>()
+var array<float> ghostC4DownPricesBody = array.new<float>()
+
+// ---- Ghost Line Label Storage (Wick-based) ----
+var array<label> ghostA1UpLabels = array.new<label>()
+var array<label> ghostA1DownLabels = array.new<label>()
+var array<label> ghostC2UpLabels = array.new<label>()
+var array<label> ghostC2DownLabels = array.new<label>()
+var array<label> ghostC3UpLabels = array.new<label>()
+var array<label> ghostC3DownLabels = array.new<label>()
+var array<label> ghostC4UpLabels = array.new<label>()
+var array<label> ghostC4DownLabels = array.new<label>()
+var array<label> ghostC2ExtLimitUpperLabels = array.new<label>()
+var array<label> ghostC2ExtLimitLowerLabels = array.new<label>()
+
+// ---- Ghost Line Label Storage (Body-based) ----
+var array<label> ghostA1UpLabelsBody = array.new<label>()
+var array<label> ghostA1DownLabelsBody = array.new<label>()
+var array<label> ghostC2UpLabelsBody = array.new<label>()
+var array<label> ghostC2DownLabelsBody = array.new<label>()
+var array<label> ghostC3UpLabelsBody = array.new<label>()
+var array<label> ghostC3DownLabelsBody = array.new<label>()
+var array<label> ghostC4UpLabelsBody = array.new<label>()
+var array<label> ghostC4DownLabelsBody = array.new<label>()
+
+// ---- Additional Ghost Line Label Storage ----
+var array<label> ghostA2UpLabels = array.new<label>()
+var array<label> ghostA2DownLabels = array.new<label>()
+var array<label> ghostA3UpLabels = array.new<label>()
+var array<label> ghostA3DownLabels = array.new<label>()
+var array<label> ghostA4UpLabels = array.new<label>()
+var array<label> ghostA4DownLabels = array.new<label>()
+var array<label> ghostA5UpLabels = array.new<label>()
+var array<label> ghostA5DownLabels = array.new<label>()
+var array<label> ghostM2UpLabels = array.new<label>()
+var array<label> ghostM2DownLabels = array.new<label>()
+
+// ---- Doubled Ghost Line Label Storage ----
+var array<label> ghostC3DoubledUpLabels = array.new<label>()
+var array<label> ghostC3DoubledDownLabels = array.new<label>()
+var array<label> ghostC4DoubledUpLabels = array.new<label>()
+var array<label> ghostC4DoubledDownLabels = array.new<label>()
+
+// ---- Doubled Ghost Line Objects (separate from SessionState) ----
+var array<line> ghostC3DoubledUpLines = array.new<line>()
+var array<line> ghostC3DoubledDownLines = array.new<line>()
+var array<line> ghostC4DoubledUpLines = array.new<line>()
+var array<line> ghostC4DoubledDownLines = array.new<line>()
+
+// ---- Cycle EQ Line Storage ----
+var array<line> eqA1Lines = array.new<line>()
+var array<line> eqA2Lines = array.new<line>()
+var array<line> eqA3Lines = array.new<line>()
+var array<line> eqA4Lines = array.new<line>()
+var array<line> eqA5Lines = array.new<line>()
+var array<line> eqC2Lines = array.new<line>()
+var array<line> eqC3Lines = array.new<line>()
+var array<line> eqC4Lines = array.new<line>()
+var array<line> eqM2Lines = array.new<line>()
+
+var array<float> eqA1Values = array.new<float>()
+var array<float> eqA2Values = array.new<float>()
+var array<float> eqA3Values = array.new<float>()
+var array<float> eqA4Values = array.new<float>()
+var array<float> eqA5Values = array.new<float>()
+var array<float> eqC2Values = array.new<float>()
+var array<float> eqC3Values = array.new<float>()
+var array<float> eqC4Values = array.new<float>()
+var array<float> eqM2Values = array.new<float>()
+
+// ---- FVG Tracking ----
+var array<box> fvgBoxes = array.new<box>()
+var array<float> fvgTops = array.new<float>()
+var array<float> fvgBottoms = array.new<float>()
+var array<bool> fvgTypes = array.new<bool>()
+var array<int> fvgTimes = array.new<int>()
+var array<string> fvgSessionNames = array.new<string>()
+var array<int> fvgDays = array.new<int>()
+var array<color> fvgOriginalColors = array.new<color>()
+
+// ---- Session FVG Migration Tracking ----
+var array<int> lastSessionStartTimes = array.new<int>()
+
+
+
+// ---- Permanent Mitigation Tracking (prevents recreation after mitigation) ----
+var array<bool> mitigatedA1 = array.new<bool>()
+var array<bool> mitigatedC2 = array.new<bool>()
+var array<bool> mitigatedC3 = array.new<bool>()
+var array<bool> mitigatedC4 = array.new<bool>()
+var array<bool> mitigatedC2ExtLimits = array.new<bool>()
+var array<bool> mitigatedA2 = array.new<bool>()
+var array<bool> mitigatedA3 = array.new<bool>()
+var array<bool> mitigatedA4 = array.new<bool>()
+var array<bool> mitigatedA5 = array.new<bool>()
+var array<bool> mitigatedM2 = array.new<bool>()
+
+// ---- Session Tracking ----
+var array<int> sessionStartTimes = array.new<int>()  // For sorting newest sessions first
+var array<bool> sessionRecentlyEnded = array.new<bool>()  // Track recently ended sessions
+
+
+
+// ---- Doubled Ghost Line Mitigation Tracking ----
+var array<bool> mitigatedC3Doubled = array.new<bool>()
+var array<bool> mitigatedC4Doubled = array.new<bool>()
+
+// ---- Historical Ghost Line Storage ----
+var array<line> historicalGhostLines = array.new<line>()
+var array<float> historicalGhostPrices = array.new<float>()
+var array<string> historicalGhostTypes = array.new<string>()
+var array<string> historicalSessionNames = array.new<string>()
+var array<int> historicalGhostTimes = array.new<int>()
+var array<int> historicalGhostDays = array.new<int>()
+var array<color> historicalGhostOriginalColors = array.new<color>()
+var array<label> historicalGhostLabels = array.new<label>()
+
+// ---- Historical EQ Line Storage ----
+var array<line> historicalEqLines = array.new<line>()
+var array<float> historicalEqValues = array.new<float>()
+var array<string> historicalEqTypes = array.new<string>()
+var array<string> historicalEqSessionNames = array.new<string>()
+var array<int> historicalEqTimes = array.new<int>()
+var array<int> historicalEqDays = array.new<int>()
+var array<color> historicalEqOriginalColors = array.new<color>()
+
+// Track which sessions have already stored historical lines
+var array<bool> sessionHistoricalStored = array.new<bool>()
+
+// Track which sessions have already plotted T1/T2 time lines for current session instance
+var array<bool> sessionTimeLinePlotted = array.new<bool>()
+
+if barstate.isfirst
+    // Create all session configurations (Alpha through Lima + TBR sessions) with hardcoded times
+    array.push(SESSION_CFGS, core.newSessionConfig('Alpha', '18:45-21:15', ShowADRQ1 or ShowAllIntraday, s1_ADRQ1_END_HOUR_CONST, s1_ADRQ1_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('Bravo', '21:30-00:00', ShowADRQ2 or ShowAllIntraday, s3_ADRQ2_END_HOUR_CONST, s3_ADRQ2_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('ADR', '19:30-02:00', ShowADR, s2_ADR_END_HOUR_CONST, s2_ADR_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('Charlie', '21:30-02:45', ShowADRQ3, s4_ADRQ3_END_HOUR_CONST, s4_ADRQ3_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('Delta', '00:15-02:45', ShowADRQ4 or ShowAllIntraday, s5_ADRQ4_END_HOUR_CONST, s5_ADRQ4_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('Echo', '03:00-05:45', ShowODRQ1 or ShowAllIntraday, s6_ODRQ1_END_HOUR_CONST, s6_ODRQ1_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('ODR', '03:00-08:30', ShowODR, s7_ODR_END_HOUR_CONST, s7_ODR_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('Kilo', '04:30-16:00', ShowHTF1, s8_HTF1_END_HOUR_CONST, s8_HTF1_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('Foxtrot', '06:00-08:15', ShowODRQ2 or ShowAllIntraday, s9_ODRQ2_END_HOUR_CONST, s9_ODRQ2_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('Golf', '08:45-11:15', ShowRDRQ1 or ShowAllIntraday, s10_RDRQ1_END_HOUR_CONST, s10_RDRQ1_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('RDR', '09:30-16:00', ShowRDR, s11_RDR_END_HOUR_CONST, s11_RDR_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('Hotel', '11:30-14:00', ShowRDRQ2 or ShowAllIntraday, s12_RDRQ2_END_HOUR_CONST, s12_RDRQ2_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('India', '11:30-14:45', ShowRDRQ3 or ShowAllIntraday, s13_RDRQ3_END_HOUR_CONST, s13_RDRQ3_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('Lima', '11:30-16:45', ShowHTF2, s14_HTF2_END_HOUR_CONST, s14_HTF2_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('Juliet', '14:15-16:45', ShowRDRQ4 or ShowAllIntraday, s15_RDRQ4_END_HOUR_CONST, s15_RDRQ4_END_MINUTE_CONST))
+
+    // HTF Extended Sessions (Daily, Weekly, Monthly)
+    array.push(SESSION_CFGS, core.newSessionConfig('Daily', '18:00-18:00', ShowDaily, s16_DAILY_END_HOUR_CONST, s16_DAILY_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('Weekly', 'SUN18:00-SUN18:00', ShowWeekly, s17_WEEKLY_END_HOUR_CONST, s17_WEEKLY_END_MINUTE_CONST))
+    array.push(SESSION_CFGS, core.newSessionConfig('Monthly', 'MONTHLY18:00-MONTHLY18:00', ShowMonthly, s18_MONTHLY_END_HOUR_CONST, s18_MONTHLY_END_MINUTE_CONST))
+
+    // RTH Sessions (50-10 pattern) - Complete 24-hour coverage
+    if ShowRTH
+        array.push(SESSION_CFGS, core.newSessionConfig('RTH_0050', '00:50-01:10', ShowRTH, 1, 10))
+        array.push(SESSION_CFGS, core.newSessionConfig('RTH_0150', '01:50-02:10', ShowRTH, 2, 10))
+        array.push(SESSION_CFGS, core.newSessionConfig('RTH_0250', '02:50-03:10', ShowRTH, 3, 10))
+        array.push(SESSION_CFGS, core.newSessionConfig('RTH_0350', '03:50-04:10', ShowRTH, 4, 10))
+        array.push(SESSION_CFGS, core.newSessionConfig('RTH_0450', '04:50-05:10', ShowRTH, 5, 10))
+        array.push(SESSION_CFGS, core.newSessionConfig('RTH_0550', '05:50-06:10', ShowRTH, 6, 10))
+        array.push(SESSION_CFGS, core.newSessionConfig('RTH_0650', '06:50-07:10', ShowRTH, 7, 10))
+        array.push(SESSION_CFGS, core.newSessionConfig('RTH_0750', '07:50-08:10', ShowRTH, 8, 10))
+        array.push(SESSION_CFGS, core.newSessionConfig('RTH_0850', '08:50-09:10', ShowRTH, 9, 10))
+        array.push(SESSION_CFGS, core.newSessionConfig('RTH_0950', '09:50-10:10', ShowRTH, 10, 10))
+        array.push(SESSION_CFGS, core.newSessionConfig('RTH_1050', '10:50-11:10', ShowRTH, 11, 10))
+        array.push(SESSION_CFGS, core.newSessionConfig('RTH_1150', '11:50-12:10', ShowRTH, 12, 10))
+        array.push(SESSION_CFGS, core.newSessionConfig('RTH_1250', '12:50-13:10', ShowRTH, 13, 10))
+        array.push(SESSION_CFGS, core.newSessionConfig('RTH_1350', '13:50-14:10', ShowRTH, 14, 10))
+        array.push(SESSION_CFGS, core.newSessionConfig('RTH_1450', '14:50-15:10', ShowRTH, 15, 10))
+        array.push(SESSION_CFGS, core.newSessionConfig('RTH_1550', '15:50-16:10', ShowRTH, 16, 10))
+        array.push(SESSION_CFGS, core.newSessionConfig('RTH_1650', '16:50-17:10', ShowRTH, 17, 10))
+        array.push(SESSION_CFGS, core.newSessionConfig('RTH_1750', '17:50-18:10', ShowRTH, 18, 10))
+        array.push(SESSION_CFGS, core.newSessionConfig('RTH_1850', '18:50-19:10', ShowRTH, 19, 10))
+        array.push(SESSION_CFGS, core.newSessionConfig('RTH_1950', '19:50-20:10', ShowRTH, 20, 10))
+        array.push(SESSION_CFGS, core.newSessionConfig('RTH_2050', '20:50-21:10', ShowRTH, 21, 10))
+        array.push(SESSION_CFGS, core.newSessionConfig('RTH_2150', '21:50-22:10', ShowRTH, 22, 10))
+        array.push(SESSION_CFGS, core.newSessionConfig('RTH_2250', '22:50-23:10', ShowRTH, 23, 10))
+        array.push(SESSION_CFGS, core.newSessionConfig('RTH_2350', '23:50-00:10', ShowRTH, 0, 10))
+    
+    // ETH Sessions (20-40 pattern) - Complete 24-hour coverage
+    if ShowETH
+        array.push(SESSION_CFGS, core.newSessionConfig('ETH_0020', '00:20-00:40', ShowETH, 0, 40))
+        array.push(SESSION_CFGS, core.newSessionConfig('ETH_0120', '01:20-01:40', ShowETH, 1, 40))
+        array.push(SESSION_CFGS, core.newSessionConfig('ETH_0220', '02:20-02:40', ShowETH, 2, 40))
+        array.push(SESSION_CFGS, core.newSessionConfig('ETH_0320', '03:20-03:40', ShowETH, 3, 40))
+        array.push(SESSION_CFGS, core.newSessionConfig('ETH_0420', '04:20-04:40', ShowETH, 4, 40))
+        array.push(SESSION_CFGS, core.newSessionConfig('ETH_0520', '05:20-05:40', ShowETH, 5, 40))
+        array.push(SESSION_CFGS, core.newSessionConfig('ETH_0620', '06:20-06:40', ShowETH, 6, 40))
+        array.push(SESSION_CFGS, core.newSessionConfig('ETH_0720', '07:20-07:40', ShowETH, 7, 40))
+        array.push(SESSION_CFGS, core.newSessionConfig('ETH_0820', '08:20-08:40', ShowETH, 8, 40))
+        array.push(SESSION_CFGS, core.newSessionConfig('ETH_0920', '09:20-09:40', ShowETH, 9, 40))
+        array.push(SESSION_CFGS, core.newSessionConfig('ETH_1020', '10:20-10:40', ShowETH, 10, 40))
+        array.push(SESSION_CFGS, core.newSessionConfig('ETH_1120', '11:20-11:40', ShowETH, 11, 40))
+        array.push(SESSION_CFGS, core.newSessionConfig('ETH_1220', '12:20-12:40', ShowETH, 12, 40))
+        array.push(SESSION_CFGS, core.newSessionConfig('ETH_1320', '13:20-13:40', ShowETH, 13, 40))
+        array.push(SESSION_CFGS, core.newSessionConfig('ETH_1420', '14:20-14:40', ShowETH, 14, 40))
+        array.push(SESSION_CFGS, core.newSessionConfig('ETH_1520', '15:20-15:40', ShowETH, 15, 40))
+        array.push(SESSION_CFGS, core.newSessionConfig('ETH_1620', '16:20-16:40', ShowETH, 16, 40))
+        array.push(SESSION_CFGS, core.newSessionConfig('ETH_1720', '17:20-17:40', ShowETH, 17, 40))
+        array.push(SESSION_CFGS, core.newSessionConfig('ETH_1820', '18:20-18:40', ShowETH, 18, 40))
+        array.push(SESSION_CFGS, core.newSessionConfig('ETH_1920', '19:20-19:40', ShowETH, 19, 40))
+        array.push(SESSION_CFGS, core.newSessionConfig('ETH_2020', '20:20-20:40', ShowETH, 20, 40))
+        array.push(SESSION_CFGS, core.newSessionConfig('ETH_2120', '21:20-21:40', ShowETH, 21, 40))
+        array.push(SESSION_CFGS, core.newSessionConfig('ETH_2220', '22:20-22:40', ShowETH, 22, 40))
+        array.push(SESSION_CFGS, core.newSessionConfig('ETH_2320', '23:20-23:40', ShowETH, 23, 40))
+    
+    // Kitt's Macro Sessions
+    array.push(SESSION_CFGS, core.newSessionConfig('Yankee', '02:33-03:00', ShowYankee, 3, 0))
+    array.push(SESSION_CFGS, core.newSessionConfig('Zulu', '04:03-04:30', ShowZulu, 4, 30))
+    array.push(SESSION_CFGS, core.newSessionConfig('Mike', '07:30-09:00', ShowMike, 9, 0))
+    array.push(SESSION_CFGS, core.newSessionConfig('November', '08:00-08:30', ShowNovember, 8, 30))
+
+    // CRITICAL: Ensure all arrays match SESSION_CFGS size dynamically
+    sessionCount = array.size(SESSION_CFGS)
+    
+    // Resize SESSION_STATES to match
+    while array.size(SESSION_STATES) < sessionCount
+        array.push(SESSION_STATES, core.newSessionState())
+    while array.size(SESSION_STATES) > sessionCount
+        array.pop(SESSION_STATES)
+    
+    // Resize lastSessionStartTimes to match
+    while array.size(lastSessionStartTimes) < sessionCount
+        array.push(lastSessionStartTimes, na)
+    while array.size(lastSessionStartTimes) > sessionCount
+        array.pop(lastSessionStartTimes)
+
+    // Initialize/resize ALL ghost price tracking arrays to match session count
+    for _ = array.size(ghostA1UpPrices) to sessionCount - 1 by 1
+        array.push(ghostA1UpPrices, na)
+        array.push(ghostA1DownPrices, na)
+        array.push(ghostC2UpPrices, na)
+        array.push(ghostC2DownPrices, na)
+        array.push(ghostC3UpPrices, na)
+        array.push(ghostC3DownPrices, na)
+        array.push(ghostC4UpPrices, na)
+        array.push(ghostC4DownPrices, na)
+        array.push(ghostC2ExtLimitUpperPrices, na)
+        array.push(ghostC2ExtLimitLowerPrices, na)
+    
+    // Shrink arrays if SESSION_CFGS is smaller
+    while array.size(ghostA1UpPrices) > sessionCount
+        array.pop(ghostA1UpPrices)
+        array.pop(ghostA1DownPrices)
+        array.pop(ghostC2UpPrices)
+        array.pop(ghostC2DownPrices)
+        array.pop(ghostC3UpPrices)
+        array.pop(ghostC3DownPrices)
+        array.pop(ghostC4UpPrices)
+        array.pop(ghostC4DownPrices)
+        array.pop(ghostC2ExtLimitUpperPrices)
+        array.pop(ghostC2ExtLimitLowerPrices)
+        
+    // Apply same dynamic resizing to ALL tracking arrays using type-specific functions
+    f_resizeFloatArray(ghostA1UpPricesBody, sessionCount, na)
+    f_resizeFloatArray(ghostA1DownPricesBody, sessionCount, na)
+    f_resizeFloatArray(ghostC2UpPricesBody, sessionCount, na)
+    f_resizeFloatArray(ghostC2DownPricesBody, sessionCount, na)
+    f_resizeFloatArray(ghostC3UpPricesBody, sessionCount, na)
+    f_resizeFloatArray(ghostC3DownPricesBody, sessionCount, na)
+    f_resizeFloatArray(ghostC4UpPricesBody, sessionCount, na)
+    f_resizeFloatArray(ghostC4DownPricesBody, sessionCount, na)
+    
+    f_resizeLabelArray(ghostA1UpLabels, sessionCount)
+    f_resizeLabelArray(ghostA1DownLabels, sessionCount)
+    f_resizeLabelArray(ghostC2UpLabels, sessionCount)
+    f_resizeLabelArray(ghostC2DownLabels, sessionCount)
+    f_resizeLabelArray(ghostC3UpLabels, sessionCount)
+    f_resizeLabelArray(ghostC3DownLabels, sessionCount)
+    f_resizeLabelArray(ghostC4UpLabels, sessionCount)
+    f_resizeLabelArray(ghostC4DownLabels, sessionCount)
+    f_resizeLabelArray(ghostC2ExtLimitUpperLabels, sessionCount)
+    f_resizeLabelArray(ghostC2ExtLimitLowerLabels, sessionCount)
+    
+    f_resizeLabelArray(ghostA1UpLabelsBody, sessionCount)
+    f_resizeLabelArray(ghostA1DownLabelsBody, sessionCount)
+    f_resizeLabelArray(ghostC2UpLabelsBody, sessionCount)
+    f_resizeLabelArray(ghostC2DownLabelsBody, sessionCount)
+    f_resizeLabelArray(ghostC3UpLabelsBody, sessionCount)
+    f_resizeLabelArray(ghostC3DownLabelsBody, sessionCount)
+    f_resizeLabelArray(ghostC4UpLabelsBody, sessionCount)
+    f_resizeLabelArray(ghostC4DownLabelsBody, sessionCount)
+    
+    f_resizeLabelArray(ghostA2UpLabels, sessionCount)
+    f_resizeLabelArray(ghostA2DownLabels, sessionCount)
+    f_resizeLabelArray(ghostA3UpLabels, sessionCount)
+    f_resizeLabelArray(ghostA3DownLabels, sessionCount)
+    f_resizeLabelArray(ghostA4UpLabels, sessionCount)
+    f_resizeLabelArray(ghostA4DownLabels, sessionCount)
+    f_resizeLabelArray(ghostA5UpLabels, sessionCount)
+    f_resizeLabelArray(ghostA5DownLabels, sessionCount)
+    f_resizeLabelArray(ghostM2UpLabels, sessionCount)
+    f_resizeLabelArray(ghostM2DownLabels, sessionCount)
+    
+    f_resizeFloatArray(ghostC3DoubledUpPrices, sessionCount, na)
+    f_resizeFloatArray(ghostC3DoubledDownPrices, sessionCount, na)
+    f_resizeFloatArray(ghostC4DoubledUpPrices, sessionCount, na)
+    f_resizeFloatArray(ghostC4DoubledDownPrices, sessionCount, na)
+    
+    f_resizeLabelArray(ghostC3DoubledUpLabels, sessionCount)
+    f_resizeLabelArray(ghostC3DoubledDownLabels, sessionCount)
+    f_resizeLabelArray(ghostC4DoubledUpLabels, sessionCount)
+    f_resizeLabelArray(ghostC4DoubledDownLabels, sessionCount)
+    
+    f_resizeLineArray(ghostC3DoubledUpLines, sessionCount)
+    f_resizeLineArray(ghostC3DoubledDownLines, sessionCount)
+    f_resizeLineArray(ghostC4DoubledUpLines, sessionCount)
+    f_resizeLineArray(ghostC4DoubledDownLines, sessionCount)
+    
+    f_resizeBoolArray(sessionHistoricalStored, sessionCount, false)
+    f_resizeBoolArray(sessionTimeLinePlotted, sessionCount, false)
+    
+    f_resizeBoolArray(mitigatedA1, sessionCount, false)
+    f_resizeBoolArray(mitigatedC2, sessionCount, false)
+    f_resizeBoolArray(mitigatedC3, sessionCount, false)
+    f_resizeBoolArray(mitigatedC4, sessionCount, false)
+    f_resizeBoolArray(mitigatedC2ExtLimits, sessionCount, false)
+    f_resizeBoolArray(mitigatedA2, sessionCount, false)
+    f_resizeBoolArray(mitigatedA3, sessionCount, false)
+    f_resizeBoolArray(mitigatedA4, sessionCount, false)
+    f_resizeBoolArray(mitigatedA5, sessionCount, false)
+    f_resizeBoolArray(mitigatedM2, sessionCount, false)
+    
+    f_resizeBoolArray(mitigatedC3Doubled, sessionCount, false)
+    f_resizeBoolArray(mitigatedC4Doubled, sessionCount, false)
+    
+    f_resizeIntArray(sessionStartTimes, sessionCount, na)
+    f_resizeBoolArray(sessionRecentlyEnded, sessionCount, false)
+    
+    f_resizeLineArray(eqA1Lines, sessionCount)
+    f_resizeLineArray(eqA2Lines, sessionCount)
+    f_resizeLineArray(eqA3Lines, sessionCount)
+    f_resizeLineArray(eqA4Lines, sessionCount)
+    f_resizeLineArray(eqA5Lines, sessionCount)
+    f_resizeLineArray(eqC2Lines, sessionCount)
+    f_resizeLineArray(eqC3Lines, sessionCount)
+    f_resizeLineArray(eqC4Lines, sessionCount)
+    f_resizeLineArray(eqM2Lines, sessionCount)
+    
+    f_resizeFloatArray(eqA1Values, sessionCount, na)
+    f_resizeFloatArray(eqA2Values, sessionCount, na)
+    f_resizeFloatArray(eqA3Values, sessionCount, na)
+    f_resizeFloatArray(eqA4Values, sessionCount, na)
+    f_resizeFloatArray(eqA5Values, sessionCount, na)
+    f_resizeFloatArray(eqC2Values, sessionCount, na)
+    f_resizeFloatArray(eqC3Values, sessionCount, na)
+    f_resizeFloatArray(eqC4Values, sessionCount, na)
+    f_resizeFloatArray(eqM2Values, sessionCount, na)
+
+// ==========================================
+// REMAINING HELPER FUNCTIONS
+// ==========================================
+
+// Helper to create ghost line label text
+f_createGhostLineLabel(string sessionName, string cycleName, float price, bool isBodyBased = false) =>
+    var array<string> labelParts = array.new<string>()
+    array.clear(labelParts)
+    
+    if ShowSessionNameInLabel
+        array.push(labelParts, sessionName)
+    
+    if ShowCycleNameInLabel
+        // Add W or B suffix to distinguish wick vs body calculations
+        cycleNameWithType = cycleName + (isBodyBased ? " B" : " W")
+        array.push(labelParts, cycleNameWithType)
+    
+    if ShowPriceInLabel
+        array.push(labelParts, str.tostring(price, "#.##"))
+    
+    string labelText = ""
+    for i = 0 to array.size(labelParts) - 1
+        labelText += array.get(labelParts, i)
+        if i < array.size(labelParts) - 1
+            labelText += LabelTextSeparator
+    
+    labelText
+
+// ==========================================
+// CYCLE DETECTION FUNCTIONS
+// ==========================================
+
+// Process all cycle detection logic for a session
+f_processCycleDetection(updatedState, cfg, idx, eqA1Lines, eqA2Lines, eqA3Lines, eqA4Lines, eqA5Lines, eqC2Lines, eqC3Lines, eqC4Lines, eqM2Lines, eqA1Values, eqA2Values, eqA3Values, eqA4Values, eqA5Values, eqC2Values, eqC3Values, eqC4Values, eqM2Values, ghostC2UpPrices, ghostC2DownPrices, ghostC3UpPrices, ghostC3DownPrices, ghostC4UpPrices, ghostC4DownPrices, mitigatedA2, mitigatedA3, mitigatedA4, mitigatedA5, mitigatedM2, mitigatedC2, mitigatedC3, mitigatedC4, historicalEqLines, historicalEqValues, historicalEqTypes, historicalEqSessionNames, historicalEqTimes, historicalEqDays, historicalEqOriginalColors, showWickBoxes, showBodyBoxes, showA1Boxes, showA2Boxes, showA3Boxes, showA4Boxes, showA5Boxes, showC2Boxes, showC3Boxes, showC4Boxes, showM2Boxes, showC2ExtBelowBox, showC2ExtAboveBox, showEqA1, showEqA2, showEqA3, showEqA4, showEqA5, showEqC2, showEqC3, showEqC4, showEqM2, extendEqLinesToCurrentBar, colorA1Wick, colorA1Body, colorA2Wick, colorA3Wick, colorA4Wick, colorA5Wick, colorC2Wick, colorC2Body, colorC3Wick, colorC3Body, colorC4Wick, colorC4Body, colorM2Wick, colorC2ExtBelow, colorC2ExtAbove, colorA1Eq, colorA2Eq, colorA3Eq, colorA4Eq, colorA5Eq, colorC2Eq, colorC3Eq, colorC4Eq, colorM2Eq, c2SizeMultiplier, a5SizeMultiplier, m2SizeMultiplier, c2ExtA1Multiplier) =>
+
+    // ---- A1 Cycle Detection ----
+    if not updatedState.a1_wickHit and not na(updatedState.targetA1)
+        // Use session absolute range like C2 does
+        sessionRange = updatedState.highPrice - updatedState.lowPrice
+        if sessionRange >= updatedState.targetA1
+            updatedState.a1_wickHit := true
+
+            // Use time-based anchoring exactly like C2 to determine which extreme was reached first
+            float boxTop = na
+            float boxBottom = na
+            
+            // If session low was reached FIRST (or simultaneously), anchor from low going UP
+            if updatedState.lowTime <= updatedState.highTime
+                boxBottom := updatedState.lowPrice
+                boxTop := updatedState.lowPrice + updatedState.targetA1
+            else // If session high was reached FIRST, anchor from high going DOWN
+                boxTop := updatedState.highPrice
+                boxBottom := updatedState.highPrice - updatedState.targetA1
+
+            // Draw A1 box if enabled
+            if showWickBoxes and showA1Boxes
+                boxLeft = updatedState.startTime
+                boxRight = time
+                box existingBox = na
+                core.updateCycleBox(existingBox, boxLeft, boxTop, boxRight, boxBottom, colorA1Wick)
+            
+            // Create A1 EQ line if enabled
+            if showEqA1 and not na(boxTop) and not na(boxBottom)
+                // Store existing EQ line as historical before creating new one
+                if not na(array.get(eqA1Lines, idx)) and not na(array.get(eqA1Values, idx))
+                    existingEqLine = array.get(eqA1Lines, idx)
+                    existingEqValue = array.get(eqA1Values, idx)
+                    lineStartTime = line.get_x1(existingEqLine)
+                    lineEndTime_hist = time
+                    lineColor = color.new(colorA1Eq, 70)
+                    newHistEqLine = line.new(lineStartTime, existingEqValue, lineEndTime_hist, existingEqValue, color = lineColor, style = line.style_solid, width = 2, xloc = xloc.bar_time)
+                    array.push(historicalEqLines, newHistEqLine)
+                    array.push(historicalEqValues, existingEqValue)
+                    array.push(historicalEqTypes, 'A1')
+                    array.push(historicalEqSessionNames, cfg.name)
+                    array.push(historicalEqTimes, time)
+                    array.push(historicalEqDays, math.floor(time / 86400000))
+                    array.push(historicalEqOriginalColors, colorA1Eq)
+                    // Delete the old line
+                    line.delete(existingEqLine)
+                
+                eqValue = (boxTop + boxBottom) / 2
+                maxFutureTime = time + timeframe.in_seconds(timeframe.period) * 1000 * 100
+                lineEndTime = extendEqLinesToCurrentBar ? maxFutureTime : math.min(updatedState.endTime, maxFutureTime)
+                eqLine = line.new(updatedState.startTime, eqValue, lineEndTime, eqValue, xloc.bar_time, color = colorA1Eq, style = line.style_solid, width = 2)
+                array.set(eqA1Lines, idx, eqLine)
+                array.set(eqA1Values, idx, eqValue)
+
+    // ---- A1 Body Cycle Detection ----
+    if not updatedState.a1_bodyHit and not na(updatedState.targetA1)
+        bodyRange = updatedState.a1_highBody - updatedState.a1_lowBody
+        if bodyRange >= updatedState.targetA1
+            updatedState.a1_bodyHit := true
+            
+            // Draw A1 body box if enabled
+            if showBodyBoxes and showA1Boxes
+                boxLeft = updatedState.startTime
+                boxRight = time
+                box existingBox = na
+                core.updateCycleBox(existingBox, boxLeft, updatedState.a1_highBody, boxRight, updatedState.a1_lowBody, colorA1Body)
+
+    // ---- C2 Cycle Detection (using session absolute high/low with time-based anchoring) ----
+    if not updatedState.c2_wickHit and not na(updatedState.targetC2)
+        sessionRange = updatedState.highPrice - updatedState.lowPrice
+        if sessionRange >= updatedState.targetC2 * c2SizeMultiplier
+            updatedState.c2_wickHit := true
+
+            // Clear C2 ghost lines since C2 cycle has been hit
+            if not na(updatedState.c2_ghostUp)
+                line.delete(updatedState.c2_ghostUp)
+                updatedState.c2_ghostUp := na
+            if not na(updatedState.c2_ghostDown)
+                line.delete(updatedState.c2_ghostDown)
+                updatedState.c2_ghostDown := na
+            array.set(ghostC2UpPrices, idx, na)
+            array.set(ghostC2DownPrices, idx, na)
+            // Set permanent mitigation flag when C2 cycle is hit
+            array.set(mitigatedC2, idx, true)
+
+            // Determine final C2 box position based on which extreme was reached FIRST
+            float boxTopC2 = na
+            float boxBottomC2 = na
+
+            // If session low was reached FIRST (lowTime <= highTime), anchor from low going UP
+            if updatedState.lowTime <= updatedState.highTime
+                boxBottomC2 := updatedState.lowPrice
+                boxTopC2 := updatedState.lowPrice + updatedState.targetC2 * c2SizeMultiplier
+            else // If session high was reached FIRST (highTime < lowTime), anchor from high going DOWN
+                boxTopC2 := updatedState.highPrice
+                boxBottomC2 := updatedState.highPrice - updatedState.targetC2 * c2SizeMultiplier
+
+            // Store C2 bounds for extension tracking
+            updatedState.c2_boundTop := boxTopC2
+            updatedState.c2_boundBottom := boxBottomC2
+
+            // Draw C2 box if enabled
+            if showWickBoxes and showC2Boxes
+                boxLeft = updatedState.startTime
+                boxRight = time
+                box existingBox = na
+                core.updateCycleBox(existingBox, boxLeft, boxTopC2, boxRight, boxBottomC2, colorC2Wick)
+            
+            // Create C2 EQ line if enabled
+            if showEqC2 and not na(boxTopC2) and not na(boxBottomC2)
+                // Store existing EQ line as historical before creating new one
+                if not na(array.get(eqC2Lines, idx)) and not na(array.get(eqC2Values, idx))
+                    existingEqLine = array.get(eqC2Lines, idx)
+                    existingEqValue = array.get(eqC2Values, idx)
+                    lineStartTime = line.get_x1(existingEqLine)
+                    lineEndTime_hist = time
+                    lineColor = color.new(colorC2Eq, 70)
+                    newHistEqLine = line.new(lineStartTime, existingEqValue, lineEndTime_hist, existingEqValue, color = lineColor, style = line.style_solid, width = 2, xloc = xloc.bar_time)
+                    array.push(historicalEqLines, newHistEqLine)
+                    array.push(historicalEqValues, existingEqValue)
+                    array.push(historicalEqTypes, 'C2')
+                    array.push(historicalEqSessionNames, cfg.name)
+                    array.push(historicalEqTimes, time)
+                    array.push(historicalEqDays, math.floor(time / 86400000))
+                    array.push(historicalEqOriginalColors, colorC2Eq)
+                    line.delete(existingEqLine)
+                
+                eqValue = (boxTopC2 + boxBottomC2) / 2
+                maxFutureTime = time + timeframe.in_seconds(timeframe.period) * 1000 * 100
+                lineEndTime = extendEqLinesToCurrentBar ? maxFutureTime : math.min(updatedState.endTime, maxFutureTime)
+                eqLine = line.new(updatedState.startTime, eqValue, lineEndTime, eqValue, xloc.bar_time, color = colorC2Eq, style = line.style_solid, width = 2)
+                array.set(eqC2Lines, idx, eqLine)
+                array.set(eqC2Values, idx, eqValue)
+
+    // ---- C2 Body Cycle Detection ----
+    if not updatedState.c2_bodyHit and not na(updatedState.targetC2)
+        bodyRange = updatedState.a1_highBody - updatedState.a1_lowBody
+        if bodyRange >= updatedState.targetC2 * c2SizeMultiplier
+            updatedState.c2_bodyHit := true
+            
+            // Store C2 body bounds for extension tracking  
+            updatedState.c2_bodyBoundTop := updatedState.a1_highBody
+            updatedState.c2_bodyBoundBottom := updatedState.a1_lowBody
+            
+            // Draw C2 body box if enabled
+            if showBodyBoxes and showC2Boxes
+                boxLeft = updatedState.startTime
+                boxRight = time
+                box existingBox = na
+                core.updateCycleBox(existingBox, boxLeft, updatedState.a1_highBody, boxRight, updatedState.a1_lowBody, colorC2Body)
+
+    // ---- C3 Cycle Detection (using session absolute high/low with time-based anchoring) ----
+    if not updatedState.c3_wickHit and not na(updatedState.targetC3)
+        sessionRange = updatedState.highPrice - updatedState.lowPrice
+        if sessionRange >= updatedState.targetC3
+            updatedState.c3_wickHit := true
+
+            // Clear C3 ghost lines since C3 cycle has been hit
+            if not na(updatedState.c3_ghostUp)
+                line.delete(updatedState.c3_ghostUp)
+                updatedState.c3_ghostUp := na
+            if not na(updatedState.c3_ghostDown)
+                line.delete(updatedState.c3_ghostDown)
+                updatedState.c3_ghostDown := na
+            array.set(ghostC3UpPrices, idx, na)
+            array.set(ghostC3DownPrices, idx, na)
+            // Set permanent mitigation flag
+            array.set(mitigatedC3, idx, true)
+
+            // Draw C3 box if enabled
+            if showWickBoxes and showC3Boxes
+                boxLeft = updatedState.startTime
+                boxRight = time
+                float boxTopC3 = na
+                float boxBottomC3 = na
+
+                // If session low was reached FIRST, anchor from low going UP
+                if updatedState.lowTime <= updatedState.highTime
+                    boxBottomC3 := updatedState.lowPrice
+                    boxTopC3 := updatedState.lowPrice + updatedState.targetC3
+                else // If session high was reached FIRST, anchor from high going DOWN
+                    boxTopC3 := updatedState.highPrice
+                    boxBottomC3 := updatedState.highPrice - updatedState.targetC3
+
+                box existingBox = na
+                core.updateCycleBox(existingBox, boxLeft, boxTopC3, boxRight, boxBottomC3, colorC3Wick)
+            
+            // Create C3 EQ line if enabled
+            if showEqC3
+                float boxTopC3 = na
+                float boxBottomC3 = na
+                
+                // Calculate box bounds for EQ line (same logic as box)
+                if updatedState.lowTime <= updatedState.highTime
+                    boxBottomC3 := updatedState.lowPrice
+                    boxTopC3 := updatedState.lowPrice + updatedState.targetC3
+                else
+                    boxTopC3 := updatedState.highPrice
+                    boxBottomC3 := updatedState.highPrice - updatedState.targetC3
+                
+                if not na(boxTopC3) and not na(boxBottomC3)
+                    // Store existing EQ line as historical before creating new one
+                    if not na(array.get(eqC3Lines, idx)) and not na(array.get(eqC3Values, idx))
+                        existingEqLine = array.get(eqC3Lines, idx)
+                        existingEqValue = array.get(eqC3Values, idx)
+                        lineStartTime = line.get_x1(existingEqLine)
+                        lineEndTime_hist = time
+                        lineColor = color.new(colorC3Eq, 70)
+                        newHistEqLine = line.new(lineStartTime, existingEqValue, lineEndTime_hist, existingEqValue, color = lineColor, style = line.style_solid, width = 2, xloc = xloc.bar_time)
+                        array.push(historicalEqLines, newHistEqLine)
+                        array.push(historicalEqValues, existingEqValue)
+                        array.push(historicalEqTypes, 'C3')
+                        array.push(historicalEqSessionNames, cfg.name)
+                        array.push(historicalEqTimes, time)
+                        array.push(historicalEqDays, math.floor(time / 86400000))
+                        array.push(historicalEqOriginalColors, colorC3Eq)
+                        line.delete(existingEqLine)
+                    
+                    eqValue = (boxTopC3 + boxBottomC3) / 2
+                    maxFutureTime = time + timeframe.in_seconds(timeframe.period) * 1000 * 100
+                    lineEndTime = extendEqLinesToCurrentBar ? maxFutureTime : math.min(updatedState.endTime, maxFutureTime)
+                    eqLine = line.new(updatedState.startTime, eqValue, lineEndTime, eqValue, xloc.bar_time, color = colorC3Eq, style = line.style_solid, width = 2)
+                    array.set(eqC3Lines, idx, eqLine)
+                    array.set(eqC3Values, idx, eqValue)
+
+    // ---- C3 Body Cycle Detection ----
+    if not updatedState.c3_bodyHit and not na(updatedState.targetC3)
+        bodyRange = updatedState.a1_highBody - updatedState.a1_lowBody
+        if bodyRange >= updatedState.targetC3
+            updatedState.c3_bodyHit := true
+            
+            // Draw C3 body box if enabled
+            if showBodyBoxes and showC3Boxes
+                boxLeft = updatedState.startTime
+                boxRight = time
+                box existingBox = na
+                core.updateCycleBox(existingBox, boxLeft, updatedState.a1_highBody, boxRight, updatedState.a1_lowBody, colorC3Body)
+
+    // ---- C4 Cycle Detection (using session absolute high/low with time-based anchoring) ----
+    if not updatedState.c4_wickHit and not na(updatedState.targetC4)
+        sessionRange = updatedState.highPrice - updatedState.lowPrice
+        if sessionRange >= updatedState.targetC4
+            updatedState.c4_wickHit := true
+
+            // Clear C4 ghost lines since C4 cycle has been hit
+            if not na(updatedState.c4_ghostUp)
+                line.delete(updatedState.c4_ghostUp)
+                updatedState.c4_ghostUp := na
+            if not na(updatedState.c4_ghostDown)
+                line.delete(updatedState.c4_ghostDown)
+                updatedState.c4_ghostDown := na
+            array.set(ghostC4UpPrices, idx, na)
+            array.set(ghostC4DownPrices, idx, na)
+            // Set permanent mitigation flag when C4 cycle is hit
+            array.set(mitigatedC4, idx, true)
+
+            // Draw C4 box if enabled
+            if showWickBoxes and showC4Boxes
+                boxLeft = updatedState.startTime
+                boxRight = time
+                float boxTopC4 = na
+                float boxBottomC4 = na
+
+                // If session low was reached FIRST, anchor from low going UP
+                if updatedState.lowTime <= updatedState.highTime
+                    boxBottomC4 := updatedState.lowPrice
+                    boxTopC4 := updatedState.lowPrice + updatedState.targetC4
+                else // If session high was reached FIRST, anchor from high going DOWN
+                    boxTopC4 := updatedState.highPrice
+                    boxBottomC4 := updatedState.highPrice - updatedState.targetC4
+
+                box existingBox = na
+                core.updateCycleBox(existingBox, boxLeft, boxTopC4, boxRight, boxBottomC4, colorC4Wick)
+            
+            // Create C4 EQ line if enabled
+            if showEqC4
+                float boxTopC4 = na
+                float boxBottomC4 = na
+                
+                // Calculate box bounds for EQ line (same logic as box)
+                if updatedState.lowTime <= updatedState.highTime
+                    boxBottomC4 := updatedState.lowPrice
+                    boxTopC4 := updatedState.lowPrice + updatedState.targetC4
+                else
+                    boxTopC4 := updatedState.highPrice
+                    boxBottomC4 := updatedState.highPrice - updatedState.targetC4
+                
+                if not na(boxTopC4) and not na(boxBottomC4)
+                    // Store existing EQ line as historical before creating new one
+                    if not na(array.get(eqC4Lines, idx)) and not na(array.get(eqC4Values, idx))
+                        existingEqLine = array.get(eqC4Lines, idx)
+                        existingEqValue = array.get(eqC4Values, idx)
+                        lineStartTime = line.get_x1(existingEqLine)
+                        lineEndTime_hist = time
+                        lineColor = color.new(colorC4Eq, 70)
+                        newHistEqLine = line.new(lineStartTime, existingEqValue, lineEndTime_hist, existingEqValue, color = lineColor, style = line.style_solid, width = 2, xloc = xloc.bar_time)
+                        array.push(historicalEqLines, newHistEqLine)
+                        array.push(historicalEqValues, existingEqValue)
+                        array.push(historicalEqTypes, 'C4')
+                        array.push(historicalEqSessionNames, cfg.name)
+                        array.push(historicalEqTimes, time)
+                        array.push(historicalEqDays, math.floor(time / 86400000))
+                        array.push(historicalEqOriginalColors, colorC4Eq)
+                        line.delete(existingEqLine)
+                    
+                    eqValue = (boxTopC4 + boxBottomC4) / 2
+                    maxFutureTime = time + timeframe.in_seconds(timeframe.period) * 1000 * 100
+                    lineEndTime = extendEqLinesToCurrentBar ? maxFutureTime : math.min(updatedState.endTime, maxFutureTime)
+                    eqLine = line.new(updatedState.startTime, eqValue, lineEndTime, eqValue, xloc.bar_time, color = colorC4Eq, style = line.style_solid, width = 2)
+                    array.set(eqC4Lines, idx, eqLine)
+                    array.set(eqC4Values, idx, eqValue)
+
+    // ---- C4 Body Cycle Detection ----
+    if not updatedState.c4_bodyHit and not na(updatedState.targetC4)
+        bodyRange = updatedState.a1_highBody - updatedState.a1_lowBody
+        if bodyRange >= updatedState.targetC4
+            updatedState.c4_bodyHit := true
+            
+            // Draw C4 body box if enabled
+            if showBodyBoxes and showC4Boxes
+                boxLeft = updatedState.startTime
+                boxRight = time
+                box existingBox = na
+                core.updateCycleBox(existingBox, boxLeft, updatedState.a1_highBody, boxRight, updatedState.a1_lowBody, colorC4Body)
+
+    // ---- Chained Cycle Detection (A2-A5) ----
+    if not na(updatedState.targetA1)
+        // A2 Cycle
+        a2Hit = core.updateChainedCycleWithMultiplier(updatedState, 2, updatedState.targetA1, 1.0)
+        if a2Hit and showWickBoxes and showA2Boxes
+            boxLeft = updatedState.a2_startTime
+            boxRight = time
+            box existingBox = na
+            core.updateCycleBox(existingBox, boxLeft, updatedState.a2_high, boxRight, updatedState.a2_low, colorA2Wick)
+            // Set permanent mitigation flag when A2 cycle is hit
+            array.set(mitigatedA2, idx, true)
+        
+        // Create A2 EQ line if enabled
+        if a2Hit and showEqA2 and not na(updatedState.a2_high) and not na(updatedState.a2_low)
+            // Store existing EQ line as historical before creating new one
+            if not na(array.get(eqA2Lines, idx)) and not na(array.get(eqA2Values, idx))
+                existingEqLine = array.get(eqA2Lines, idx)
+                existingEqValue = array.get(eqA2Values, idx)
+                lineStartTime = line.get_x1(existingEqLine)
+                lineEndTime_hist = time
+                lineColor = color.new(colorA2Eq, 70)
+                newHistEqLine = line.new(lineStartTime, existingEqValue, lineEndTime_hist, existingEqValue, color = lineColor, style = line.style_solid, width = 2, xloc = xloc.bar_time)
+                array.push(historicalEqLines, newHistEqLine)
+                array.push(historicalEqValues, existingEqValue)
+                array.push(historicalEqTypes, 'A2')
+                array.push(historicalEqSessionNames, cfg.name)
+                array.push(historicalEqTimes, time)
+                array.push(historicalEqDays, math.floor(time / 86400000))
+                array.push(historicalEqOriginalColors, colorA2Eq)
+                line.delete(existingEqLine)
+            
+            eqValue = (updatedState.a2_high + updatedState.a2_low) / 2
+            maxFutureTime = time + timeframe.in_seconds(timeframe.period) * 1000 * 100
+            lineEndTime = extendEqLinesToCurrentBar ? maxFutureTime : math.min(updatedState.endTime, maxFutureTime)
+            eqLine = line.new(updatedState.a2_startTime, eqValue, lineEndTime, eqValue, xloc.bar_time, color = colorA2Eq, style = line.style_solid, width = 2)
+            array.set(eqA2Lines, idx, eqLine)
+            array.set(eqA2Values, idx, eqValue)
+
+        // A3 Cycle
+        a3Hit = core.updateChainedCycleWithMultiplier(updatedState, 3, updatedState.targetA1, 1.0)
+        if a3Hit and showWickBoxes and showA3Boxes
+            boxLeft = updatedState.a3_startTime
+            boxRight = time
+            box existingBox = na
+            core.updateCycleBox(existingBox, boxLeft, updatedState.a3_high, boxRight, updatedState.a3_low, colorA3Wick)
+            // Set permanent mitigation flag when A3 cycle is hit
+            array.set(mitigatedA3, idx, true)
+        
+        // Create A3 EQ line if enabled
+        if a3Hit and showEqA3 and not na(updatedState.a3_high) and not na(updatedState.a3_low)
+            // Store existing EQ line as historical before creating new one
+            if not na(array.get(eqA3Lines, idx)) and not na(array.get(eqA3Values, idx))
+                existingEqLine = array.get(eqA3Lines, idx)
+                existingEqValue = array.get(eqA3Values, idx)
+                lineStartTime = line.get_x1(existingEqLine)
+                lineEndTime_hist = time
+                lineColor = color.new(colorA3Eq, 70)
+                newHistEqLine = line.new(lineStartTime, existingEqValue, lineEndTime_hist, existingEqValue, color = lineColor, style = line.style_solid, width = 2, xloc = xloc.bar_time)
+                array.push(historicalEqLines, newHistEqLine)
+                array.push(historicalEqValues, existingEqValue)
+                array.push(historicalEqTypes, 'A3')
+                array.push(historicalEqSessionNames, cfg.name)
+                array.push(historicalEqTimes, time)
+                array.push(historicalEqDays, math.floor(time / 86400000))
+                array.push(historicalEqOriginalColors, colorA3Eq)
+                line.delete(existingEqLine)
+            
+            eqValue = (updatedState.a3_high + updatedState.a3_low) / 2
+            maxFutureTime = time + timeframe.in_seconds(timeframe.period) * 1000 * 100
+            lineEndTime = extendEqLinesToCurrentBar ? maxFutureTime : math.min(updatedState.endTime, maxFutureTime)
+            eqLine = line.new(updatedState.a3_startTime, eqValue, lineEndTime, eqValue, xloc.bar_time, color = colorA3Eq, style = line.style_solid, width = 2)
+            array.set(eqA3Lines, idx, eqLine)
+            array.set(eqA3Values, idx, eqValue)
+
+        // A4 Cycle
+        a4Hit = core.updateChainedCycleWithMultiplier(updatedState, 4, updatedState.targetA1, 1.0)
+        if a4Hit and showWickBoxes and showA4Boxes
+            boxLeft = updatedState.a4_startTime
+            boxRight = time
+            box existingBox = na
+            core.updateCycleBox(existingBox, boxLeft, updatedState.a4_high, boxRight, updatedState.a4_low, colorA4Wick)
+            // Set permanent mitigation flag when A4 cycle is hit
+            array.set(mitigatedA4, idx, true)
+        
+        // Create A4 EQ line if enabled
+        if a4Hit and showEqA4 and not na(updatedState.a4_high) and not na(updatedState.a4_low)
+            // Store existing EQ line as historical before creating new one
+            if not na(array.get(eqA4Lines, idx)) and not na(array.get(eqA4Values, idx))
+                existingEqLine = array.get(eqA4Lines, idx)
+                existingEqValue = array.get(eqA4Values, idx)
+                lineStartTime = line.get_x1(existingEqLine)
+                lineEndTime_hist = time
+                lineColor = color.new(colorA4Eq, 70)
+                newHistEqLine = line.new(lineStartTime, existingEqValue, lineEndTime_hist, existingEqValue, color = lineColor, style = line.style_solid, width = 2, xloc = xloc.bar_time)
+                array.push(historicalEqLines, newHistEqLine)
+                array.push(historicalEqValues, existingEqValue)
+                array.push(historicalEqTypes, 'A4')
+                array.push(historicalEqSessionNames, cfg.name)
+                array.push(historicalEqTimes, time)
+                array.push(historicalEqDays, math.floor(time / 86400000))
+                array.push(historicalEqOriginalColors, colorA4Eq)
+                line.delete(existingEqLine)
+            
+            eqValue = (updatedState.a4_high + updatedState.a4_low) / 2
+            maxFutureTime = time + timeframe.in_seconds(timeframe.period) * 1000 * 100
+            lineEndTime = extendEqLinesToCurrentBar ? maxFutureTime : math.min(updatedState.endTime, maxFutureTime)
+            eqLine = line.new(updatedState.a4_startTime, eqValue, lineEndTime, eqValue, xloc.bar_time, color = colorA4Eq, style = line.style_solid, width = 2)
+            array.set(eqA4Lines, idx, eqLine)
+            array.set(eqA4Values, idx, eqValue)
+
+        // A5 Cycle
+        a5Hit = core.updateChainedCycleWithMultiplier(updatedState, 5, updatedState.targetA1, a5SizeMultiplier)
+        if a5Hit and showWickBoxes and showA5Boxes
+            boxLeft = updatedState.a5_startTime
+            boxRight = time
+            box existingBox = na
+            core.updateCycleBox(existingBox, boxLeft, updatedState.a5_high, boxRight, updatedState.a5_low, colorA5Wick)
+            // Set permanent mitigation flag when A5 cycle is hit
+            array.set(mitigatedA5, idx, true)
+        
+        // Create A5 EQ line if enabled
+        if a5Hit and showEqA5 and not na(updatedState.a5_high) and not na(updatedState.a5_low)
+            // Store existing EQ line as historical before creating new one
+            if not na(array.get(eqA5Lines, idx)) and not na(array.get(eqA5Values, idx))
+                existingEqLine = array.get(eqA5Lines, idx)
+                existingEqValue = array.get(eqA5Values, idx)
+                lineStartTime = line.get_x1(existingEqLine)
+                lineEndTime_hist = time
+                lineColor = color.new(colorA5Eq, 70)
+                newHistEqLine = line.new(lineStartTime, existingEqValue, lineEndTime_hist, existingEqValue, color = lineColor, style = line.style_solid, width = 2, xloc = xloc.bar_time)
+                array.push(historicalEqLines, newHistEqLine)
+                array.push(historicalEqValues, existingEqValue)
+                array.push(historicalEqTypes, 'A5')
+                array.push(historicalEqSessionNames, cfg.name)
+                array.push(historicalEqTimes, time)
+                array.push(historicalEqDays, math.floor(time / 86400000))
+                array.push(historicalEqOriginalColors, colorA5Eq)
+                line.delete(existingEqLine)
+            
+            eqValue = (updatedState.a5_high + updatedState.a5_low) / 2
+            maxFutureTime = time + timeframe.in_seconds(timeframe.period) * 1000 * 100
+            lineEndTime = extendEqLinesToCurrentBar ? maxFutureTime : math.min(updatedState.endTime, maxFutureTime)
+            eqLine = line.new(updatedState.a5_startTime, eqValue, lineEndTime, eqValue, xloc.bar_time, color = colorA5Eq, style = line.style_solid, width = 2)
+            array.set(eqA5Lines, idx, eqLine)
+            array.set(eqA5Values, idx, eqValue)
+
+    // ---- M2 Cycle Detection (chained from C2) ----
+    if not na(updatedState.targetC2)
+        // M2 Cycle
+        m2Hit = core.updateM2CycleWithMultiplier(updatedState, updatedState.targetC2, m2SizeMultiplier)
+        if m2Hit and showWickBoxes and showM2Boxes
+            boxLeft = updatedState.m2_startTime
+            boxRight = time
+            box existingBox = na
+            core.updateCycleBox(existingBox, boxLeft, updatedState.m2_high, boxRight, updatedState.m2_low, colorM2Wick)
+            // Set permanent mitigation flag when M2 cycle is hit
+            array.set(mitigatedM2, idx, true)
+        
+        // Create M2 EQ line if enabled
+        if m2Hit and showEqM2 and not na(updatedState.m2_high) and not na(updatedState.m2_low)
+            // Store existing EQ line as historical before creating new one
+            if not na(array.get(eqM2Lines, idx)) and not na(array.get(eqM2Values, idx))
+                existingEqLine = array.get(eqM2Lines, idx)
+                existingEqValue = array.get(eqM2Values, idx)
+                lineStartTime = line.get_x1(existingEqLine)
+                lineEndTime_hist = time
+                lineColor = color.new(colorM2Eq, 70)
+                newHistEqLine = line.new(lineStartTime, existingEqValue, lineEndTime_hist, existingEqValue, color = lineColor, style = line.style_solid, width = 2, xloc = xloc.bar_time)
+                array.push(historicalEqLines, newHistEqLine)
+                array.push(historicalEqValues, existingEqValue)
+                array.push(historicalEqTypes, 'M2')
+                array.push(historicalEqSessionNames, cfg.name)
+                array.push(historicalEqTimes, time)
+                array.push(historicalEqDays, math.floor(time / 86400000))
+                array.push(historicalEqOriginalColors, colorM2Eq)
+                line.delete(existingEqLine)
+            
+            eqValue = (updatedState.m2_high + updatedState.m2_low) / 2
+            maxFutureTime = time + timeframe.in_seconds(timeframe.period) * 1000 * 100
+            lineEndTime = extendEqLinesToCurrentBar ? maxFutureTime : math.min(updatedState.endTime, maxFutureTime)
+            eqLine = line.new(updatedState.m2_startTime, eqValue, lineEndTime, eqValue, xloc.bar_time, color = colorM2Eq, style = line.style_solid, width = 2)
+            array.set(eqM2Lines, idx, eqLine)
+            array.set(eqM2Values, idx, eqValue)
+
+            // ---- C2 Extensions (Delta Premium/Discount) ----
+        // Support both wick-based and body-based C2 extensions
+        wickBasedC2Ready = updatedState.c2_wickHit and not na(updatedState.c2_boundBottom) and not na(updatedState.c2_boundTop)
+        bodyBasedC2Ready = updatedState.c2_bodyHit and not na(updatedState.c2_bodyBoundBottom) and not na(updatedState.c2_bodyBoundTop)
+        
+        if wickBasedC2Ready or bodyBasedC2Ready
+            // Determine which bounds to use based on display preferences
+            useWickBounds = showWickBoxes and wickBasedC2Ready
+            useBodyBounds = showBodyBoxes and bodyBasedC2Ready
+            
+            // Set bounds and price references based on which type is being displayed
+            float c2Top = na
+            float c2Bottom = na
+            float currentHigh = na
+            float currentLow = na
+            
+            if useWickBounds
+                c2Top := updatedState.c2_boundTop
+                c2Bottom := updatedState.c2_boundBottom
+                currentHigh := high
+                currentLow := low
+            else if useBodyBounds
+                c2Top := updatedState.c2_bodyBoundTop
+                c2Bottom := updatedState.c2_bodyBoundBottom
+                currentHigh := math.max(open, close)
+                currentLow := math.min(open, close)
+            else if wickBasedC2Ready  // Fallback to wick if available
+                c2Top := updatedState.c2_boundTop
+                c2Bottom := updatedState.c2_boundBottom
+                currentHigh := high
+                currentLow := low
+            else if bodyBasedC2Ready  // Fallback to body if available
+                c2Top := updatedState.c2_bodyBoundTop
+                c2Bottom := updatedState.c2_bodyBoundBottom
+                currentHigh := math.max(open, close)
+                currentLow := math.min(open, close)
+
+            if not na(c2Top) and not na(c2Bottom)
+                // -------- LOWER EXTENSION (below C2) --------
+                if currentLow < c2Bottom
+                    if not updatedState.c2_extLowerActive
+                        updatedState.c2_extLowerActive := true
+                        updatedState.c2_extLowerStartTime := time
+                        updatedState.c2_extLowerExtreme := currentLow
+                        if showC2ExtBelowBox and ((useWickBounds and showWickBoxes) or (useBodyBounds and showBodyBoxes) or (not showBodyBoxes and showWickBoxes))
+                            boxLeftExt = updatedState.c2_extLowerStartTime
+                            tfMs = timeframe.in_seconds(timeframe.period) * 1000
+                            boxRightExt = time + tfMs // Extend one bar into future for continuous tracking
+                            a1LimitDisc = not na(updatedState.targetA1) and updatedState.targetA1 > 0 and c2ExtA1Multiplier > 0 ? updatedState.targetA1 * c2ExtA1Multiplier : na
+                            finalBoxBottomPrice = not na(a1LimitDisc) and a1LimitDisc > 0 ? math.max(currentLow, c2Bottom - a1LimitDisc) : currentLow
+                            updatedState.c2_extLowerBox := box.new(boxLeftExt, c2Bottom, boxRightExt, finalBoxBottomPrice, bgcolor = colorC2ExtBelow, border_color = colorC2ExtBelow, xloc = xloc.bar_time)
+                    else
+                        updatedState.c2_extLowerExtreme := math.min(updatedState.c2_extLowerExtreme, currentLow)
+
+                // Continuously update lower box if exists
+                if not na(updatedState.c2_extLowerBox)
+                    tfMs = timeframe.in_seconds(timeframe.period) * 1000
+                    boxRightExt = time + tfMs // Extend one bar into future for continuous tracking
+                    box.set_right(updatedState.c2_extLowerBox, boxRightExt)
+                    a1LimitDisc = not na(updatedState.targetA1) and updatedState.targetA1 > 0 and c2ExtA1Multiplier > 0 ? updatedState.targetA1 * c2ExtA1Multiplier : na
+                    finalDisplayBottom = not na(a1LimitDisc) and a1LimitDisc > 0 ? math.max(updatedState.c2_extLowerExtreme, c2Bottom - a1LimitDisc) : updatedState.c2_extLowerExtreme
+                    box.set_bottom(updatedState.c2_extLowerBox, finalDisplayBottom)
+
+                // -------- UPPER EXTENSION (above C2) --------
+                if currentHigh > c2Top
+                    if not updatedState.c2_extUpperActive
+                        updatedState.c2_extUpperActive := true
+                        updatedState.c2_extUpperStartTime := time
+                        updatedState.c2_extUpperExtreme := currentHigh
+                        if showC2ExtAboveBox and ((useWickBounds and showWickBoxes) or (useBodyBounds and showBodyBoxes) or (not showBodyBoxes and showWickBoxes))
+                            boxLeftUp = updatedState.c2_extUpperStartTime
+                            tfMs = timeframe.in_seconds(timeframe.period) * 1000
+                            boxRightUp = time + tfMs // Extend one bar into future for continuous tracking
+                            a1LimitPrem = not na(updatedState.targetA1) and updatedState.targetA1 > 0 and c2ExtA1Multiplier > 0 ? updatedState.targetA1 * c2ExtA1Multiplier : na
+                            finalBoxTopPrice = not na(a1LimitPrem) and a1LimitPrem > 0 ? math.min(currentHigh, c2Top + a1LimitPrem) : currentHigh
+                            updatedState.c2_extUpperBox := box.new(boxLeftUp, finalBoxTopPrice, boxRightUp, c2Top, bgcolor = colorC2ExtAbove, border_color = colorC2ExtAbove, xloc = xloc.bar_time)
+                    else
+                        updatedState.c2_extUpperExtreme := math.max(updatedState.c2_extUpperExtreme, currentHigh)
+
+                // Continuously update upper box if exists
+                if not na(updatedState.c2_extUpperBox)
+                    tfMs = timeframe.in_seconds(timeframe.period) * 1000
+                    boxRightUp = time + tfMs // Extend one bar into future for continuous tracking
+                    box.set_right(updatedState.c2_extUpperBox, boxRightUp)
+                    a1LimitPrem = not na(updatedState.targetA1) and updatedState.targetA1 > 0 and c2ExtA1Multiplier > 0 ? updatedState.targetA1 * c2ExtA1Multiplier : na
+                    finalDisplayTop = not na(a1LimitPrem) and a1LimitPrem > 0 ? math.min(updatedState.c2_extUpperExtreme, c2Top + a1LimitPrem) : updatedState.c2_extUpperExtreme
+                    box.set_top(updatedState.c2_extUpperBox, finalDisplayTop)
+
+    updatedState
+
+// ==========================================
+// GHOST LINE MANAGEMENT FUNCTIONS
+// ==========================================
+
+// Process all ghost line management for a session
+f_processGhostLines(updatedState, cfg, idx) =>
+    // For now, return the state unchanged - ghost line logic handled in main loop
+    // This function can be expanded later when library functions are available
+    updatedState
+
+// ==========================================
+// ENHANCED HISTORICAL GHOST MANAGEMENT (WITH LABELS)
+// ==========================================
+
+// Enhanced historical ghost management function with label support
+f_manageHistoricalGhosts(array<line> historicalGhostLines, array<float> historicalGhostPrices, array<string> historicalGhostTypes, array<string> historicalSessionNames, array<int> historicalGhostTimes, array<int> historicalGhostDays, array<color> historicalGhostOriginalColors, array<label> historicalGhostLabels, bool enableHistoricalGhosts = true, int historicalGhostDaysLimit = 3, int maxHistoricalGhosts = 100, bool fadeHistoricalGhosts = true, bool keepOriginalColors = false, int historicalTransparency = 60, color historicalGhostColor = color.gray) =>
+    if enableHistoricalGhosts and array.size(historicalGhostLines) > 0
+        currentDay = math.floor(time / 86400000)
+
+        // Check historical ghost lines for mitigation
+        for i = array.size(historicalGhostLines) - 1 to 0 by 1
+            if i >= 0 and i < array.size(historicalGhostLines) and i < array.size(historicalGhostPrices) and i < array.size(historicalGhostTypes)
+                ghostLine = array.get(historicalGhostLines, i)
+                ghostPrice = array.get(historicalGhostPrices, i)
+                ghostType = array.get(historicalGhostTypes, i)
+
+                // Check if price hit with robust logic
+                priceHit = false
+                if (str.contains(ghostType, '_UP') or str.contains(ghostType, '_UPPER')) and high >= ghostPrice
+                    priceHit := true
+                else if (str.contains(ghostType, '_DOWN') or str.contains(ghostType, '_LOWER')) and low <= ghostPrice
+                    priceHit := true
+
+                // If this line was hit, mitigate both UP and DOWN lines of the same type from the same session
+                if priceHit
+                    sessionName = array.get(historicalSessionNames, i)
+                    baseGhostType = ''
+
+                    // Determine the base ghost type using exact matching to avoid confusion
+                    if ghostType == 'A1_UP' or ghostType == 'A1_DOWN'
+                        baseGhostType := 'A1'
+                    else if ghostType == 'C2_EXT_UPPER' or ghostType == 'C2_EXT_LOWER'
+                        baseGhostType := 'C2_EXT'
+                    else if ghostType == 'C2_UP' or ghostType == 'C2_DOWN'
+                        baseGhostType := 'C2'
+                    else if ghostType == 'C3_2X_UP' or ghostType == 'C3_2X_DOWN'
+                        baseGhostType := 'C3_2X'
+                    else if ghostType == 'C3_UP' or ghostType == 'C3_DOWN'
+                        baseGhostType := 'C3'
+                    else if ghostType == 'C4_2X_UP' or ghostType == 'C4_2X_DOWN'
+                        baseGhostType := 'C4_2X'
+                    else if ghostType == 'C4_UP' or ghostType == 'C4_DOWN'
+                        baseGhostType := 'C4'
+
+                    // Mark all matching lines for removal (both UP and DOWN of same type from same session)
+                    var array<bool> linesToRemove = array.new<bool>()
+                    array.clear(linesToRemove)
+
+                    for j = 0 to array.size(historicalGhostLines) - 1 by 1
+                        if j < array.size(historicalGhostTypes) and j < array.size(historicalSessionNames)
+                            checkGhostType = array.get(historicalGhostTypes, j)
+                            checkSessionName = array.get(historicalSessionNames, j)
+
+                            // Check if this line matches the base type and session using exact matching
+                            shouldRemovePair = false
+                            if checkSessionName == sessionName
+                                if baseGhostType == 'A1' and (checkGhostType == 'A1_UP' or checkGhostType == 'A1_DOWN')
+                                    shouldRemovePair := true
+                                else if baseGhostType == 'C2_EXT' and (checkGhostType == 'C2_EXT_UPPER' or checkGhostType == 'C2_EXT_LOWER')
+                                    shouldRemovePair := true
+                                else if baseGhostType == 'C2' and (checkGhostType == 'C2_UP' or checkGhostType == 'C2_DOWN')
+                                    shouldRemovePair := true
+                                else if baseGhostType == 'C3_2X' and (checkGhostType == 'C3_2X_UP' or checkGhostType == 'C3_2X_DOWN')
+                                    shouldRemovePair := true
+                                else if baseGhostType == 'C3' and (checkGhostType == 'C3_UP' or checkGhostType == 'C3_DOWN')
+                                    shouldRemovePair := true
+                                else if baseGhostType == 'C4_2X' and (checkGhostType == 'C4_2X_UP' or checkGhostType == 'C4_2X_DOWN')
+                                    shouldRemovePair := true
+                                else if baseGhostType == 'C4' and (checkGhostType == 'C4_UP' or checkGhostType == 'C4_DOWN')
+                                    shouldRemovePair := true
+
+                            array.push(linesToRemove, shouldRemovePair)
+                        else
+                            array.push(linesToRemove, false)
+
+                    // Remove marked lines and labels in reverse order to maintain indices
+                    for j = array.size(historicalGhostLines) - 1 to 0 by 1
+                        if j < array.size(linesToRemove) and array.get(linesToRemove, j)
+                            pairGhostLine = array.get(historicalGhostLines, j)
+                            if not na(pairGhostLine)
+                                line.delete(pairGhostLine)
+
+                            // Delete corresponding label
+                            if j < array.size(historicalGhostLabels)
+                                pairGhostLabel = array.get(historicalGhostLabels, j)
+                                if not na(pairGhostLabel)
+                                    label.delete(pairGhostLabel)
+                                array.remove(historicalGhostLabels, j)
+
+                            array.remove(historicalGhostLines, j)
+                            array.remove(historicalGhostPrices, j)
+                            array.remove(historicalGhostTypes, j)
+                            array.remove(historicalSessionNames, j)
+                            array.remove(historicalGhostTimes, j)
+                            array.remove(historicalGhostDays, j)
+                            array.remove(historicalGhostOriginalColors, j)
+
+                    // Break out of the main loop since we've already processed this hit
+                    break
+
+        // Cleanup old historical ghost lines and labels
+        for i = array.size(historicalGhostLines) - 1 to 0 by 1
+            if i >= 0 and i < array.size(historicalGhostDays) and i < array.size(historicalGhostLines)
+                ghostDay = array.get(historicalGhostDays, i)
+                dayAge = currentDay - ghostDay
+
+                // Remove if too old or exceeding max count
+                shouldRemove = dayAge > historicalGhostDaysLimit or array.size(historicalGhostLines) > maxHistoricalGhosts
+
+                if shouldRemove
+                    ghostLine = array.get(historicalGhostLines, i)
+                    if not na(ghostLine)
+                        line.delete(ghostLine)
+                    
+                    // Delete corresponding label
+                    if i < array.size(historicalGhostLabels)
+                        ghostLabel = array.get(historicalGhostLabels, i)
+                        if not na(ghostLabel)
+                            label.delete(ghostLabel)
+                        array.remove(historicalGhostLabels, i)
+                    
+                    array.remove(historicalGhostLines, i)
+                    array.remove(historicalGhostPrices, i)
+                    array.remove(historicalGhostTypes, i)
+                    array.remove(historicalSessionNames, i)
+                    array.remove(historicalGhostTimes, i)
+                    array.remove(historicalGhostDays, i)
+                    array.remove(historicalGhostOriginalColors, i)
+
+        // Update historical ghost line and label colors based on age (if fade enabled)
+        if fadeHistoricalGhosts and array.size(historicalGhostLines) > 0
+            for i = 0 to array.size(historicalGhostLines) - 1 by 1
+                if i < array.size(historicalGhostLines) and i < array.size(historicalGhostDays) and i < array.size(historicalGhostOriginalColors)
+                    ghostLine = array.get(historicalGhostLines, i)
+                    ghostDay = array.get(historicalGhostDays, i)
+                    dayAge = currentDay - ghostDay
+
+                    if not na(ghostLine) and dayAge >= 0
+                        // Calculate fade transparency (older = more transparent)
+                        baseFade = keepOriginalColors ? historicalTransparency : 60
+                        fadeAmount = math.min(95, baseFade + dayAge * 10)
+                        // Use original color if keeping original colors, otherwise use historical color
+                        baseColor = keepOriginalColors ? array.get(historicalGhostOriginalColors, i) : historicalGhostColor
+                        fadedColor = color.new(baseColor, fadeAmount)
+                        line.set_color(ghostLine, fadedColor)
+                        
+                        // Update label color to match line
+                        if i < array.size(historicalGhostLabels)
+                            ghostLabel = array.get(historicalGhostLabels, i)
+                            if not na(ghostLabel)
+                                labelTextColor = color.new(GhostLabelColor, fadeAmount)
+                                label.set_textcolor(ghostLabel, labelTextColor)
+
+// ==========================================
+// MAIN PROCESSING LOOP
+// ==========================================
+
+const string Timezone = 'America/New_York'
+
+// ==========================================
+// SESSION-BASED FVG MIGRATION - MOVE TO HISTORICAL WHEN SAME SESSION TYPE RESTARTS
+// ==========================================
+
+// Clean up old FVGs when sessions restart
+for idx = 0 to array.size(SESSION_CFGS) - 1 by 1
+    cfg = array.get(SESSION_CFGS, idx)
+    st = array.get(SESSION_STATES, idx)
+    
+    // If this session just became active (new instance)
+    if st.isActive and st.isFirstBar
+        lastStartTime = array.get(lastSessionStartTimes, idx)
+        
+        // If we have a previous start time, this is a NEW instance of the same session type
+        if not na(lastStartTime) and array.size(fvgBoxes) > 0
+            // Clean up FVGs from the previous instance of this session
+            for i = array.size(fvgSessionNames) - 1 to 0 by 1
+                if i < array.size(fvgSessionNames) and array.get(fvgSessionNames, i) == cfg.name
+                    fvgTime = array.get(fvgTimes, i)
+                    
+                    // Check if this FVG is from the previous instance (before current session start)
+                    if fvgTime < st.startTime
+                        // Delete the old FVG box
+                        if i < array.size(fvgBoxes) and not na(array.get(fvgBoxes, i))
+                            box.delete(array.get(fvgBoxes, i))
+                        
+                        // Remove from current arrays
+                        if i < array.size(fvgBoxes)
+                            array.remove(fvgBoxes, i)
+                        array.remove(fvgTops, i)
+                        array.remove(fvgBottoms, i)
+                        array.remove(fvgTypes, i)
+                        array.remove(fvgTimes, i)
+                        array.remove(fvgSessionNames, i)
+                        array.remove(fvgDays, i)
+                        array.remove(fvgOriginalColors, i)
+        
+        // Update the last start time for this session type
+        array.set(lastSessionStartTimes, idx, st.startTime)
+
+// Always update session start times for tracking purposes, regardless of historical setting
+for idx = 0 to array.size(SESSION_CFGS) - 1 by 1
+    st = array.get(SESSION_STATES, idx)
+    if st.isActive and st.isFirstBar
+        // Update start time tracking for all sessions
+        if idx < array.size(lastSessionStartTimes)
+            array.set(lastSessionStartTimes, idx, st.startTime)
+
+// ==========================================
+// GHOST LINE HELPER FUNCTIONS
+// ==========================================
+
+// Helper function to create/update a pair of ghost lines (up and down)
+f_updateGhostPair(line ghostUp, line ghostDown, label labelUp, label labelDown, int idx, array<label> upLabels, array<label> downLabels, array<float> upPrices, array<float> downPrices, int lineLeft, int lineRight, float upPrice, float downPrice, color lineColor, string cycleName, string sessionName, bool isBodyBased = false) =>
+    upLabelText = f_createGhostLineLabel(sessionName, cycleName + "↑", upPrice, isBodyBased)
+    dnLabelText = f_createGhostLineLabel(sessionName, cycleName + "↓", downPrice, isBodyBased)
+    
+    [tempUp, upLabel] = core.updateGhostLineWithLabel(ghostUp, array.get(upLabels, idx), lineLeft, upPrice, lineRight, lineColor, _ghostLineStyleConst, GhostLineWidth, ShowGhostLabels, upLabelText, GhostLabelSize, GhostLabelPosition, GhostLabelOffset, GhostLabelColor)
+    [tempDown, dnLabel] = core.updateGhostLineWithLabel(ghostDown, array.get(downLabels, idx), lineLeft, downPrice, lineRight, lineColor, _ghostLineStyleConst, GhostLineWidth, ShowGhostLabels, dnLabelText, GhostLabelSize, GhostLabelPosition, GhostLabelOffset, GhostLabelColor)
+    
+    array.set(upLabels, idx, upLabel)
+    array.set(downLabels, idx, dnLabel)
+    array.set(upPrices, idx, upPrice)
+    array.set(downPrices, idx, downPrice)
+    
+    [tempUp, tempDown]
+
+// Process each session
+for idx = 0 to array.size(SESSION_CFGS) - 1 by 1
+    cfg = array.get(SESSION_CFGS, idx)
+    
+    // Skip disabled sessions early to save processing
+    if not cfg.enabled
+        continue
+        
+    st = array.get(SESSION_STATES, idx)
+
+    // Update session state using library function
+    updatedState = core.updateSession(st, cfg, Timezone)
+    array.set(SESSION_STATES, idx, updatedState)
+    
+    // Reset permanent mitigation flags when a new session starts
+    if updatedState.isFirstBar
+        array.set(mitigatedA1, idx, false)
+        array.set(mitigatedC2, idx, false)
+        array.set(mitigatedC3, idx, false)
+        array.set(mitigatedC4, idx, false)
+        array.set(mitigatedC2ExtLimits, idx, false)
+        array.set(mitigatedA2, idx, false)
+        array.set(mitigatedA3, idx, false)
+        array.set(mitigatedA4, idx, false)
+        array.set(mitigatedA5, idx, false)
+        array.set(mitigatedM2, idx, false)
+        array.set(mitigatedC3Doubled, idx, false)
+        array.set(mitigatedC4Doubled, idx, false)
+        array.set(sessionTimeLinePlotted, idx, false)
+        
+        // Reset session tracking for new session
+        array.set(sessionStartTimes, idx, updatedState.startTime)
+        array.set(sessionRecentlyEnded, idx, false)
+
+    // Only process active sessions
+    if updatedState.isActive
+        // Cache frequently used values to avoid recalculation
+        _high = high
+        _low = low
+        _time = time
+
+        // Capture previous A1 values BEFORE updating them (like original)
+        prevA1High = updatedState.a1_highWick
+        prevA1Low = updatedState.a1_lowWick
+
+        // Update A1 ranges with current bar (like original does)
+        updatedState.a1_highWick := na(updatedState.a1_highWick) ? _high : math.max(updatedState.a1_highWick, _high)
+        updatedState.a1_lowWick := na(updatedState.a1_lowWick) ? _low : math.min(updatedState.a1_lowWick, _low)
+
+        // ---- Cycle Detection ----
+        updatedState := f_processCycleDetection(updatedState, cfg, idx, eqA1Lines, eqA2Lines, eqA3Lines, eqA4Lines, eqA5Lines, eqC2Lines, eqC3Lines, eqC4Lines, eqM2Lines, eqA1Values, eqA2Values, eqA3Values, eqA4Values, eqA5Values, eqC2Values, eqC3Values, eqC4Values, eqM2Values, ghostC2UpPrices, ghostC2DownPrices, ghostC3UpPrices, ghostC3DownPrices, ghostC4UpPrices, ghostC4DownPrices, mitigatedA2, mitigatedA3, mitigatedA4, mitigatedA5, mitigatedM2, mitigatedC2, mitigatedC3, mitigatedC4, historicalEqLines, historicalEqValues, historicalEqTypes, historicalEqSessionNames, historicalEqTimes, historicalEqDays, historicalEqOriginalColors, ShowWickBoxes, ShowBodyBoxes, ShowA1Boxes, ShowA2Boxes, ShowA3Boxes, ShowA4Boxes, ShowA5Boxes, ShowC2Boxes, ShowC3Boxes, ShowC4Boxes, ShowM2Boxes, ShowC2ExtBelowBox, ShowC2ExtAboveBox, ShowEqA1, ShowEqA2, ShowEqA3, ShowEqA4, ShowEqA5, ShowEqC2, ShowEqC3, ShowEqC4, ShowEqM2, ExtendEqLinesToCurrentBar, ColorA1Wick, ColorA1Body, ColorA2Wick, ColorA3Wick, ColorA4Wick, ColorA5Wick, ColorC2Wick, ColorC2Body, ColorC3Wick, ColorC3Body, ColorC4Wick, ColorC4Body, ColorM2Wick, ColorC2ExtBelow, ColorC2ExtAbove, ColorA1Eq, ColorA2Eq, ColorA3Eq, ColorA4Eq, ColorA5Eq, ColorC2Eq, ColorC3Eq, ColorC4Eq, ColorM2Eq, C2SizeMultiplier, A5SizeMultiplier, M2SizeMultiplier, C2ExtA1Multiplier)
+
+        // ---- FVG Detection using Library Engine ----
+        if ShowFVGs and cfg.enabled
+            // Manage existing FVG boxes first
+            core.manageCurrentFVGBoxes(fvgBoxes, fvgTops, fvgBottoms, fvgTypes, fvgTimes, fvgSessionNames, fvgDays, EnableFVGMitigation)
+            
+            // Detect and create new FVGs
+            fvgResult = core.processFVGEngine(updatedState, fvgMinTickSize, fvgShowOnlyFirstInSession, fvgShowOnlyFirstInC2Ext, fvgShowFirstTypeOverall, fvgExtendBoxes, fvgBullColor, fvgBearColor, fvgC2ExtBullFillColor, fvgC2ExtBullBorderColor, fvgC2ExtBearFillColor, fvgC2ExtBearBorderColor)
+            
+            // Handle new FVG detection and add to tracking arrays
+            if fvgResult.bullishDetected or fvgResult.bearishDetected
+                currentDay = math.floor(time / 86400000)
+                
+                if fvgResult.bullishDetected
+                    // Find and store the bullish FVG box (it was created by the library)
+                    array.push(fvgTops, fvgResult.bullTop)
+                    array.push(fvgBottoms, fvgResult.bullBottom)
+                    array.push(fvgTypes, true)
+                    array.push(fvgTimes, time)
+                    array.push(fvgSessionNames, cfg.name)
+                    array.push(fvgDays, currentDay)
+                    // Store original color for historical use
+                    isInExt = core.isFVGInC2Extension(updatedState, fvgResult.bullTop, fvgResult.bullBottom, true) or core.isFVGInC2Extension(updatedState, fvgResult.bullTop, fvgResult.bullBottom, false)
+                    originalColor = isInExt ? fvgC2ExtBullFillColor : fvgBullColor
+                    array.push(fvgOriginalColors, originalColor)
+                    array.push(fvgBoxes, na) // Placeholder since boxes are handled by library
+                
+                if fvgResult.bearishDetected
+                    // Find and store the bearish FVG box (it was created by the library)
+                    array.push(fvgTops, fvgResult.bearTop)
+                    array.push(fvgBottoms, fvgResult.bearBottom)
+                    array.push(fvgTypes, false)
+                    array.push(fvgTimes, time)
+                    array.push(fvgSessionNames, cfg.name)
+                    array.push(fvgDays, currentDay)
+                    // Store original color for historical use
+                    isInExt = core.isFVGInC2Extension(updatedState, fvgResult.bearTop, fvgResult.bearBottom, true) or core.isFVGInC2Extension(updatedState, fvgResult.bearTop, fvgResult.bearBottom, false)
+                    originalColor = isInExt ? fvgC2ExtBearFillColor : fvgBearColor
+                    array.push(fvgOriginalColors, originalColor)
+                    array.push(fvgBoxes, na) // Placeholder since boxes are handled by library
+
+        // ---- Ghost Projection Lines ----
+        if not na(updatedState.targetA1)
+            lineLeft = updatedState.startTime
+            // Limit line extension to prevent 500-bar future error
+            maxFutureTime = time + timeframe.in_seconds(timeframe.period) * 1000 * 100
+            lineRight = math.min(updatedState.endTime, maxFutureTime)
+
+            // A1 Ghost Lines - Create or update dynamically while session is active
+            if ShowGhostA1 and not array.get(mitigatedA1, idx)
+                // Wick-based A1 ghost lines
+                if ShowWickBoxes
+                    upA1 = updatedState.a1_lowWick + updatedState.targetA1
+                    dnA1 = updatedState.a1_highWick - updatedState.targetA1
+                    
+                    [tempA1Up, tempA1Down] = f_updateGhostPair(updatedState.a1_ghostUp, updatedState.a1_ghostDown, na, na, idx, ghostA1UpLabels, ghostA1DownLabels, ghostA1UpPrices, ghostA1DownPrices, lineLeft, lineRight, upA1, dnA1, ColorA1Ghost, "A1", cfg.name, false)
+                    updatedState.a1_ghostUp := tempA1Up
+                    updatedState.a1_ghostDown := tempA1Down
+                else
+                    // Clear wick-based ghost lines if not showing wick boxes
+                    if not na(updatedState.a1_ghostUp)
+                        line.delete(updatedState.a1_ghostUp)
+                        updatedState.a1_ghostUp := na
+                    if not na(updatedState.a1_ghostDown)
+                        line.delete(updatedState.a1_ghostDown)
+                        updatedState.a1_ghostDown := na
+                    array.set(ghostA1UpPrices, idx, na)
+                    array.set(ghostA1DownPrices, idx, na)
+
+                // Body-based A1 ghost lines
+                if ShowBodyBoxes
+                    upA1Body = updatedState.a1_lowBody + updatedState.targetA1
+                    dnA1Body = updatedState.a1_highBody - updatedState.targetA1
+                    
+                    [tempA1UpBody, tempA1DownBody] = f_updateGhostPair(updatedState.a1_ghostUpBody, updatedState.a1_ghostDownBody, na, na, idx, ghostA1UpLabelsBody, ghostA1DownLabelsBody, ghostA1UpPricesBody, ghostA1DownPricesBody, lineLeft, lineRight, upA1Body, dnA1Body, ColorA1Ghost, "A1", cfg.name, true)
+                    updatedState.a1_ghostUpBody := tempA1UpBody
+                    updatedState.a1_ghostDownBody := tempA1DownBody
+                else
+                    // Clear body-based ghost lines if not showing body boxes
+                    if not na(updatedState.a1_ghostUpBody)
+                        line.delete(updatedState.a1_ghostUpBody)
+                        updatedState.a1_ghostUpBody := na
+                    if not na(updatedState.a1_ghostDownBody)
+                        line.delete(updatedState.a1_ghostDownBody)
+                        updatedState.a1_ghostDownBody := na
+                    array.set(ghostA1UpPricesBody, idx, na)
+                    array.set(ghostA1DownPricesBody, idx, na)
+
+            // C2 Ghost Lines - Create or update dynamically while session is active  
+            if ShowGhostC2 and not na(updatedState.targetC2) and not array.get(mitigatedC2, idx)
+                // Wick-based C2 ghost lines
+                if ShowWickBoxes
+                    upC2 = updatedState.lowPrice + updatedState.targetC2 * C2SizeMultiplier
+                    dnC2 = updatedState.highPrice - updatedState.targetC2 * C2SizeMultiplier
+                    
+                    [tempC2Up, tempC2Down] = f_updateGhostPair(updatedState.c2_ghostUp, updatedState.c2_ghostDown, na, na, idx, ghostC2UpLabels, ghostC2DownLabels, ghostC2UpPrices, ghostC2DownPrices, lineLeft, lineRight, upC2, dnC2, ColorC2Ghost, "C2", cfg.name, false)
+                    updatedState.c2_ghostUp := tempC2Up
+                    updatedState.c2_ghostDown := tempC2Down
+
+                // Body-based C2 ghost lines
+                if ShowBodyBoxes
+                    upC2Body = updatedState.a1_lowBody + updatedState.targetC2 * C2SizeMultiplier
+                    dnC2Body = updatedState.a1_highBody - updatedState.targetC2 * C2SizeMultiplier
+                    
+                    [tempC2UpBody, tempC2DownBody] = f_updateGhostPair(updatedState.c2_ghostUpBody, updatedState.c2_ghostDownBody, na, na, idx, ghostC2UpLabelsBody, ghostC2DownLabelsBody, ghostC2UpPricesBody, ghostC2DownPricesBody, lineLeft, lineRight, upC2Body, dnC2Body, ColorC2Ghost, "C2", cfg.name, true)
+                    updatedState.c2_ghostUpBody := tempC2UpBody
+                    updatedState.c2_ghostDownBody := tempC2DownBody
+
+            // C3 Ghost Lines - Create or update dynamically while session is active
+            if ShowGhostC3 and not na(updatedState.targetC3) and not array.get(mitigatedC3, idx)
+                // Wick-based C3 ghost lines
+                if ShowWickBoxes
+                    upC3 = updatedState.lowPrice + updatedState.targetC3
+                    dnC3 = updatedState.highPrice - updatedState.targetC3
+                    
+                    [tempC3Up, tempC3Down] = f_updateGhostPair(updatedState.c3_ghostUp, updatedState.c3_ghostDown, na, na, idx, ghostC3UpLabels, ghostC3DownLabels, ghostC3UpPrices, ghostC3DownPrices, lineLeft, lineRight, upC3, dnC3, ColorC3Ghost, "C3", cfg.name, false)
+                    updatedState.c3_ghostUp := tempC3Up
+                    updatedState.c3_ghostDown := tempC3Down
+
+                // Body-based C3 ghost lines
+                if ShowBodyBoxes
+                    upC3Body = updatedState.a1_lowBody + updatedState.targetC3
+                    dnC3Body = updatedState.a1_highBody - updatedState.targetC3
+                    
+                    [tempC3UpBody, tempC3DownBody] = f_updateGhostPair(updatedState.c3_ghostUpBody, updatedState.c3_ghostDownBody, na, na, idx, ghostC3UpLabelsBody, ghostC3DownLabelsBody, ghostC3UpPricesBody, ghostC3DownPricesBody, lineLeft, lineRight, upC3Body, dnC3Body, ColorC3Ghost, "C3", cfg.name, true)
+                    updatedState.c3_ghostUpBody := tempC3UpBody
+                    updatedState.c3_ghostDownBody := tempC3DownBody
+
+            // C4 Ghost Lines - Create or update dynamically while session is active
+            if ShowGhostC4 and not na(updatedState.targetC4) and not array.get(mitigatedC4, idx)
+                // Wick-based C4 ghost lines
+                if ShowWickBoxes
+                    upC4 = updatedState.lowPrice + updatedState.targetC4
+                    dnC4 = updatedState.highPrice - updatedState.targetC4
+                    
+                    [tempC4Up, tempC4Down] = f_updateGhostPair(updatedState.c4_ghostUp, updatedState.c4_ghostDown, na, na, idx, ghostC4UpLabels, ghostC4DownLabels, ghostC4UpPrices, ghostC4DownPrices, lineLeft, lineRight, upC4, dnC4, ColorC4Ghost, "C4", cfg.name, false)
+                    updatedState.c4_ghostUp := tempC4Up
+                    updatedState.c4_ghostDown := tempC4Down
+
+                // Body-based C4 ghost lines
+                if ShowBodyBoxes
+                    upC4Body = updatedState.a1_lowBody + updatedState.targetC4
+                    dnC4Body = updatedState.a1_highBody - updatedState.targetC4
+                    
+                    [tempC4UpBody, tempC4DownBody] = f_updateGhostPair(updatedState.c4_ghostUpBody, updatedState.c4_ghostDownBody, na, na, idx, ghostC4UpLabelsBody, ghostC4DownLabelsBody, ghostC4UpPricesBody, ghostC4DownPricesBody, lineLeft, lineRight, upC4Body, dnC4Body, ColorC4Ghost, "C4", cfg.name, true)
+                    updatedState.c4_ghostUpBody := tempC4UpBody
+                    updatedState.c4_ghostDownBody := tempC4DownBody
+
+            // C3 Doubled Ghost Lines - Create or update dynamically while session is active
+            if ShowGhostC3Doubled and not na(updatedState.targetC3) and not array.get(mitigatedC3Doubled, idx) and ShowWickBoxes
+                upC3Doubled = updatedState.lowPrice + (updatedState.targetC3 * 2.0)
+                dnC3Doubled = updatedState.highPrice - (updatedState.targetC3 * 2.0)
+                
+                [tempC3DoubledUp, tempC3DoubledDown] = f_updateGhostPair(array.get(ghostC3DoubledUpLines, idx), array.get(ghostC3DoubledDownLines, idx), na, na, idx, ghostC3DoubledUpLabels, ghostC3DoubledDownLabels, ghostC3DoubledUpPrices, ghostC3DoubledDownPrices, lineLeft, lineRight, upC3Doubled, dnC3Doubled, ColorC3GhostDoubled, "C3 2x", cfg.name, false)
+                array.set(ghostC3DoubledUpLines, idx, tempC3DoubledUp)
+                array.set(ghostC3DoubledDownLines, idx, tempC3DoubledDown)
+            else
+                // Clear doubled ghost lines if not enabled or mitigated
+                if not na(array.get(ghostC3DoubledUpLines, idx))
+                    line.delete(array.get(ghostC3DoubledUpLines, idx))
+                    array.set(ghostC3DoubledUpLines, idx, na)
+                if not na(array.get(ghostC3DoubledDownLines, idx))
+                    line.delete(array.get(ghostC3DoubledDownLines, idx))
+                    array.set(ghostC3DoubledDownLines, idx, na)
+                if not na(array.get(ghostC3DoubledUpLabels, idx))
+                    label.delete(array.get(ghostC3DoubledUpLabels, idx))
+                    array.set(ghostC3DoubledUpLabels, idx, na)
+                if not na(array.get(ghostC3DoubledDownLabels, idx))
+                    label.delete(array.get(ghostC3DoubledDownLabels, idx))
+                    array.set(ghostC3DoubledDownLabels, idx, na)
+                array.set(ghostC3DoubledUpPrices, idx, na)
+                array.set(ghostC3DoubledDownPrices, idx, na)
+
+            // C4 Doubled Ghost Lines - Create or update dynamically while session is active
+            if ShowGhostC4Doubled and not na(updatedState.targetC4) and not array.get(mitigatedC4Doubled, idx) and ShowWickBoxes
+                upC4Doubled = updatedState.lowPrice + (updatedState.targetC4 * 2.0)
+                dnC4Doubled = updatedState.highPrice - (updatedState.targetC4 * 2.0)
+                
+                [tempC4DoubledUp, tempC4DoubledDown] = f_updateGhostPair(array.get(ghostC4DoubledUpLines, idx), array.get(ghostC4DoubledDownLines, idx), na, na, idx, ghostC4DoubledUpLabels, ghostC4DoubledDownLabels, ghostC4DoubledUpPrices, ghostC4DoubledDownPrices, lineLeft, lineRight, upC4Doubled, dnC4Doubled, ColorC4GhostDoubled, "C4 2x", cfg.name, false)
+                array.set(ghostC4DoubledUpLines, idx, tempC4DoubledUp)
+                array.set(ghostC4DoubledDownLines, idx, tempC4DoubledDown)
+            else
+                // Clear doubled ghost lines if not enabled or mitigated
+                if not na(array.get(ghostC4DoubledUpLines, idx))
+                    line.delete(array.get(ghostC4DoubledUpLines, idx))
+                    array.set(ghostC4DoubledUpLines, idx, na)
+                if not na(array.get(ghostC4DoubledDownLines, idx))
+                    line.delete(array.get(ghostC4DoubledDownLines, idx))
+                    array.set(ghostC4DoubledDownLines, idx, na)
+                if not na(array.get(ghostC4DoubledUpLabels, idx))
+                    label.delete(array.get(ghostC4DoubledUpLabels, idx))
+                    array.set(ghostC4DoubledUpLabels, idx, na)
+                if not na(array.get(ghostC4DoubledDownLabels, idx))
+                    label.delete(array.get(ghostC4DoubledDownLabels, idx))
+                    array.set(ghostC4DoubledDownLabels, idx, na)
+                array.set(ghostC4DoubledUpPrices, idx, na)
+                array.set(ghostC4DoubledDownPrices, idx, na)
+
+            // C2 Extension Ghost Limit Lines
+            if updatedState.c2_wickHit and not na(updatedState.c2_boundBottom) and not na(updatedState.c2_boundTop) and ShowGhostC2ExtLimits
+                // Calculate limit values
+                a1LimitDisc = not na(updatedState.targetA1) and updatedState.targetA1 > 0 and C2ExtA1Multiplier > 0 ? updatedState.targetA1 * C2ExtA1Multiplier : na
+                a1LimitPrem = not na(updatedState.targetA1) and updatedState.targetA1 > 0 and C2ExtA1Multiplier > 0 ? updatedState.targetA1 * C2ExtA1Multiplier : na
+
+                // Create discount limit ghost line only once if it doesn't exist
+                if na(updatedState.c2_extLimitLowerGhost) and not na(a1LimitDisc) and a1LimitDisc > 0 and not array.get(mitigatedC2ExtLimits, idx)
+                    discLimitLevel = updatedState.c2_boundBottom - a1LimitDisc
+                    
+                    lowerLabelText = f_createGhostLineLabel(cfg.name, "Disc", discLimitLevel)
+                    [tempLowerGhost, lowerLabel] = core.updateGhostLineWithLabel(updatedState.c2_extLimitLowerGhost, array.get(ghostC2ExtLimitLowerLabels, idx), lineLeft, discLimitLevel, lineRight, ColorC2ExtBelow, _ghostLineStyleConst, GhostLineWidth, ShowGhostLabels, lowerLabelText, GhostLabelSize, GhostLabelPosition, GhostLabelOffset, GhostLabelColor)
+                    updatedState.c2_extLimitLowerGhost := tempLowerGhost
+                    
+                    array.set(ghostC2ExtLimitLowerLabels, idx, lowerLabel)
+                    array.set(ghostC2ExtLimitLowerPrices, idx, discLimitLevel)
+
+                // Create premium limit ghost line only once if it doesn't exist
+                if na(updatedState.c2_extLimitUpperGhost) and not na(a1LimitPrem) and a1LimitPrem > 0 and not array.get(mitigatedC2ExtLimits, idx)
+                    premLimitLevel = updatedState.c2_boundTop + a1LimitPrem
+                    
+                    upperLabelText = f_createGhostLineLabel(cfg.name, "Prem", premLimitLevel)
+                    [tempUpperGhost, upperLabel] = core.updateGhostLineWithLabel(updatedState.c2_extLimitUpperGhost, array.get(ghostC2ExtLimitUpperLabels, idx), lineLeft, premLimitLevel, lineRight, ColorC2ExtAbove, _ghostLineStyleConst, GhostLineWidth, ShowGhostLabels, upperLabelText, GhostLabelSize, GhostLabelPosition, GhostLabelOffset, GhostLabelColor)
+                    updatedState.c2_extLimitUpperGhost := tempUpperGhost
+                    
+                    array.set(ghostC2ExtLimitUpperLabels, idx, upperLabel)
+                    array.set(ghostC2ExtLimitUpperPrices, idx, premLimitLevel)
+
+                
+        // Update the state back to the array
+        array.set(SESSION_STATES, idx, updatedState)
+
+// ==========================================
+// T1/T2 TIME LINE PLOTTING
+// ==========================================
+
+// Function to create vertical time lines and labels (similar to OLD OG BASE.pine)
+f_time_line_label(bool line_toggle, bool label_toggle, int x, float y1, float y2, float y3, color _color, string line_style, string label_size, int _width, string label_text) =>
+    line _line = na
+    label _label = na
+    if line_toggle
+        lineStyleConst = f_to_line_style(line_style)
+        _line := line.new(x, y1, x, y2, xloc.bar_time, extend.none, _color, lineStyleConst, _width)
+        if label_toggle
+            labelSizeConst = f_to_size(label_size)
+            _label := label.new(x, y3, label_text, xloc.bar_time, yloc.price, color.new(color.white, 100), label.style_label_up, _color, labelSizeConst, text.align_center)
+    [_line, _label]
+
+// Plot T1 and T2 time lines for active sessions
+if ShowTimeLines
+    for idx = 0 to array.size(SESSION_CFGS) - 1 by 1
+        cfg = array.get(SESSION_CFGS, idx)
+        st = array.get(SESSION_STATES, idx)
+        
+        // Only plot for enabled sessions
+        if cfg.enabled and (not ShowOnlyActiveSessionTimelines or st.isActive)
+            // Only plot if we have valid time data and haven't plotted for this session instance yet
+            if not na(st.targetT1) and not na(st.targetT2) and not na(st.startTime) and not array.get(sessionTimeLinePlotted, idx)
+                // Mark this session as having plotted time lines
+                array.set(sessionTimeLinePlotted, idx, true)
+                
+                // Calculate Y positions for the time lines (use price range)
+                priceRange = high - low
+                if priceRange <= 0
+                    priceRange := close * 0.001 // Fallback to small range
+                
+                yTop = high + priceRange * 0.5
+                yBottom = low - priceRange * 0.5
+                yLabel = yBottom - priceRange * 0.1
+                
+                // Calculate T1 and T2 times
+                t1Time = math.round(st.startTime + st.targetT1)
+                t2Time = math.round(st.startTime + st.targetT2)
+                
+                // Format time labels
+                t1TimeString = ShowTimeLabels ? str.format_time(t1Time, "HH:mm", "America/New_York") : ""
+                t2TimeString = ShowTimeLabels ? str.format_time(t2Time, "HH:mm", "America/New_York") : ""
+                
+                // Plot T1 (Manipulation) line
+                [t1_line, t1_label] = f_time_line_label(true, ShowTimeLabels, t1Time, yBottom, yTop, yLabel, T1LineColor, T1LineStyleInput, TimelineLabelSize, T1LineWidth, t1TimeString)
+                
+                [t2_line, t2_label] = f_time_line_label(true, ShowTimeLabels, t2Time, yBottom, yTop, yLabel, T2LineColor, T2LineStyleInput, TimelineLabelSize, T2LineWidth, t2TimeString)
+
+
+// ==========================================
+// T1/T2 TIME LINE PLOTTING  
+// ==========================================
+
+// T1/T2 time line plotting uses existing function defined above
+
+// Plot T1 and T2 time lines for active sessions
+if ShowTimeLines
+    for idx = 0 to array.size(SESSION_CFGS) - 1 by 1
+        cfg = array.get(SESSION_CFGS, idx)
+        st = array.get(SESSION_STATES, idx)
+        
+        // Only plot for enabled sessions
+        if cfg.enabled and (not ShowOnlyActiveSessionTimelines or st.isActive)
+            // Only plot if we have valid time data and haven't plotted for this session instance yet
+            if not na(st.targetT1) and not na(st.targetT2) and not na(st.startTime) and not array.get(sessionTimeLinePlotted, idx)
+                // Mark this session as having plotted time lines
+                array.set(sessionTimeLinePlotted, idx, true)
+                
+                // Calculate Y positions for the time lines (use price range)
+                priceRange = high - low
+                if priceRange <= 0
+                    priceRange := close * 0.001 // Fallback to small range
+                
+                yTop = high + priceRange * 0.5
+                yBottom = low - priceRange * 0.5
+                yLabel = yBottom - priceRange * 0.1
+                
+                // Calculate T1 and T2 times
+                t1Time = math.round(st.startTime + st.targetT1)
+                t2Time = math.round(st.startTime + st.targetT2)
+                
+                // Format time labels
+                t1TimeString = ShowTimeLabels ? str.format_time(t1Time, "HH:mm", "America/New_York") : ""
+                t2TimeString = ShowTimeLabels ? str.format_time(t2Time, "HH:mm", "America/New_York") : ""
+                
+                // Plot T1 (Manipulation) line
+                [t1_line, t1_label] = f_time_line_label(true, ShowTimeLabels, t1Time, yBottom, yTop, yLabel, T1LineColor, T1LineStyleInput, TimelineLabelSize, T1LineWidth, t1TimeString)
+                
+                [t2_line, t2_label] = f_time_line_label(true, ShowTimeLabels, t2Time, yBottom, yTop, yLabel, T2LineColor, T2LineStyleInput, TimelineLabelSize, T2LineWidth, t2TimeString)
+
+// ==========================================
+// EQ LINE UPDATES - EXTEND TO CURRENT BAR
+// ==========================================
+
+// Update current session EQ lines to extend to current bar if toggle is enabled
+if ExtendEqLinesToCurrentBar
+    for idx = 0 to array.size(eqA1Lines) - 1 by 1
+        if not na(array.get(eqA1Lines, idx))
+            line.set_x2(array.get(eqA1Lines, idx), time)
+        if not na(array.get(eqA2Lines, idx))
+            line.set_x2(array.get(eqA2Lines, idx), time)
+        if not na(array.get(eqA3Lines, idx))
+            line.set_x2(array.get(eqA3Lines, idx), time)
+        if not na(array.get(eqA4Lines, idx))
+            line.set_x2(array.get(eqA4Lines, idx), time)
+        if not na(array.get(eqA5Lines, idx))
+            line.set_x2(array.get(eqA5Lines, idx), time)
+        if not na(array.get(eqC2Lines, idx))
+            line.set_x2(array.get(eqC2Lines, idx), time)
+        if not na(array.get(eqC3Lines, idx))
+            line.set_x2(array.get(eqC3Lines, idx), time)
+        if not na(array.get(eqC4Lines, idx))
+            line.set_x2(array.get(eqC4Lines, idx), time)
+
+// Update historical EQ lines to extend to current bar if toggle is enabled
+if ExtendEqLinesToCurrentBar and array.size(historicalEqLines) > 0
+    for i = 0 to array.size(historicalEqLines) - 1 by 1
+        if not na(array.get(historicalEqLines, i))
+            line.set_x2(array.get(historicalEqLines, i), time)
+
+// ==========================================
+// SESSION END PROCESSING - STORE HISTORICAL GHOST LINES
+// ==========================================
+
+// Check for session ends and store current ghost lines as historical
+if EnableHistoricalGhosts
+    for idx = 0 to array.size(SESSION_CFGS) - 1 by 1
+        cfg = array.get(SESSION_CFGS, idx)
+        st = array.get(SESSION_STATES, idx)
+
+        // Reset tracking when session becomes active
+        if st.isActive and array.get(sessionHistoricalStored, idx)
+            array.set(sessionHistoricalStored, idx, false)
+            array.set(sessionRecentlyEnded, idx, false)  // Clear recently ended flag when session becomes active again
+
+        // Check if session just ended - Create historical lines when session becomes inactive and has ghost lines OR EQ lines (only once)
+        hasGhostLines = (not na(st.a1_ghostUp) or not na(st.a1_ghostDown) or not na(st.c2_ghostUp) or not na(st.c2_ghostDown) or not na(st.c3_ghostUp) or not na(st.c3_ghostDown) or not na(st.c4_ghostUp) or not na(st.c4_ghostDown))
+        hasEqLines = (not na(array.get(eqA1Lines, idx)) or not na(array.get(eqA2Lines, idx)) or not na(array.get(eqA3Lines, idx)) or not na(array.get(eqA4Lines, idx)) or not na(array.get(eqA5Lines, idx)) or not na(array.get(eqC2Lines, idx)) or not na(array.get(eqC3Lines, idx)) or not na(array.get(eqC4Lines, idx)))
+        
+        if not st.isActive and not array.get(sessionHistoricalStored, idx) and (hasGhostLines or hasEqLines)
+            // Mark session as recently ended for table sorting
+            array.set(sessionRecentlyEnded, idx, true)
+            currentDay = math.floor(time / 86400000) // Convert to day number
+
+            // Mark this session as having stored historical lines
+            array.set(sessionHistoricalStored, idx, true)
+            
+            // Historical session data storage moved to library
+
+            // Store A1 ghost lines and create new historical lines
+            if not na(st.a1_ghostUp) and not na(array.get(ghostA1UpPrices, idx))
+                // Delete original current session label to avoid duplication
+                if not na(array.get(ghostA1UpLabels, idx))
+                    label.delete(array.get(ghostA1UpLabels, idx))
+                    array.set(ghostA1UpLabels, idx, na)
+                
+                // Create new historical line without extension
+                lineStartTime = line.get_x1(st.a1_ghostUp)
+                linePrice = array.get(ghostA1UpPrices, idx)
+                // End line at current time instead of extending into future
+                lineEndTime = time
+                // Choose color based on user preference
+                lineColor = KeepOriginalColors ? color.new(ColorA1Ghost, HistoricalTransparency) : HistoricalGhostColor
+                newHistLine = line.new(lineStartTime, linePrice, lineEndTime, linePrice, color = lineColor, style = _ghostLineStyleConst, width = GhostLineWidth, xloc = xloc.bar_time)
+                
+                // Create historical label
+                labelText = f_createGhostLineLabel(cfg.name, "A1↑", linePrice, false)
+                labelX = math.round(lineStartTime + (lineEndTime - lineStartTime) * GhostLabelOffset)
+                newHistLabel = label.new(x = labelX, y = linePrice, text = labelText, xloc = xloc.bar_time, yloc = yloc.price, color = color.new(color.white, 100), style = _ghostLabelStyleConst, textcolor = GhostLabelColor, size = f_to_size(GhostLabelSize))
+                
+                array.push(historicalGhostLines, newHistLine)
+                array.push(historicalGhostPrices, array.get(ghostA1UpPrices, idx))
+                array.push(historicalGhostTypes, 'A1_UP')
+                array.push(historicalSessionNames, cfg.name)
+                array.push(historicalGhostTimes, st.endTime)
+                array.push(historicalGhostDays, currentDay)
+                array.push(historicalGhostOriginalColors, ColorA1Ghost)
+                array.push(historicalGhostLabels, newHistLabel)
+
+            if not na(st.a1_ghostDown) and not na(array.get(ghostA1DownPrices, idx))
+                // Delete original current session label to avoid duplication
+                if not na(array.get(ghostA1DownLabels, idx))
+                    label.delete(array.get(ghostA1DownLabels, idx))
+                    array.set(ghostA1DownLabels, idx, na)
+                
+                // Create new historical line without extension
+                lineStartTime = line.get_x1(st.a1_ghostDown)
+                linePrice = array.get(ghostA1DownPrices, idx)
+                // End line at current time instead of extending into future
+                lineEndTime = time
+                // Choose color based on user preference
+                lineColor = KeepOriginalColors ? color.new(ColorA1Ghost, HistoricalTransparency) : HistoricalGhostColor
+                newHistLine = line.new(lineStartTime, linePrice, lineEndTime, linePrice, color = lineColor, style = _ghostLineStyleConst, width = GhostLineWidth, xloc = xloc.bar_time)
+                
+                // Create historical label
+                labelText = f_createGhostLineLabel(cfg.name, "A1↓", linePrice, false)
+                labelX = math.round(lineStartTime + (lineEndTime - lineStartTime) * GhostLabelOffset)
+                newHistLabel = label.new(x = labelX, y = linePrice, text = labelText, xloc = xloc.bar_time, yloc = yloc.price, color = color.new(color.white, 100), style = _ghostLabelStyleConst, textcolor = GhostLabelColor, size = f_to_size(GhostLabelSize))
+                
+                array.push(historicalGhostLines, newHistLine)
+                array.push(historicalGhostPrices, array.get(ghostA1DownPrices, idx))
+                array.push(historicalGhostTypes, 'A1_DOWN')
+                array.push(historicalSessionNames, cfg.name)
+                array.push(historicalGhostTimes, st.endTime)
+                array.push(historicalGhostDays, currentDay)
+                array.push(historicalGhostOriginalColors, ColorA1Ghost)
+                array.push(historicalGhostLabels, newHistLabel)
+
+            // Store C2 ghost lines
+            if not na(st.c2_ghostUp) and not na(array.get(ghostC2UpPrices, idx))
+                // Delete original current session label to avoid duplication
+                if not na(array.get(ghostC2UpLabels, idx))
+                    label.delete(array.get(ghostC2UpLabels, idx))
+                    array.set(ghostC2UpLabels, idx, na)
+                
+                lineStartTime = line.get_x1(st.c2_ghostUp)
+                linePrice = array.get(ghostC2UpPrices, idx)
+                lineEndTime = time
+                // Choose color based on user preference
+                lineColor = KeepOriginalColors ? color.new(ColorC2Ghost, HistoricalTransparency) : HistoricalGhostColor
+                newHistLine = line.new(lineStartTime, linePrice, lineEndTime, linePrice, color = lineColor, style = _ghostLineStyleConst, width = GhostLineWidth, xloc = xloc.bar_time)
+                
+                // Create historical label
+                labelText = f_createGhostLineLabel(cfg.name, "C2↑", linePrice, false)
+                labelX = math.round(lineStartTime + (lineEndTime - lineStartTime) * GhostLabelOffset)
+                newHistLabel = label.new(x = labelX, y = linePrice, text = labelText, xloc = xloc.bar_time, yloc = yloc.price, color = color.new(color.white, 100), style = _ghostLabelStyleConst, textcolor = GhostLabelColor, size = f_to_size(GhostLabelSize))
+                
+                array.push(historicalGhostLines, newHistLine)
+                array.push(historicalGhostPrices, array.get(ghostC2UpPrices, idx))
+                array.push(historicalGhostTypes, 'C2_UP')
+                array.push(historicalSessionNames, cfg.name)
+                array.push(historicalGhostTimes, st.endTime)
+                array.push(historicalGhostDays, currentDay)
+                array.push(historicalGhostOriginalColors, ColorC2Ghost)
+                array.push(historicalGhostLabels, newHistLabel)
+
+            if not na(st.c2_ghostDown) and not na(array.get(ghostC2DownPrices, idx))
+                // Delete original current session label to avoid duplication
+                if not na(array.get(ghostC2DownLabels, idx))
+                    label.delete(array.get(ghostC2DownLabels, idx))
+                    array.set(ghostC2DownLabels, idx, na)
+                
+                lineStartTime = line.get_x1(st.c2_ghostDown)
+                linePrice = array.get(ghostC2DownPrices, idx)
+                lineEndTime = time
+                // Choose color based on user preference
+                lineColor = KeepOriginalColors ? color.new(ColorC2Ghost, HistoricalTransparency) : HistoricalGhostColor
+                newHistLine = line.new(lineStartTime, linePrice, lineEndTime, linePrice, color = lineColor, style = _ghostLineStyleConst, width = GhostLineWidth, xloc = xloc.bar_time)
+                
+                // Create historical label
+                labelText = f_createGhostLineLabel(cfg.name, "C2↓", linePrice, false)
+                labelX = math.round(lineStartTime + (lineEndTime - lineStartTime) * GhostLabelOffset)
+                newHistLabel = label.new(x = labelX, y = linePrice, text = labelText, xloc = xloc.bar_time, yloc = yloc.price, color = color.new(color.white, 100), style = _ghostLabelStyleConst, textcolor = GhostLabelColor, size = f_to_size(GhostLabelSize))
+                
+                array.push(historicalGhostLines, newHistLine)
+                array.push(historicalGhostPrices, array.get(ghostC2DownPrices, idx))
+                array.push(historicalGhostTypes, 'C2_DOWN')
+                array.push(historicalSessionNames, cfg.name)
+                array.push(historicalGhostTimes, st.endTime)
+                array.push(historicalGhostDays, currentDay)
+                array.push(historicalGhostOriginalColors, ColorC2Ghost)
+                array.push(historicalGhostLabels, newHistLabel)
+
+            // Store C3 ghost lines
+            if not na(st.c3_ghostUp) and not na(array.get(ghostC3UpPrices, idx))
+                // Delete original current session label to avoid duplication
+                if not na(array.get(ghostC3UpLabels, idx))
+                    label.delete(array.get(ghostC3UpLabels, idx))
+                    array.set(ghostC3UpLabels, idx, na)
+                
+                lineStartTime = line.get_x1(st.c3_ghostUp)
+                linePrice = array.get(ghostC3UpPrices, idx)
+                lineEndTime = time
+                // Choose color based on user preference
+                lineColor = KeepOriginalColors ? color.new(ColorC3Ghost, HistoricalTransparency) : HistoricalGhostColor
+                newHistLine = line.new(lineStartTime, linePrice, lineEndTime, linePrice, color = lineColor, style = _ghostLineStyleConst, width = GhostLineWidth, xloc = xloc.bar_time)
+                
+                // Create historical label
+                labelText = f_createGhostLineLabel(cfg.name, "C3↑", linePrice, false)
+                labelX = math.round(lineStartTime + (lineEndTime - lineStartTime) * GhostLabelOffset)
+                newHistLabel = label.new(x = labelX, y = linePrice, text = labelText, xloc = xloc.bar_time, yloc = yloc.price, color = color.new(color.white, 100), style = _ghostLabelStyleConst, textcolor = GhostLabelColor, size = f_to_size(GhostLabelSize))
+                
+                array.push(historicalGhostLines, newHistLine)
+                array.push(historicalGhostPrices, array.get(ghostC3UpPrices, idx))
+                array.push(historicalGhostTypes, 'C3_UP')
+                array.push(historicalSessionNames, cfg.name)
+                array.push(historicalGhostTimes, st.endTime)
+                array.push(historicalGhostDays, currentDay)
+                array.push(historicalGhostOriginalColors, ColorC3Ghost)
+                array.push(historicalGhostLabels, newHistLabel)
+
+            if not na(st.c3_ghostDown) and not na(array.get(ghostC3DownPrices, idx))
+                // Delete original current session label to avoid duplication
+                if not na(array.get(ghostC3DownLabels, idx))
+                    label.delete(array.get(ghostC3DownLabels, idx))
+                    array.set(ghostC3DownLabels, idx, na)
+                
+                lineStartTime = line.get_x1(st.c3_ghostDown)
+                linePrice = array.get(ghostC3DownPrices, idx)
+                lineEndTime = time
+                // Choose color based on user preference
+                lineColor = KeepOriginalColors ? color.new(ColorC3Ghost, HistoricalTransparency) : HistoricalGhostColor
+                newHistLine = line.new(lineStartTime, linePrice, lineEndTime, linePrice, color = lineColor, style = _ghostLineStyleConst, width = GhostLineWidth, xloc = xloc.bar_time)
+                
+                // Create historical label
+                labelText = f_createGhostLineLabel(cfg.name, "C3↓", linePrice, false)
+                labelX = math.round(lineStartTime + (lineEndTime - lineStartTime) * GhostLabelOffset)
+                newHistLabel = label.new(x = labelX, y = linePrice, text = labelText, xloc = xloc.bar_time, yloc = yloc.price, color = color.new(color.white, 100), style = _ghostLabelStyleConst, textcolor = GhostLabelColor, size = f_to_size(GhostLabelSize))
+                
+                array.push(historicalGhostLines, newHistLine)
+                array.push(historicalGhostPrices, array.get(ghostC3DownPrices, idx))
+                array.push(historicalGhostTypes, 'C3_DOWN')
+                array.push(historicalSessionNames, cfg.name)
+                array.push(historicalGhostTimes, st.endTime)
+                array.push(historicalGhostDays, currentDay)
+                array.push(historicalGhostOriginalColors, ColorC3Ghost)
+                array.push(historicalGhostLabels, newHistLabel)
+
+            // Store C4 ghost lines
+            if not na(st.c4_ghostUp) and not na(array.get(ghostC4UpPrices, idx))
+                // Delete original current session label to avoid duplication
+                if not na(array.get(ghostC4UpLabels, idx))
+                    label.delete(array.get(ghostC4UpLabels, idx))
+                    array.set(ghostC4UpLabels, idx, na)
+                
+                lineStartTime = line.get_x1(st.c4_ghostUp)
+                linePrice = array.get(ghostC4UpPrices, idx)
+                lineEndTime = time
+                // Choose color based on user preference
+                lineColor = KeepOriginalColors ? color.new(ColorC4Ghost, HistoricalTransparency) : HistoricalGhostColor
+                newHistLine = line.new(lineStartTime, linePrice, lineEndTime, linePrice, color = lineColor, style = _ghostLineStyleConst, width = GhostLineWidth, xloc = xloc.bar_time)
+                
+                // Create historical label
+                labelText = f_createGhostLineLabel(cfg.name, "C4↑", linePrice, false)
+                labelX = math.round(lineStartTime + (lineEndTime - lineStartTime) * GhostLabelOffset)
+                newHistLabel = label.new(x = labelX, y = linePrice, text = labelText, xloc = xloc.bar_time, yloc = yloc.price, color = color.new(color.white, 100), style = _ghostLabelStyleConst, textcolor = GhostLabelColor, size = f_to_size(GhostLabelSize))
+                
+                array.push(historicalGhostLines, newHistLine)
+                array.push(historicalGhostPrices, array.get(ghostC4UpPrices, idx))
+                array.push(historicalGhostTypes, 'C4_UP')
+                array.push(historicalSessionNames, cfg.name)
+                array.push(historicalGhostTimes, st.endTime)
+                array.push(historicalGhostDays, currentDay)
+                array.push(historicalGhostOriginalColors, ColorC4Ghost)
+                array.push(historicalGhostLabels, newHistLabel)
+
+            if not na(st.c4_ghostDown) and not na(array.get(ghostC4DownPrices, idx))
+                // Delete original current session label to avoid duplication
+                if not na(array.get(ghostC4DownLabels, idx))
+                    label.delete(array.get(ghostC4DownLabels, idx))
+                    array.set(ghostC4DownLabels, idx, na)
+                
+                lineStartTime = line.get_x1(st.c4_ghostDown)
+                linePrice = array.get(ghostC4DownPrices, idx)
+                lineEndTime = time
+                // Choose color based on user preference
+                lineColor = KeepOriginalColors ? color.new(ColorC4Ghost, HistoricalTransparency) : HistoricalGhostColor
+                newHistLine = line.new(lineStartTime, linePrice, lineEndTime, linePrice, color = lineColor, style = _ghostLineStyleConst, width = GhostLineWidth, xloc = xloc.bar_time)
+                
+                // Create historical label
+                labelText = f_createGhostLineLabel(cfg.name, "C4↓", linePrice, false)
+                labelX = math.round(lineStartTime + (lineEndTime - lineStartTime) * GhostLabelOffset)
+                newHistLabel = label.new(x = labelX, y = linePrice, text = labelText, xloc = xloc.bar_time, yloc = yloc.price, color = color.new(color.white, 100), style = _ghostLabelStyleConst, textcolor = GhostLabelColor, size = f_to_size(GhostLabelSize))
+                
+                array.push(historicalGhostLines, newHistLine)
+                array.push(historicalGhostPrices, array.get(ghostC4DownPrices, idx))
+                array.push(historicalGhostTypes, 'C4_DOWN')
+                array.push(historicalSessionNames, cfg.name)
+                array.push(historicalGhostTimes, st.endTime)
+                array.push(historicalGhostDays, currentDay)
+                array.push(historicalGhostOriginalColors, ColorC4Ghost)
+                array.push(historicalGhostLabels, newHistLabel)
+
+            // Store C3 Doubled ghost lines
+            if not na(array.get(ghostC3DoubledUpLines, idx)) and not na(array.get(ghostC3DoubledUpPrices, idx))
+                // Delete original current session label to avoid duplication
+                if not na(array.get(ghostC3DoubledUpLabels, idx))
+                    label.delete(array.get(ghostC3DoubledUpLabels, idx))
+                    array.set(ghostC3DoubledUpLabels, idx, na)
+                
+                ghostLine = array.get(ghostC3DoubledUpLines, idx)
+                lineStartTime = line.get_x1(ghostLine)
+                linePrice = array.get(ghostC3DoubledUpPrices, idx)
+                lineEndTime = time
+                // Choose color based on user preference
+                lineColor = KeepOriginalColors ? color.new(ColorC3GhostDoubled, HistoricalTransparency) : HistoricalGhostColor
+                newHistLine = line.new(lineStartTime, linePrice, lineEndTime, linePrice, color = lineColor, style = _ghostLineStyleConst, width = GhostLineWidth, xloc = xloc.bar_time)
+                
+                // Create historical label
+                labelText = f_createGhostLineLabel(cfg.name, "C3 2x↑", linePrice, false)
+                labelX = math.round(lineStartTime + (lineEndTime - lineStartTime) * GhostLabelOffset)
+                newHistLabel = label.new(x = labelX, y = linePrice, text = labelText, xloc = xloc.bar_time, yloc = yloc.price, color = color.new(color.white, 100), style = _ghostLabelStyleConst, textcolor = GhostLabelColor, size = f_to_size(GhostLabelSize))
+                
+                array.push(historicalGhostLines, newHistLine)
+                array.push(historicalGhostPrices, array.get(ghostC3DoubledUpPrices, idx))
+                array.push(historicalGhostTypes, 'C3_2X_UP')
+                array.push(historicalSessionNames, cfg.name)
+                array.push(historicalGhostTimes, st.endTime)
+                array.push(historicalGhostDays, currentDay)
+                array.push(historicalGhostOriginalColors, ColorC3GhostDoubled)
+                array.push(historicalGhostLabels, newHistLabel)
+
+            if not na(array.get(ghostC3DoubledDownLines, idx)) and not na(array.get(ghostC3DoubledDownPrices, idx))
+                // Delete original current session label to avoid duplication
+                if not na(array.get(ghostC3DoubledDownLabels, idx))
+                    label.delete(array.get(ghostC3DoubledDownLabels, idx))
+                    array.set(ghostC3DoubledDownLabels, idx, na)
+                
+                ghostLine = array.get(ghostC3DoubledDownLines, idx)
+                lineStartTime = line.get_x1(ghostLine)
+                linePrice = array.get(ghostC3DoubledDownPrices, idx)
+                lineEndTime = time
+                // Choose color based on user preference
+                lineColor = KeepOriginalColors ? color.new(ColorC3GhostDoubled, HistoricalTransparency) : HistoricalGhostColor
+                newHistLine = line.new(lineStartTime, linePrice, lineEndTime, linePrice, color = lineColor, style = _ghostLineStyleConst, width = GhostLineWidth, xloc = xloc.bar_time)
+                
+                // Create historical label
+                labelText = f_createGhostLineLabel(cfg.name, "C3 2x↓", linePrice, false)
+                labelX = math.round(lineStartTime + (lineEndTime - lineStartTime) * GhostLabelOffset)
+                newHistLabel = label.new(x = labelX, y = linePrice, text = labelText, xloc = xloc.bar_time, yloc = yloc.price, color = color.new(color.white, 100), style = _ghostLabelStyleConst, textcolor = GhostLabelColor, size = f_to_size(GhostLabelSize))
+                
+                array.push(historicalGhostLines, newHistLine)
+                array.push(historicalGhostPrices, array.get(ghostC3DoubledDownPrices, idx))
+                array.push(historicalGhostTypes, 'C3_2X_DOWN')
+                array.push(historicalSessionNames, cfg.name)
+                array.push(historicalGhostTimes, st.endTime)
+                array.push(historicalGhostDays, currentDay)
+                array.push(historicalGhostOriginalColors, ColorC3GhostDoubled)
+                array.push(historicalGhostLabels, newHistLabel)
+
+            // Store C4 Doubled ghost lines
+            if not na(array.get(ghostC4DoubledUpLines, idx)) and not na(array.get(ghostC4DoubledUpPrices, idx))
+                // Delete original current session label to avoid duplication
+                if not na(array.get(ghostC4DoubledUpLabels, idx))
+                    label.delete(array.get(ghostC4DoubledUpLabels, idx))
+                    array.set(ghostC4DoubledUpLabels, idx, na)
+                
+                ghostLine = array.get(ghostC4DoubledUpLines, idx)
+                lineStartTime = line.get_x1(ghostLine)
+                linePrice = array.get(ghostC4DoubledUpPrices, idx)
+                lineEndTime = time
+                // Choose color based on user preference
+                lineColor = KeepOriginalColors ? color.new(ColorC4GhostDoubled, HistoricalTransparency) : HistoricalGhostColor
+                newHistLine = line.new(lineStartTime, linePrice, lineEndTime, linePrice, color = lineColor, style = _ghostLineStyleConst, width = GhostLineWidth, xloc = xloc.bar_time)
+                
+                // Create historical label
+                labelText = f_createGhostLineLabel(cfg.name, "C4 2x↑", linePrice, false)
+                labelX = math.round(lineStartTime + (lineEndTime - lineStartTime) * GhostLabelOffset)
+                newHistLabel = label.new(x = labelX, y = linePrice, text = labelText, xloc = xloc.bar_time, yloc = yloc.price, color = color.new(color.white, 100), style = _ghostLabelStyleConst, textcolor = GhostLabelColor, size = f_to_size(GhostLabelSize))
+                
+                array.push(historicalGhostLines, newHistLine)
+                array.push(historicalGhostPrices, array.get(ghostC4DoubledUpPrices, idx))
+                array.push(historicalGhostTypes, 'C4_2X_UP')
+                array.push(historicalSessionNames, cfg.name)
+                array.push(historicalGhostTimes, st.endTime)
+                array.push(historicalGhostDays, currentDay)
+                array.push(historicalGhostOriginalColors, ColorC4GhostDoubled)
+                array.push(historicalGhostLabels, newHistLabel)
+
+            if not na(array.get(ghostC4DoubledDownLines, idx)) and not na(array.get(ghostC4DoubledDownPrices, idx))
+                // Delete original current session label to avoid duplication
+                if not na(array.get(ghostC4DoubledDownLabels, idx))
+                    label.delete(array.get(ghostC4DoubledDownLabels, idx))
+                    array.set(ghostC4DoubledDownLabels, idx, na)
+                
+                ghostLine = array.get(ghostC4DoubledDownLines, idx)
+                lineStartTime = line.get_x1(ghostLine)
+                linePrice = array.get(ghostC4DoubledDownPrices, idx)
+                lineEndTime = time
+                // Choose color based on user preference
+                lineColor = KeepOriginalColors ? color.new(ColorC4GhostDoubled, HistoricalTransparency) : HistoricalGhostColor
+                newHistLine = line.new(lineStartTime, linePrice, lineEndTime, linePrice, color = lineColor, style = _ghostLineStyleConst, width = GhostLineWidth, xloc = xloc.bar_time)
+                
+                // Create historical label
+                labelText = f_createGhostLineLabel(cfg.name, "C4 2x↓", linePrice, false)
+                labelX = math.round(lineStartTime + (lineEndTime - lineStartTime) * GhostLabelOffset)
+                newHistLabel = label.new(x = labelX, y = linePrice, text = labelText, xloc = xloc.bar_time, yloc = yloc.price, color = color.new(color.white, 100), style = _ghostLabelStyleConst, textcolor = GhostLabelColor, size = f_to_size(GhostLabelSize))
+                
+                array.push(historicalGhostLines, newHistLine)
+                array.push(historicalGhostPrices, array.get(ghostC4DoubledDownPrices, idx))
+                array.push(historicalGhostTypes, 'C4_2X_DOWN')
+                array.push(historicalSessionNames, cfg.name)
+                array.push(historicalGhostTimes, st.endTime)
+                array.push(historicalGhostDays, currentDay)
+                array.push(historicalGhostOriginalColors, ColorC4GhostDoubled)
+                array.push(historicalGhostLabels, newHistLabel)
+
+            // Store C2 Extension Limit ghost lines
+            if not na(st.c2_extLimitUpperGhost) and not na(array.get(ghostC2ExtLimitUpperPrices, idx))
+                // Delete original current session label to avoid duplication
+                if not na(array.get(ghostC2ExtLimitUpperLabels, idx))
+                    label.delete(array.get(ghostC2ExtLimitUpperLabels, idx))
+                    array.set(ghostC2ExtLimitUpperLabels, idx, na)
+                
+                lineStartTime = line.get_x1(st.c2_extLimitUpperGhost)
+                linePrice = array.get(ghostC2ExtLimitUpperPrices, idx)
+                lineEndTime = time
+                // Choose color based on user preference
+                lineColor = KeepOriginalColors ? color.new(ColorC2ExtAbove, HistoricalTransparency) : HistoricalGhostColor
+                newHistLine = line.new(lineStartTime, linePrice, lineEndTime, linePrice, color = lineColor, style = _ghostLineStyleConst, width = GhostLineWidth, xloc = xloc.bar_time)
+                
+                // Create historical label
+                labelText = f_createGhostLineLabel(cfg.name, "C2 Ext↑", linePrice, false)
+                labelX = math.round(lineStartTime + (lineEndTime - lineStartTime) * GhostLabelOffset)
+                newHistLabel = label.new(x = labelX, y = linePrice, text = labelText, xloc = xloc.bar_time, yloc = yloc.price, color = color.new(color.white, 100), style = _ghostLabelStyleConst, textcolor = GhostLabelColor, size = f_to_size(GhostLabelSize))
+                
+                array.push(historicalGhostLines, newHistLine)
+                array.push(historicalGhostPrices, array.get(ghostC2ExtLimitUpperPrices, idx))
+                array.push(historicalGhostTypes, 'C2_EXT_UPPER')
+                array.push(historicalSessionNames, cfg.name)
+                array.push(historicalGhostTimes, st.endTime)
+                array.push(historicalGhostDays, currentDay)
+                array.push(historicalGhostOriginalColors, ColorC2ExtAbove)
+                array.push(historicalGhostLabels, newHistLabel)
+
+            if not na(st.c2_extLimitLowerGhost) and not na(array.get(ghostC2ExtLimitLowerPrices, idx))
+                // Delete original current session label to avoid duplication
+                if not na(array.get(ghostC2ExtLimitLowerLabels, idx))
+                    label.delete(array.get(ghostC2ExtLimitLowerLabels, idx))
+                    array.set(ghostC2ExtLimitLowerLabels, idx, na)
+                
+                lineStartTime = line.get_x1(st.c2_extLimitLowerGhost)
+                linePrice = array.get(ghostC2ExtLimitLowerPrices, idx)
+                lineEndTime = time
+                // Choose color based on user preference
+                lineColor = KeepOriginalColors ? color.new(ColorC2ExtBelow, HistoricalTransparency) : HistoricalGhostColor
+                newHistLine = line.new(lineStartTime, linePrice, lineEndTime, linePrice, color = lineColor, style = _ghostLineStyleConst, width = GhostLineWidth, xloc = xloc.bar_time)
+                
+                // Create historical label
+                labelText = f_createGhostLineLabel(cfg.name, "C2 Ext↓", linePrice, false)
+                labelX = math.round(lineStartTime + (lineEndTime - lineStartTime) * GhostLabelOffset)
+                newHistLabel = label.new(x = labelX, y = linePrice, text = labelText, xloc = xloc.bar_time, yloc = yloc.price, color = color.new(color.white, 100), style = _ghostLabelStyleConst, textcolor = GhostLabelColor, size = f_to_size(GhostLabelSize))
+                
+                array.push(historicalGhostLines, newHistLine)
+                array.push(historicalGhostPrices, array.get(ghostC2ExtLimitLowerPrices, idx))
+                array.push(historicalGhostTypes, 'C2_EXT_LOWER')
+                array.push(historicalSessionNames, cfg.name)
+                array.push(historicalGhostTimes, st.endTime)
+                array.push(historicalGhostDays, currentDay)
+                array.push(historicalGhostOriginalColors, ColorC2ExtBelow)
+                array.push(historicalGhostLabels, newHistLabel)
+
+            // Store current session EQ lines as historical
+            if not na(array.get(eqA1Lines, idx)) and not na(array.get(eqA1Values, idx))
+                eqLine = array.get(eqA1Lines, idx)
+                lineStartTime = line.get_x1(eqLine)
+                eqValue = array.get(eqA1Values, idx)
+                lineEndTime = time
+                // Create new historical EQ line with muted color
+                lineColor = color.new(ColorA1Eq, 70)
+                newHistEqLine = line.new(lineStartTime, eqValue, lineEndTime, eqValue, color = lineColor, style = line.style_solid, width = 2, xloc = xloc.bar_time)
+                array.push(historicalEqLines, newHistEqLine)
+                array.push(historicalEqValues, eqValue)
+                array.push(historicalEqTypes, 'A1')
+                array.push(historicalEqSessionNames, cfg.name)
+                array.push(historicalEqTimes, st.endTime)
+                array.push(historicalEqDays, currentDay)
+                array.push(historicalEqOriginalColors, ColorA1Eq)
+            
+            if not na(array.get(eqA2Lines, idx)) and not na(array.get(eqA2Values, idx))
+                eqLine = array.get(eqA2Lines, idx)
+                lineStartTime = line.get_x1(eqLine)
+                eqValue = array.get(eqA2Values, idx)
+                lineEndTime = time
+                lineColor = color.new(ColorA2Eq, 70)
+                newHistEqLine = line.new(lineStartTime, eqValue, lineEndTime, eqValue, color = lineColor, style = line.style_solid, width = 2, xloc = xloc.bar_time)
+                array.push(historicalEqLines, newHistEqLine)
+                array.push(historicalEqValues, eqValue)
+                array.push(historicalEqTypes, 'A2')
+                array.push(historicalEqSessionNames, cfg.name)
+                array.push(historicalEqTimes, st.endTime)
+                array.push(historicalEqDays, currentDay)
+                array.push(historicalEqOriginalColors, ColorA2Eq)
+                
+            if not na(array.get(eqA3Lines, idx)) and not na(array.get(eqA3Values, idx))
+                eqLine = array.get(eqA3Lines, idx)
+                lineStartTime = line.get_x1(eqLine)
+                eqValue = array.get(eqA3Values, idx)
+                lineEndTime = time
+                lineColor = color.new(ColorA3Eq, 70)
+                newHistEqLine = line.new(lineStartTime, eqValue, lineEndTime, eqValue, color = lineColor, style = line.style_solid, width = 2, xloc = xloc.bar_time)
+                array.push(historicalEqLines, newHistEqLine)
+                array.push(historicalEqValues, eqValue)
+                array.push(historicalEqTypes, 'A3')
+                array.push(historicalEqSessionNames, cfg.name)
+                array.push(historicalEqTimes, st.endTime)
+                array.push(historicalEqDays, currentDay)
+                array.push(historicalEqOriginalColors, ColorA3Eq)
+                
+            if not na(array.get(eqA4Lines, idx)) and not na(array.get(eqA4Values, idx))
+                eqLine = array.get(eqA4Lines, idx)
+                lineStartTime = line.get_x1(eqLine)
+                eqValue = array.get(eqA4Values, idx)
+                lineEndTime = time
+                lineColor = color.new(ColorA4Eq, 70)
+                newHistEqLine = line.new(lineStartTime, eqValue, lineEndTime, eqValue, color = lineColor, style = line.style_solid, width = 2, xloc = xloc.bar_time)
+                array.push(historicalEqLines, newHistEqLine)
+                array.push(historicalEqValues, eqValue)
+                array.push(historicalEqTypes, 'A4')
+                array.push(historicalEqSessionNames, cfg.name)
+                array.push(historicalEqTimes, st.endTime)
+                array.push(historicalEqDays, currentDay)
+                array.push(historicalEqOriginalColors, ColorA4Eq)
+                
+            if not na(array.get(eqA5Lines, idx)) and not na(array.get(eqA5Values, idx))
+                eqLine = array.get(eqA5Lines, idx)
+                lineStartTime = line.get_x1(eqLine)
+                eqValue = array.get(eqA5Values, idx)
+                lineEndTime = time
+                lineColor = color.new(ColorA5Eq, 70)
+                newHistEqLine = line.new(lineStartTime, eqValue, lineEndTime, eqValue, color = lineColor, style = line.style_solid, width = 2, xloc = xloc.bar_time)
+                array.push(historicalEqLines, newHistEqLine)
+                array.push(historicalEqValues, eqValue)
+                array.push(historicalEqTypes, 'A5')
+                array.push(historicalEqSessionNames, cfg.name)
+                array.push(historicalEqTimes, st.endTime)
+                array.push(historicalEqDays, currentDay)
+                array.push(historicalEqOriginalColors, ColorA5Eq)
+                
+            if not na(array.get(eqC2Lines, idx)) and not na(array.get(eqC2Values, idx))
+                eqLine = array.get(eqC2Lines, idx)
+                lineStartTime = line.get_x1(eqLine)
+                eqValue = array.get(eqC2Values, idx)
+                lineEndTime = time
+                lineColor = color.new(ColorC2Eq, 70)
+                newHistEqLine = line.new(lineStartTime, eqValue, lineEndTime, eqValue, color = lineColor, style = line.style_solid, width = 2, xloc = xloc.bar_time)
+                array.push(historicalEqLines, newHistEqLine)
+                array.push(historicalEqValues, eqValue)
+                array.push(historicalEqTypes, 'C2')
+                array.push(historicalEqSessionNames, cfg.name)
+                array.push(historicalEqTimes, st.endTime)
+                array.push(historicalEqDays, currentDay)
+                array.push(historicalEqOriginalColors, ColorC2Eq)
+                
+            if not na(array.get(eqC3Lines, idx)) and not na(array.get(eqC3Values, idx))
+                eqLine = array.get(eqC3Lines, idx)
+                lineStartTime = line.get_x1(eqLine)
+                eqValue = array.get(eqC3Values, idx)
+                lineEndTime = time
+                lineColor = color.new(ColorC3Eq, 70)
+                newHistEqLine = line.new(lineStartTime, eqValue, lineEndTime, eqValue, color = lineColor, style = line.style_solid, width = 2, xloc = xloc.bar_time)
+                array.push(historicalEqLines, newHistEqLine)
+                array.push(historicalEqValues, eqValue)
+                array.push(historicalEqTypes, 'C3')
+                array.push(historicalEqSessionNames, cfg.name)
+                array.push(historicalEqTimes, st.endTime)
+                array.push(historicalEqDays, currentDay)
+                array.push(historicalEqOriginalColors, ColorC3Eq)
+                
+            if not na(array.get(eqC4Lines, idx)) and not na(array.get(eqC4Values, idx))
+                eqLine = array.get(eqC4Lines, idx)
+                lineStartTime = line.get_x1(eqLine)
+                eqValue = array.get(eqC4Values, idx)
+                lineEndTime = time
+                lineColor = color.new(ColorC4Eq, 70)
+                newHistEqLine = line.new(lineStartTime, eqValue, lineEndTime, eqValue, color = lineColor, style = line.style_solid, width = 2, xloc = xloc.bar_time)
+                array.push(historicalEqLines, newHistEqLine)
+                array.push(historicalEqValues, eqValue)
+                array.push(historicalEqTypes, 'C4')
+                array.push(historicalEqSessionNames, cfg.name)
+                array.push(historicalEqTimes, st.endTime)
+                array.push(historicalEqDays, currentDay)
+                array.push(historicalEqOriginalColors, ColorC4Eq)
+
+        // ---- Session-Based FVG Management ----
+        // FVGs now stay visible until the SAME session type starts again
+        // No special processing needed here - migration handled above when new session instances start
+        // Sessions ending just leave their FVGs in place for continued visibility
+
+// ==========================================
+// GHOST LINE MITIGATION & CLEANUP
+// ==========================================
+
+// Check all sessions for current ghost line price hits and remove lines if hit
+for idx = 0 to array.size(SESSION_STATES) - 1 by 1
+    cfg = array.get(SESSION_CFGS, idx)
+    
+    // Skip disabled sessions for mitigation checks
+    if not cfg.enabled
+        continue
+        
+    st = array.get(SESSION_STATES, idx)
+    
+    // Use library function for comprehensive ghost line mitigation (wick-based)
+    updatedState = core.mitigateAllGhostLines(st, idx, ghostA1UpPrices, ghostA1DownPrices, ghostC2UpPrices, ghostC2DownPrices, ghostC3UpPrices, ghostC3DownPrices, ghostC4UpPrices, ghostC4DownPrices, ghostC2ExtLimitUpperPrices, ghostC2ExtLimitLowerPrices, ghostA1UpLabels, ghostA1DownLabels, ghostC2UpLabels, ghostC2DownLabels, ghostC3UpLabels, ghostC3DownLabels, ghostC4UpLabels, ghostC4DownLabels, ghostC2ExtLimitUpperLabels, ghostC2ExtLimitLowerLabels, ghostA2UpLabels, ghostA2DownLabels, ghostA3UpLabels, ghostA3DownLabels, ghostA4UpLabels, ghostA4DownLabels, ghostA5UpLabels, ghostA5DownLabels, ghostM2UpLabels, ghostM2DownLabels, mitigatedA1, mitigatedC2, mitigatedC3, mitigatedC4, mitigatedC2ExtLimits, mitigatedA2, mitigatedA3, mitigatedA4, mitigatedA5, mitigatedM2, A5SizeMultiplier, M2SizeMultiplier)
+    
+    // Library function handles all mitigation - no need for redundant manual checks
+    
+    // Explicit label cleanup to ensure labels are deleted when ghost lines are mitigated
+    // C2 Ghost Line Labels
+    if na(updatedState.c2_ghostUp) and not na(array.get(ghostC2UpLabels, idx))
+        label.delete(array.get(ghostC2UpLabels, idx))
+        array.set(ghostC2UpLabels, idx, na)
+    if na(updatedState.c2_ghostDown) and not na(array.get(ghostC2DownLabels, idx))
+        label.delete(array.get(ghostC2DownLabels, idx))
+        array.set(ghostC2DownLabels, idx, na)
+    
+    // C3 Ghost Line Labels
+    if na(updatedState.c3_ghostUp) and not na(array.get(ghostC3UpLabels, idx))
+        label.delete(array.get(ghostC3UpLabels, idx))
+        array.set(ghostC3UpLabels, idx, na)
+    if na(updatedState.c3_ghostDown) and not na(array.get(ghostC3DownLabels, idx))
+        label.delete(array.get(ghostC3DownLabels, idx))
+        array.set(ghostC3DownLabels, idx, na)
+    
+    // C4 Ghost Line Labels
+    if na(updatedState.c4_ghostUp) and not na(array.get(ghostC4UpLabels, idx))
+        label.delete(array.get(ghostC4UpLabels, idx))
+        array.set(ghostC4UpLabels, idx, na)
+    if na(updatedState.c4_ghostDown) and not na(array.get(ghostC4DownLabels, idx))
+        label.delete(array.get(ghostC4DownLabels, idx))
+        array.set(ghostC4DownLabels, idx, na)
+
+    // A1 Ghost Line Labels
+    if na(updatedState.a1_ghostUp) and not na(array.get(ghostA1UpLabels, idx))
+        label.delete(array.get(ghostA1UpLabels, idx))
+        array.set(ghostA1UpLabels, idx, na)
+    if na(updatedState.a1_ghostDown) and not na(array.get(ghostA1DownLabels, idx))
+        label.delete(array.get(ghostA1DownLabels, idx))
+        array.set(ghostA1DownLabels, idx, na)
+
+    // C2 Extension Limit Labels
+    if na(updatedState.c2_extLimitUpperGhost) and not na(array.get(ghostC2ExtLimitUpperLabels, idx))
+        label.delete(array.get(ghostC2ExtLimitUpperLabels, idx))
+        array.set(ghostC2ExtLimitUpperLabels, idx, na)
+    if na(updatedState.c2_extLimitLowerGhost) and not na(array.get(ghostC2ExtLimitLowerLabels, idx))
+        label.delete(array.get(ghostC2ExtLimitLowerLabels, idx))
+        array.set(ghostC2ExtLimitLowerLabels, idx, na)
+    
+    // Update the state back to the array after mitigation
+    array.set(SESSION_STATES, idx, updatedState)
+
+// ==========================================
+// CYCLE EQ LINE MITIGATION
+// ==========================================
+
+// Check for EQ line mitigation on all sessions
+for idx = 0 to array.size(SESSION_STATES) - 1 by 1
+    cfg = array.get(SESSION_CFGS, idx)
+    
+    // Skip disabled sessions for EQ mitigation checks
+    if not cfg.enabled
+        continue
+    // A1 EQ Line Mitigation
+    if not na(array.get(eqA1Lines, idx)) and not na(array.get(eqA1Values, idx))
+        eqValue = array.get(eqA1Values, idx)
+        
+        eqHit = false
+        // Method 1: Complete price crossover (candle body/wick crossed through the level)
+        if high >= eqValue and low <= eqValue
+            eqHit := true
+        // Method 2: Close price is very close to EQ line (within 1 tick)
+        if math.abs(close - eqValue) <= syminfo.mintick
+            eqHit := true
+        // Method 3: High or low touched the EQ line closely (within 2 ticks for precision)
+        if math.abs(high - eqValue) <= syminfo.mintick * 2 or math.abs(low - eqValue) <= syminfo.mintick * 2
+            eqHit := true
+        
+        if eqHit
+            // Price crossed EQ line - delete it completely
+            eqLine = array.get(eqA1Lines, idx)
+            line.delete(eqLine)
+            array.set(eqA1Lines, idx, na)
+            array.set(eqA1Values, idx, na)
+    
+    // A2 EQ Line Mitigation
+    if not na(array.get(eqA2Lines, idx)) and not na(array.get(eqA2Values, idx))
+        eqValue = array.get(eqA2Values, idx)
+        
+        eqHit = false
+        if high >= eqValue and low <= eqValue
+            eqHit := true
+        if math.abs(close - eqValue) <= syminfo.mintick
+            eqHit := true
+        if math.abs(high - eqValue) <= syminfo.mintick * 2 or math.abs(low - eqValue) <= syminfo.mintick * 2
+            eqHit := true
+            
+        if eqHit
+            eqLine = array.get(eqA2Lines, idx)
+            line.delete(eqLine)
+            array.set(eqA2Lines, idx, na)
+            array.set(eqA2Values, idx, na)
+    
+    // A3 EQ Line Mitigation
+    if not na(array.get(eqA3Lines, idx)) and not na(array.get(eqA3Values, idx))
+        eqValue = array.get(eqA3Values, idx)
+        
+        eqHit = false
+        if high >= eqValue and low <= eqValue
+            eqHit := true
+        if math.abs(close - eqValue) <= syminfo.mintick
+            eqHit := true
+        if math.abs(high - eqValue) <= syminfo.mintick * 2 or math.abs(low - eqValue) <= syminfo.mintick * 2
+            eqHit := true
+            
+        if eqHit
+            eqLine = array.get(eqA3Lines, idx)
+            line.delete(eqLine)
+            array.set(eqA3Lines, idx, na)
+            array.set(eqA3Values, idx, na)
+    
+    // A4 EQ Line Mitigation
+    if not na(array.get(eqA4Lines, idx)) and not na(array.get(eqA4Values, idx))
+        eqValue = array.get(eqA4Values, idx)
+        
+        eqHit = false
+        if high >= eqValue and low <= eqValue
+            eqHit := true
+        if math.abs(close - eqValue) <= syminfo.mintick
+            eqHit := true
+        if math.abs(high - eqValue) <= syminfo.mintick * 2 or math.abs(low - eqValue) <= syminfo.mintick * 2
+            eqHit := true
+            
+        if eqHit
+            eqLine = array.get(eqA4Lines, idx)
+            line.delete(eqLine)
+            array.set(eqA4Lines, idx, na)
+            array.set(eqA4Values, idx, na)
+    
+    // A5 EQ Line Mitigation
+    if not na(array.get(eqA5Lines, idx)) and not na(array.get(eqA5Values, idx))
+        eqValue = array.get(eqA5Values, idx)
+        
+        eqHit = false
+        if high >= eqValue and low <= eqValue
+            eqHit := true
+        if math.abs(close - eqValue) <= syminfo.mintick
+            eqHit := true
+        if math.abs(high - eqValue) <= syminfo.mintick * 2 or math.abs(low - eqValue) <= syminfo.mintick * 2
+            eqHit := true
+            
+        if eqHit
+            eqLine = array.get(eqA5Lines, idx)
+            line.delete(eqLine)
+            array.set(eqA5Lines, idx, na)
+            array.set(eqA5Values, idx, na)
+    
+    // C2 EQ Line Mitigation
+    if not na(array.get(eqC2Lines, idx)) and not na(array.get(eqC2Values, idx))
+        eqValue = array.get(eqC2Values, idx)
+        
+        eqHit = false
+        if high >= eqValue and low <= eqValue
+            eqHit := true
+        if math.abs(close - eqValue) <= syminfo.mintick
+            eqHit := true
+        if math.abs(high - eqValue) <= syminfo.mintick * 2 or math.abs(low - eqValue) <= syminfo.mintick * 2
+            eqHit := true
+            
+        if eqHit
+            eqLine = array.get(eqC2Lines, idx)
+            line.delete(eqLine)
+            array.set(eqC2Lines, idx, na)
+            array.set(eqC2Values, idx, na)
+    
+    // C3 EQ Line Mitigation
+    if not na(array.get(eqC3Lines, idx)) and not na(array.get(eqC3Values, idx))
+        eqValue = array.get(eqC3Values, idx)
+        
+        eqHit = false
+        if high >= eqValue and low <= eqValue
+            eqHit := true
+        if math.abs(close - eqValue) <= syminfo.mintick
+            eqHit := true
+        if math.abs(high - eqValue) <= syminfo.mintick * 2 or math.abs(low - eqValue) <= syminfo.mintick * 2
+            eqHit := true
+            
+        if eqHit
+            eqLine = array.get(eqC3Lines, idx)
+            line.delete(eqLine)
+            array.set(eqC3Lines, idx, na)
+            array.set(eqC3Values, idx, na)
+    
+    // C4 EQ Line Mitigation
+    if not na(array.get(eqC4Lines, idx)) and not na(array.get(eqC4Values, idx))
+        eqValue = array.get(eqC4Values, idx)
+        
+        eqHit = false
+        if high >= eqValue and low <= eqValue
+            eqHit := true
+        if math.abs(close - eqValue) <= syminfo.mintick
+            eqHit := true
+        if math.abs(high - eqValue) <= syminfo.mintick * 2 or math.abs(low - eqValue) <= syminfo.mintick * 2
+            eqHit := true
+            
+        if eqHit
+            eqLine = array.get(eqC4Lines, idx)
+            line.delete(eqLine)
+            array.set(eqC4Lines, idx, na)
+            array.set(eqC4Values, idx, na)
+
+// ==========================================
+// HISTORICAL EQ LINE MITIGATION & CLEANUP
+// ==========================================
+
+// Check historical EQ lines for mitigation and cleanup
+if array.size(historicalEqLines) > 0
+    currentDay = math.floor(time / 86400000)
+
+    // Check historical EQ lines for mitigation
+    for i = array.size(historicalEqLines) - 1 to 0 by 1
+        if i >= 0 and i < array.size(historicalEqLines) and i < array.size(historicalEqValues)
+            eqLine = array.get(historicalEqLines, i)
+            eqValue = array.get(historicalEqValues, i)
+
+            // Check if price crossed EQ line - improved mitigation logic
+            eqHit = false
+            
+            // Method 1: Complete price crossover (candle body/wick crossed through the level)
+            if high >= eqValue and low <= eqValue
+                eqHit := true
+            
+            // Method 2: Close price is very close to EQ line (within 1 tick)
+            if math.abs(close - eqValue) <= syminfo.mintick
+                eqHit := true
+            
+            // Method 3: High or low touched the EQ line closely (within 2 ticks for precision)
+            if math.abs(high - eqValue) <= syminfo.mintick * 2 or math.abs(low - eqValue) <= syminfo.mintick * 2
+                eqHit := true
+
+            if eqHit
+                // Price hit EQ line - delete it
+                if not na(eqLine)
+                    line.delete(eqLine)
+                array.remove(historicalEqLines, i)
+                array.remove(historicalEqValues, i)
+                array.remove(historicalEqTypes, i)
+                array.remove(historicalEqSessionNames, i)
+                array.remove(historicalEqTimes, i)
+                array.remove(historicalEqDays, i)
+                array.remove(historicalEqOriginalColors, i)
+
+    // Cleanup old historical EQ lines
+    for i = array.size(historicalEqLines) - 1 to 0 by 1
+        if i >= 0 and i < array.size(historicalEqDays) and i < array.size(historicalEqLines)
+            eqDay = array.get(historicalEqDays, i)
+            dayAge = currentDay - eqDay
+
+            // Remove if too old or exceeding max count (use same limits as ghost lines)
+            shouldRemove = dayAge > HistoricalGhostDays or array.size(historicalEqLines) > MaxHistoricalGhosts
+
+            if shouldRemove
+                eqLine = array.get(historicalEqLines, i)
+                if not na(eqLine)
+                    line.delete(eqLine)
+                array.remove(historicalEqLines, i)
+                array.remove(historicalEqValues, i)
+                array.remove(historicalEqTypes, i)
+                array.remove(historicalEqSessionNames, i)
+                array.remove(historicalEqTimes, i)
+                array.remove(historicalEqDays, i)
+                array.remove(historicalEqOriginalColors, i)
+
+    // Update historical EQ line colors based on age (if fade enabled)
+    if FadeHistoricalGhosts and array.size(historicalEqLines) > 0
+        for i = 0 to array.size(historicalEqLines) - 1 by 1
+            if i < array.size(historicalEqLines) and i < array.size(historicalEqDays) and i < array.size(historicalEqOriginalColors)
+                eqLine = array.get(historicalEqLines, i)
+                eqDay = array.get(historicalEqDays, i)
+                dayAge = currentDay - eqDay
+
+                if not na(eqLine) and dayAge >= 0
+                    // Calculate fade transparency (older = more transparent)
+                    baseFade = KeepOriginalColors ? HistoricalTransparency : 70
+                    fadeAmount = math.min(95, baseFade + dayAge * 10)
+                    // Use original color if keeping original colors, otherwise use gray
+                    baseColor = KeepOriginalColors ? array.get(historicalEqOriginalColors, i) : color.gray
+                    fadedColor = color.new(baseColor, fadeAmount)
+                    line.set_color(eqLine, fadedColor)
+
+
+
+// ==========================================
+// TABLE FUNCTIONS
+// ==========================================
+
+// Helper to display table values
+f_getTargetDisplay(val, isActive) =>
+    na(val) ? isActive ? 'Pending' : '' : str.tostring(val, '#.##')
+
+// Create basic data table
+f_createDataTable(sessions, states, showTable, tablePosition, tableTextSize, tableBGColor, tableTextColor, tableBorderColor) =>
+    var table dataTable = na
+    
+    if showTable
+        // Count active sessions for table sizing
+        activeCount = 0
+        for i = 0 to array.size(sessions) - 1 by 1
+            cfg = array.get(sessions, i)
+            if cfg.enabled
+                activeCount += 1
+        
+        rowsNeeded = activeCount + 1 // +1 for header
+        
+        if na(dataTable)
+            dataTable := table.new(columns = 5, rows = rowsNeeded, position = tablePosition, border_width = 1, border_color = tableBorderColor, frame_color = tableBorderColor, frame_width = 1)
+
+            // Header
+            table.cell(dataTable, 0, 0, 'Session', text_color = tableTextColor, bgcolor = tableBGColor, text_size = tableTextSize)
+            table.cell(dataTable, 1, 0, 'A1', text_color = tableTextColor, bgcolor = tableBGColor, text_size = tableTextSize)
+            table.cell(dataTable, 2, 0, 'C2', text_color = tableTextColor, bgcolor = tableBGColor, text_size = tableTextSize)
+            table.cell(dataTable, 3, 0, 'C3', text_color = tableTextColor, bgcolor = tableBGColor, text_size = tableTextSize)
+            table.cell(dataTable, 4, 0, 'C4', text_color = tableTextColor, bgcolor = tableBGColor, text_size = tableTextSize)
+
+        // Fill data rows
+        row = 1
+        for i = 0 to array.size(sessions) - 1 by 1
+            cfg = array.get(sessions, i)
+            st = array.get(states, i)
+
+            if cfg.enabled
+                table.cell(dataTable, 0, row, cfg.name, text_color = tableTextColor, bgcolor = tableBGColor, text_size = tableTextSize)
+                table.cell(dataTable, 1, row, f_getTargetDisplay(st.targetA1, st.isActive), text_color = tableTextColor, bgcolor = tableBGColor, text_size = tableTextSize)
+                table.cell(dataTable, 2, row, f_getTargetDisplay(st.targetC2, st.isActive), text_color = tableTextColor, bgcolor = tableBGColor, text_size = tableTextSize)
+                table.cell(dataTable, 3, row, f_getTargetDisplay(st.targetC3, st.isActive), text_color = tableTextColor, bgcolor = tableBGColor, text_size = tableTextSize)
+                table.cell(dataTable, 4, row, f_getTargetDisplay(st.targetC4, st.isActive), text_color = tableTextColor, bgcolor = tableBGColor, text_size = tableTextSize)
+                row += 1
+    else
+        if not na(dataTable)
+            table.delete(dataTable)
+            dataTable := na
+    
+    dataTable
+
+// ==========================================
+// DATA TABLE
+// ==========================================
+
+var table g_dataTable = na
+g_dataTable := f_createDataTable(SESSION_CFGS, SESSION_STATES, ShowDataTable, _tablePositionConst, _tableTextSizeConst, TableBGColor, TableTextColor, TableBorderColor)
+
+// Placeholder plot to satisfy Pine Script requirements
+plot(na)
+
+
+
+
+
+
+// Placeholder plot to satisfy Pine Script requirements
+plot(na)
+
+// ==========================================
+// HISTORICAL GHOST LINES MANAGEMENT
+// ==========================================
+
+// Check historical ghost lines for mitigation and cleanup using local function (enhanced with labels)
+f_manageHistoricalGhosts(historicalGhostLines, historicalGhostPrices, historicalGhostTypes, historicalSessionNames, historicalGhostTimes, historicalGhostDays, historicalGhostOriginalColors, historicalGhostLabels, EnableHistoricalGhosts, HistoricalGhostDays, MaxHistoricalGhosts, FadeHistoricalGhosts, KeepOriginalColors, HistoricalTransparency, HistoricalGhostColor)
+
+// ==========================================
+// HISTORICAL SESSION DATA CLEANUP
+// ==========================================
+
+// Historical session cleanup moved to library
+
+// ==========================================
+// FVG MANAGEMENT
+// ==========================================
+
+// Manage FVG boxes - handled automatically by the library engine call above, but we can add additional cleanup if needed
+if ShowFVGs
+    // Additional FVG cleanup can be added here if needed
+    // The library engine already handles mitigation and age-based cleanup
+    na
+
+
