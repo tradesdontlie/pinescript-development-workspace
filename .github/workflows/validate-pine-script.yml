@@ -1,0 +1,306 @@
+name: Pine Script Validation
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+    paths: 
+      - '**.pine'
+      - 'working/**'
+      - 'indicators/**'
+      - 'strategies/**'
+  push:
+    branches: [ main, develop ]
+    paths: 
+      - '**.pine'
+      - 'working/**'
+      - 'indicators/**'
+      - 'strategies/**'
+
+jobs:
+  validate-pine-script:
+    runs-on: ubuntu-latest
+    name: Validate Pine Script Files
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyyaml requests
+        
+    - name: Find Pine Script files
+      id: find-files
+      run: |
+        # Find all .pine files in working/, indicators/, and strategies/ directories
+        pine_files=$(find working/ indicators/ strategies/ -name "*.pine" -type f 2>/dev/null || true)
+        echo "Found Pine Script files:"
+        echo "$pine_files"
+        echo "pine_files<<EOF" >> $GITHUB_OUTPUT
+        echo "$pine_files" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+    - name: Validate Pine Script v6 syntax
+      run: |
+        echo "Validating Pine Script files for v6 compliance..."
+        
+        # Create validation script
+        cat > validate_pine.py << 'EOF'
+        import sys
+        import os
+        import re
+        
+        def validate_pine_file(file_path):
+            """Validate Pine Script file for v6 compliance"""
+            errors = []
+            warnings = []
+            
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    lines = content.split('\n')
+            except Exception as e:
+                errors.append(f"Could not read file: {e}")
+                return errors, warnings
+                
+            # Check for version declaration
+            if not content.startswith('//@version=6'):
+                if '//@version=5' in content:
+                    warnings.append("File uses Pine Script v5, consider upgrading to v6")
+                else:
+                    errors.append("Missing or incorrect version declaration. Should start with '//@version=6'")
+            
+            # Check for multi-line function calls (Pine v6 requires single line)
+            in_multiline_function = False
+            for i, line in enumerate(lines, 1):
+                stripped = line.strip()
+                
+                # Check for common Pine Script functions that might be multi-line
+                if any(func in stripped for func in ['box.new(', 'line.new(', 'label.new(', 'table.new(', 'array.new<']):
+                    if not stripped.endswith(')'):
+                        in_multiline_function = True
+                        errors.append(f"Line {i}: Multi-line function calls not allowed in Pine Script v6")
+                
+                # Check for proper assignment operators
+                if ':=' in stripped and '=' in stripped:
+                    # Check if it's initial declaration with :=
+                    if stripped.count('=') == 1 and stripped.find(':=') < stripped.find('='):
+                        errors.append(f"Line {i}: Use '=' for initial declaration, ':=' for reassignment")
+                
+                # Check for array access without bounds checking
+                if '.get(' in stripped and 'array.size(' not in content:
+                    warnings.append(f"Line {i}: Consider adding array bounds checking before accessing elements")
+                
+                # Check for old Pine Script syntax
+                if 'study(' in stripped:
+                    errors.append(f"Line {i}: Use 'indicator()' instead of 'study()' in Pine Script v6")
+                
+                if 'strategy(' in stripped and 'overlay=true' not in stripped and 'overlay=false' not in stripped:
+                    warnings.append(f"Line {i}: Consider specifying overlay parameter in strategy()")
+                
+                if 'security(' in stripped:
+                    warnings.append(f"Line {i}: Consider using 'request.security()' instead of 'security()'")
+                    
+                if 'resolution=' in stripped:
+                    warnings.append(f"Line {i}: Use 'timeframe=' instead of 'resolution=' in Pine Script v6")
+            
+            # Check for TTS signal integration if this appears to be a signal indicator
+            if 'TTS' in content.upper() or 'signal' in content.lower():
+                if 'plot(' not in content or 'TTS Signal' not in content:
+                    warnings.append("TTS signal integration may be incomplete. Ensure proper plot() with 'TTS Signal' title")
+                    
+                if 'display=display.data_window' not in content:
+                    warnings.append("TTS signals should use 'display=display.data_window' for proper integration")
+            
+            return errors, warnings
+        
+        def main():
+            files_to_check = []
+            
+            # Get files from command line arguments or find them
+            if len(sys.argv) > 1:
+                files_to_check = sys.argv[1:]
+            else:
+                # Find all .pine files
+                for root, dirs, files in os.walk('.'):
+                    for file in files:
+                        if file.endswith('.pine'):
+                            files_to_check.append(os.path.join(root, file))
+            
+            total_errors = 0
+            total_warnings = 0
+            
+            for file_path in files_to_check:
+                if not os.path.exists(file_path):
+                    continue
+                    
+                print(f"\n📁 Validating: {file_path}")
+                errors, warnings = validate_pine_file(file_path)
+                
+                if errors:
+                    print(f"❌ Errors ({len(errors)}):")
+                    for error in errors:
+                        print(f"  - {error}")
+                    total_errors += len(errors)
+                
+                if warnings:
+                    print(f"⚠️  Warnings ({len(warnings)}):")
+                    for warning in warnings:
+                        print(f"  - {warning}")
+                    total_warnings += len(warnings)
+                
+                if not errors and not warnings:
+                    print("✅ No issues found")
+            
+            print(f"\n📊 Summary:")
+            print(f"  Files checked: {len(files_to_check)}")
+            print(f"  Total errors: {total_errors}")
+            print(f"  Total warnings: {total_warnings}")
+            
+            if total_errors > 0:
+                print(f"\n❌ Validation failed with {total_errors} errors")
+                sys.exit(1)
+            elif total_warnings > 0:
+                print(f"\n⚠️  Validation passed with {total_warnings} warnings")
+                sys.exit(0)
+            else:
+                print(f"\n✅ All validations passed!")
+                sys.exit(0)
+        
+        if __name__ == "__main__":
+            main()
+        EOF
+        
+        # Run validation on Pine Script files
+        python validate_pine.py ${{ steps.find-files.outputs.pine_files }}
+        
+    - name: Check for required TTS integration
+      run: |
+        echo "Checking for TTS integration compliance..."
+        
+        # Check if any files in working/ directory need TTS integration
+        working_files=$(find working/ -name "*.pine" -type f 2>/dev/null || true)
+        
+        if [ -n "$working_files" ]; then
+          echo "Checking TTS integration in working directory files..."
+          for file in $working_files; do
+            if [ -f "$file" ]; then
+              echo "Checking: $file"
+              
+              # Check for TTS signal plot
+              if grep -q "plot.*TTS Signal" "$file"; then
+                echo "✅ TTS signal plot found in $file"
+              else
+                echo "⚠️  TTS signal plot not found in $file"
+              fi
+              
+              # Check for proper display configuration
+              if grep -q "display=display.data_window" "$file"; then
+                echo "✅ Proper display configuration found in $file"
+              else
+                echo "⚠️  display=display.data_window not found in $file"
+              fi
+            fi
+          done
+        else
+          echo "No Pine Script files found in working directory"
+        fi
+        
+    - name: Validate directory structure
+      run: |
+        echo "Validating directory structure..."
+        
+        # Check if working directory exists
+        if [ ! -d "working" ]; then
+          echo "❌ Missing 'working' directory"
+          exit 1
+        fi
+        
+        # Check if indicators directory exists
+        if [ ! -d "indicators" ]; then
+          echo "❌ Missing 'indicators' directory"
+          exit 1
+        fi
+        
+        # Validate working directory structure
+        expected_dirs=("fvg" "ghost" "oracle" "sessions" "vortex" "strategy" "testing")
+        for dir in "${expected_dirs[@]}"; do
+          if [ ! -d "working/$dir" ]; then
+            echo "⚠️  Missing working/$dir directory"
+          else
+            echo "✅ working/$dir directory exists"
+          fi
+        done
+        
+        # Validate indicators directory structure
+        expected_indicator_dirs=("fvg" "ghost" "oracle" "sessions" "vortex" "cycles" "libraries")
+        for dir in "${expected_indicator_dirs[@]}"; do
+          if [ ! -d "indicators/$dir" ]; then
+            echo "⚠️  Missing indicators/$dir directory"
+          else
+            echo "✅ indicators/$dir directory exists"
+          fi
+        done
+        
+        echo "✅ Directory structure validation complete"
+        
+    - name: Check for documentation
+      run: |
+        echo "Checking documentation requirements..."
+        
+        # Check for README.md
+        if [ -f "README.md" ]; then
+          echo "✅ README.md exists"
+        else
+          echo "❌ README.md missing"
+          exit 1
+        fi
+        
+        # Check for CONTRIBUTING.md
+        if [ -f "CONTRIBUTING.md" ]; then
+          echo "✅ CONTRIBUTING.md exists"
+        else
+          echo "❌ CONTRIBUTING.md missing"
+          exit 1
+        fi
+        
+        # Check for GitHub templates
+        if [ -f ".github/ISSUE_TEMPLATE/data-point-request.md" ]; then
+          echo "✅ Data Point Request template exists"
+        else
+          echo "❌ Data Point Request template missing"
+          exit 1
+        fi
+        
+        if [ -f ".github/ISSUE_TEMPLATE/strategy-model.md" ]; then
+          echo "✅ Strategy Model template exists"
+        else
+          echo "❌ Strategy Model template missing"
+          exit 1
+        fi
+        
+        if [ -f ".github/pull_request_template.md" ]; then
+          echo "✅ Pull Request template exists"
+        else
+          echo "❌ Pull Request template missing"
+          exit 1
+        fi
+        
+        echo "✅ Documentation validation complete"
+        
+    - name: Summary
+      run: |
+        echo "🎉 Pine Script validation workflow completed successfully!"
+        echo ""
+        echo "✅ All Pine Script files validated for v6 compliance"
+        echo "✅ TTS integration checked"
+        echo "✅ Directory structure validated"
+        echo "✅ Documentation requirements met"
+        echo ""
+        echo "Ready for code review! 🚀"
