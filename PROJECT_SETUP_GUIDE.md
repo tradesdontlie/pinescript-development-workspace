@@ -1,12 +1,15 @@
 # GitHub Project Setup Guide
 
-## Step 1: Create the GitHub Project
+## Step 1: Create the GitHub Project (EASIEST METHOD)
 
 1. **Go to your repository**: https://github.com/tradesdontlie/pinescript-codebase
-2. **Click "Projects" tab** → **"Link a project"** → **"New project"**
-3. **Choose "Table" view** (better for team management)
-4. **Name it**: "Pine Script Trading Signals & Strategy Engine"
-5. **Description**: "Collaborative development platform for Pine Script indicators, data points, and strategy models with TTS integration"
+2. **Click "Projects" tab** 
+3. **Click "New project"** (green button)
+4. **Choose "Table" template** (better for team management)
+5. **Name it**: "Pine Script Trading Signals & Strategy Engine"
+6. **Click "Create project"**
+
+The project is automatically linked to your repository! 🎉
 
 ## Step 2: Configure Project Columns/Fields
 
