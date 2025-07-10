@@ -19,7 +19,10 @@
       "mcp__puppeteer__puppeteer_click",
       "mcp__puppeteer__puppeteer_navigate",
       "Bash(chmod:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(npm install)",
+      "Bash(npm install:*)",
+      "Bash(node:*)"
     ],
     "deny": []
   }

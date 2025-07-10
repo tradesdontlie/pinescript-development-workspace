@@ -10,9 +10,8 @@
     "install-deps": "npm install puppeteer"
   },
   "dependencies": {
-    "puppeteer": "^21.0.0"
+    "puppeteer": "^21.11.0"
   },
-  "devDependencies": {},
   "keywords": [
     "pine-script",
     "tradingview",
