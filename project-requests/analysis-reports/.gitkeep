@@ -1,0 +1,12 @@
+# Analysis Reports Directory
+
+Place multi-indicator analysis and research documentation here.
+
+Example structure:
+```
+analysis-topic/
+├── analysis-summary.md     # Key findings
+├── data-analysis.md       # Statistical analysis
+├── charts-screenshots/    # Visual evidence
+└── recommendations.md     # Next steps
+```

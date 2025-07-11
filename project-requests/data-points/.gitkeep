@@ -1,0 +1,11 @@
+# Data Points Directory
+
+Place data point analysis and requests here before submitting GitHub issues.
+
+Example structure:
+```
+your-indicator-signal-name/
+├── request.md              # Complete data point request
+├── signal-analysis.md      # Technical analysis  
+└── test-scenarios.md       # Testing requirements
+```

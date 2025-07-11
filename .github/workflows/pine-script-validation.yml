@@ -1,0 +1,58 @@
+name: Pine Script Validation
+
+on:
+  push:
+    paths:
+      - '**/*.pine'
+      - 'working/**/*.pine'
+  pull_request:
+    paths:
+      - '**/*.pine'
+      - 'working/**/*.pine'
+
+jobs:
+  validate-pine-scripts:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Find Pine Script files
+      id: find-files
+      run: |
+        echo "files=$(find . -name '*.pine' -type f | tr '\n' ' ')" >> $GITHUB_OUTPUT
+        
+    - name: Validate Pine Script syntax
+      run: |
+        for file in ${{ steps.find-files.outputs.files }}; do
+          echo "Validating $file"
+          python scripts/validate_pine_script.py "$file"
+        done
+        
+    - name: Check for memory management patterns
+      run: |
+        echo "Checking for proper memory management..."
+        for file in $(find . -name '*.pine' -type f); do
+          if grep -q -E "(line\.new|label\.new|box\.new|table\.new)" "$file"; then
+            if ! grep -q "barstate.islastconfirmedhistory" "$file"; then
+              echo "⚠️  $file: Contains drawing objects but missing cleanup pattern"
+            fi
+          fi
+        done
+        
+    - name: Check Pine Script v6 compliance
+      run: |
+        echo "Checking Pine Script v6 compliance..."
+        for file in $(find . -name '*.pine' -type f); do
+          if ! head -1 "$file" | grep -q "//@version=6"; then
+            echo "❌ $file: Missing or incorrect version declaration"
+            exit 1
+          fi
+        done
+        echo "✅ All files have correct version declarations"

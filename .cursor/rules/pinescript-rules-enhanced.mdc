@@ -1,0 +1,343 @@
+# Enhanced Pine Script v6 Rules 
+
+*Enhanced with Pine Script v6 Extension analysis and [TradingView Pine Script v6 Reference](https://www.tradingview.com/pine-script-reference/v6/)*
+
+---
+
+## 🎯 Core Type System & Forms
+
+### **Rule 1.1: Type Keywords & Forms**
+
+| **Keyword** | **Meaning / Usage Rule** | **v6 Examples** |
+|-------------|--------------------------|-----------------|
+| `int`, `float`, `bool`, `string`, `color` | Explicitly declare base types when clarity needed or when initializing with `na` | `int myVar = na` |
+| `line`, `label`, `box`, `table`, `linefill`, `polyline`, `chart.point` | Declare object IDs returned by their respective `*.new()` functions. Always **series form** | `polyline pl = polyline.new()` |
+| `array<type>` or `type[]` | Declare an array holding elements of `type` | `array<float> arr = array.new_float()` |
+| `matrix<type>` | Declare a 2D matrix of elements | `matrix<float> mx = matrix.new<float>(3,3)` |
+| `map<keyType, valueType>` | Declare key-value map structure | `map<string, float> prices = map.new<string, float>()` |
+| `simple` | Use in **exported library functions** to demand a *simple* (non‑series) argument | `export emaRight(float src, simple int len) => ta.ema(src,len)` |
+| `series` | Implicit for most variables; rarely needs explicit statement unless contrasting with `simple` | `series float price = close` |
+
+**Rule 1.2:** Prefer implicit typing unless compilation or readability demands explicit keywords.
+
+**Rule 1.3:** Do **not** mix type forms inside the same expression; both branches of a conditional must resolve to the same type & form.
+
+```pine
+// ✅ Correct - same type forms
+result = condition ? 1 : 2
+
+// ❌ Error - mixing type forms  
+result = condition ? 1 : 1.0  // int vs float mismatch
+```
+
+---
+
+## 🔢 Array, Matrix & Map Handling
+
+### **Rule 2.1: Array Operations (Enhanced for v6)**
+
+```pine
+// ✅ Array creation with explicit typing
+var array<float> buffer = array.new_float(100, na)
+var array<string> symbols = array.new_string(0, "DEFAULT")
+
+// ✅ v6 Feature: Negative indices for array access
+if array.size(prices) >= 2
+    lastPrice = array.get(prices, -1)      // Last element
+    secondLast = array.get(prices, -2)     // Second to last
+
+// ✅ Safe array access pattern
+safeArrayGet(arr, index) =>
+    if array.size(arr) > math.abs(index)
+        array.get(arr, index)
+    else
+        na
+```
+
+**Rule 2.2:** Arrays are **zero‑based** (`array.get(a,0)` is the first element).
+
+**Rule 2.3:** Arrays are reference objects; changes through any reference affect the original.
+
+**Rule 2.4:** **ALWAYS** check `array.size()` before reading to avoid runtime errors.
+
+### **Rule 2.5: Matrix Operations (v6)**
+
+```pine
+// Matrix creation and operations
+var matrix<float> priceMatrix = matrix.new<float>(rows=3, cols=3, initial_value=0.0)
+
+// Matrix access and modification
+matrix.set(priceMatrix, row=0, col=0, value=close)
+currentPrice = matrix.get(priceMatrix, row=0, col=0)
+
+// Matrix utility operations
+rows = matrix.rows(priceMatrix)
+cols = matrix.columns(priceMatrix)
+```
+
+### **Rule 2.6: Map Operations (v6)**
+
+```pine
+// Map creation and usage
+var map<string, float> symbolPrices = map.new<string, float>()
+
+// Map operations
+map.put(symbolPrices, "AAPL", 150.0)
+applePrice = map.get(symbolPrices, "AAPL")
+hasApple = map.contains(symbolPrices, "AAPL")
+```
+
+---
+
+## 📝 Assignment Operators
+
+| **Operator** | **Purpose** | **v6 Usage** |
+|--------------|-------------|--------------|
+| `=`  | Initial declaration & assignment | `myVar = 10` |
+| `:=` | Re‑assignment to an already declared identifier | `myVar := 20` |
+| `+=`, `-=`, `*=`, `/=`, `%=` | Compound arithmetic updates; equivalent to `x = x op y` | `myVar += 5` |
+
+**Rule 3.1:** Use `:=` *only* after variable declaration; never for first assignment.
+
+```pine
+// ✅ Correct declaration pattern
+myVar = 0        // Initial declaration
+myVar := myVar + 1   // Reassignment
+
+// ❌ Error pattern  
+myVar := myVar + 1   // Error: 'myVar' not declared
+```
+
+---
+
+## 🔧 Core Language Operators
+
+| **Operator** | **Notes** | **v6 Enhancements** |
+|--------------|-----------|---------------------|
+| `?:` (ternary) | Forms: `test ? a : b`. Chainable for *switch‑like* logic | Short-circuit evaluation improved |
+| `[]` (series subscript) | Access historical values: `close[1]` is previous bar | Consistent with array negative indexing |
+| `+` `-` `*` `/` `%` | Numeric math (element‑wise when inputs are series) | `+` also concatenates strings |
+| `==` `!=` `>` `<` `>=` `<=` | Comparison; returns `bool` / `series<bool>` | Boolean optimization in v6 |
+
+**Rule 4.1:** Zero, `NaN`, ±`Infinity` evaluate as *false* in boolean contexts.
+
+**Rule 4.2:** Use short-circuit evaluation for performance in v6:
+
+```pine
+// ✅ v6 optimized boolean evaluation
+if array.size(myArray) > 0 and array.first(myArray) > 0
+    // array.first() only evaluated if size > 0
+    process(array.first(myArray))
+```
+
+---
+
+## 🎨 Function Calls & Parameters
+
+### **Rule 5.1:** Supply arguments in the exact order shown in the official syntax.
+
+```pine
+// ✅ Correct parameter order and types
+line.new(x1, y1, x2, y2, color=color.blue, width=2)
+
+// ✅ v6 Dynamic requests
+symbols = array.from("AAPL", "GOOGL", "MSFT")
+for symbol in symbols
+    price = request.security(symbol, "1D", close)  // Variable symbol in v6!
+```
+
+### **Rule 5.2:** Check `allowedTypeIDs` for correct form (`series int`, `simple float`, etc.).
+
+```pine
+// ✅ Library function with proper type forms
+export customTA(series float source, simple int length) =>
+    ta.sma(source, length)  // 'simple int' required for ta functions
+
+// ❌ Common error
+export wrongTA(series float source, series int length) =>
+    ta.sma(source, length)  // Error: ta.sma needs simple int for length
+```
+
+### **Rule 5.3:** Optional parameters have defaults; omit rather than passing `na` unless function expects it.
+
+---
+
+## 🗂️ Object Lifecycle
+
+### **Rule 6.1:** Object Creation & Cleanup
+
+```pine
+// Objects requiring memory management:
+// line, label, box, table, linefill, polyline, chart.point
+
+// ✅ Proper object lifecycle
+if barstate.isconfirmed
+    myLine = line.new(bar_index-1, high, bar_index, high)
+    
+// ✅ Memory cleanup pattern
+var MAX_OBJECTS = 100
+var array<line> lines = array.new<line>()
+
+addLine() =>
+    if array.size(lines) >= MAX_OBJECTS
+        oldest = array.shift(lines)
+        line.delete(oldest)
+    newLine = line.new(...)
+    array.push(lines, newLine)
+```
+
+**Rule 6.2:** Guard `.delete()` calls with `barstate.islastconfirmedhistory` when cleaning up batch objects.
+
+```pine
+// ✅ Batch cleanup on last confirmed history bar
+if barstate.islastconfirmedhistory
+    for i = 0 to array.size(lineArray) - 1
+        line.delete(array.get(lineArray, i))
+    array.clear(lineArray)
+```
+
+---
+
+## 🆕 Pine Script v6 Specific Features
+
+### **Rule V6.1: Dynamic Requests**
+
+```pine
+// ✅ v6 Feature: Variable symbols in security requests
+symbols = array.from("AAPL", "GOOGL", "MSFT")
+
+for symbol in symbols
+    price = request.security(symbol, "1D", close)
+    log.info("Price for " + symbol + ": " + str.tostring(price))
+```
+
+### **Rule V6.2: Enhanced Text Features**
+
+```pine
+// ✅ v6 Feature: Exact point sizes instead of size constants
+if barstate.islast
+    label.new(bar_index, high, "Bold Text", 
+              text_size = 16,  // Exact points instead of size.large
+              text_formatting = text.format_bold)
+    
+    // ✅ v6 Feature: Combined text formatting  
+    label.new(bar_index, low, "Bold & Italic", 
+              text_size = 18,
+              text_formatting = text.format_bold + text.format_italic)
+```
+
+### **Rule V6.3: Negative Array Indices**
+
+```pine
+// ✅ v6 Feature: Access array elements from the end
+if array.size(myArray) >= 2
+    lastValue = array.get(myArray, -1)      // Last element
+    secondLast = array.get(myArray, -2)     // Second to last
+    
+    if lastValue > secondLast
+        label.new(bar_index, high, "Upward trend")
+```
+
+---
+
+## 🚨 Common Error Patterns & Solutions
+
+### **Rule E1: Series vs Simple Type Errors**
+
+```pine
+// ❌ Common Error
+ta.ema(close, series int length)  // Error: ta functions need simple int
+
+// ✅ Solution  
+ta.ema(close, simple int length)  // Use simple form for ta function parameters
+
+// ✅ Alternative when type is determined by input
+length = input.int(20, "Length")  // Returns simple int
+ema = ta.ema(close, length)       // Works correctly
+```
+
+### **Rule E2: Array Bounds Errors**
+
+```pine
+// ❌ Unsafe array access
+value = array.get(myArray, 5)  // May cause runtime error
+
+// ✅ Safe array access with bounds checking
+if array.size(myArray) > 5
+    value = array.get(myArray, 5)
+else
+    value = na
+
+// ✅ v6 Safe access with negative indices
+if array.size(myArray) > 0
+    lastValue = array.get(myArray, -1)  // Always safe for last element
+```
+
+### **Rule E3: Version Migration Errors**
+
+```pine
+// ❌ v4/v5 deprecated syntax
+study("My Study")                    // Use indicator() instead
+security(symbol, timeframe, src)     // Use request.security() instead
+text_size = size.large              // Use exact points in v6
+
+// ✅ v6 updated syntax
+indicator("My Indicator")
+request.security(symbol, timeframe, src)
+text_size = 16                      // Exact point values
+```
+
+---
+
+## 🔍 `na` Handling
+
+**Rule 7.1:** `na` is valid for **all** base types; for arrays use `na` or omit `initial_value`.
+
+**Rule 7.2:** Use `nz(value, replacement)` when substituting `na` values safely.
+
+```pine
+// ✅ Proper na handling
+price = nz(request.security("AAPL", "1D", close), close)
+
+// ✅ Explicit typing when initializing with na  
+int myInt = na
+float myFloat = na
+```
+
+---
+
+## ✅ Best‑Practice Checklist
+
+### **Before Code Submission:**
+- [ ] Script begins with `//@version=6` 
+- [ ] Correct script declaration: `indicator()`, `strategy()`, or `library()`
+- [ ] One statement per line; no backslash continuations
+- [ ] Variables declared before use; correct `=` vs `:=`
+- [ ] Array indices checked via `array.size()`
+- [ ] All ternary branches return the same type & form
+- [ ] Objects cleaned up on `barstate.islastconfirmedhistory`
+- [ ] No compilation warnings in the Pine editor
+
+### **v6 Specific Features:**
+- [ ] Dynamic symbols in `request.security()` where applicable
+- [ ] Exact point sizes for text (instead of size constants)
+- [ ] Text formatting combinations using `text.format_bold + text.format_italic`
+- [ ] Negative array indices for cleaner code (`array.get(arr, -1)`)
+- [ ] Short-circuit boolean evaluation for performance
+
+### **Performance Optimizations:**
+- [ ] Use `barstate` conditions for expensive operations
+- [ ] Implement object cleanup to prevent memory leaks
+- [ ] Pre-allocate arrays when size is known
+- [ ] Choose appropriate data structures (arrays, matrices, maps)
+
+---
+
+## 📚 Reference Links
+
+- **Official Documentation:** [Pine Script v6 Reference](https://www.tradingview.com/pine-script-reference/v6/)
+- **Extension Source:** Pine Script v6 VSCode Extension analysis
+- **Type System:** Focus on `simple` vs `series` forms for library functions
+- **Object Management:** Always implement cleanup for drawing objects
+
+*These enhanced rules incorporate comprehensive Pine Script v6 features and best practices derived from both official documentation and extension analysis.* 

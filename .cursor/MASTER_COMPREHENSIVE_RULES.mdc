@@ -1,0 +1,520 @@
+# 🎯 MASTER: Comprehensive Pine Script v6 Rules & Automation System
+
+*The ultimate reference combining Pine Script v6 Extension analysis, [TradingView Pine Script v6 Reference](https://www.tradingview.com/pine-script-reference/v6/), and intelligent automation workflows*
+
+---
+
+## 📋 Table of Contents
+
+1. [🚀 Quick Start Checklist](#-quick-start-checklist)
+2. [🎯 Version & Script Setup](#-version--script-setup)  
+3. [🏷️ Complete Type System](#-complete-type-system)
+4. [📝 Syntax & Structure Rules](#-syntax--structure-rules)
+5. [🔧 Function & Method Definitions](#-function--method-definitions)
+6. [📊 Data Structures (Arrays, Maps, Matrices)](#-data-structures-arrays-maps-matrices)
+7. [🗂️ Object Lifecycle & Memory Management](#-object-lifecycle--memory-management)
+8. [🆕 Pine Script v6 Specific Features](#-pine-script-v6-specific-features)
+9. [🚨 Error Prevention & Auto-Correction](#-error-prevention--auto-correction)
+10. [⚡ Performance Optimization](#-performance-optimization)
+11. [🤖 AI Automation Workflow](#-ai-automation-workflow)
+12. [✅ Master Checklist](#-master-checklist)
+
+---
+
+## 🚀 Quick Start Checklist
+
+### **Before Writing Any Code:**
+```pine
+//@version=6
+indicator("My Indicator", overlay=true)
+```
+
+### **Essential Rules (Memorize These):**
+- ✅ Use `=` for declaration, `:=` for reassignment
+- ✅ Check `array.size()` before `array.get()`  
+- ✅ Keep statements on single lines (no line continuation)
+- ✅ Use `simple int` for library functions, not `series int`
+- ✅ Clean up objects with `.delete()` to prevent memory leaks
+- ✅ Use exact point sizes for text in v6 (not size constants)
+
+---
+
+## 🎯 Version & Script Setup
+
+### **Rule V1: Mandatory Version Declaration**
+```pine
+//@version=6
+indicator("Indicator Name", overlay=true)    // Technical analysis
+strategy("Strategy Name", overlay=true)       // Trading strategy  
+library("Library Name")                       // Reusable functions
+```
+
+**Supported Versions:** `4`, `5`, `6` (always use v6 for new scripts)  
+**Pattern Detection:** `^(\/\/)(@)(version)(=)([456])`
+
+### **Rule V2: Script Metadata**
+```pine
+//@version=6
+//@description Advanced Pine Script indicator with v6 features
+
+indicator("Custom Indicator",
+          shorttitle="CI", 
+          overlay=true,
+          max_lines_count=100,
+          max_labels_count=100,
+          max_boxes_count=50)
+```
+
+---
+
+## 🏷️ Complete Type System
+
+### **Rule T1: Type Keywords & Usage**
+
+| **Type** | **Declaration** | **Usage Context** | **v6 Example** |
+|----------|----------------|-------------------|----------------|
+| `int`, `float`, `bool`, `string`, `color` | Basic types | Explicit when needed | `int myVar = na` |
+| `line`, `label`, `box`, `table`, `linefill` | Object IDs | Always series form | `line myLine = line.new(...)` |
+| `polyline`, `chart.point` | v6 Objects | New drawing types | `polyline pl = polyline.new()` |
+| `array<type>` or `type[]` | Collections | Array declarations | `array<float> arr = array.new_float()` |
+| `matrix<type>` | 2D Collections | Matrix operations | `matrix<float> mx = matrix.new<float>(3,3)` |
+| `map<keyType, valueType>` | Key-value pairs | Lookup structures | `map<string, float> prices = map.new<string, float>()` |
+
+### **Rule T2: Type Forms (Critical for Libraries)**
+```pine
+// ✅ Library function - use 'simple' for ta function parameters
+export emaCustom(series float source, simple int length) =>
+    ta.ema(source, length)  // ta functions require simple int
+
+// ❌ Common error - series int not supported
+export emaWrong(series float source, series int length) =>
+    ta.ema(source, length)  // Compilation error!
+```
+
+### **Rule T3: Type Consistency**
+```pine
+// ✅ Both branches same type
+result = condition ? 1 : 2              // Both int
+color = condition ? color.red : color.blue  // Both color
+
+// ❌ Type mismatch errors
+result = condition ? 1 : 1.0            // int vs float
+value = condition ? "text" : 42         // string vs int
+```
+
+---
+
+## 📝 Syntax & Structure Rules
+
+### **Rule S1: Single Line Statements (CRITICAL)**
+Pine Script **does not support line continuation**. Keep all statements on single lines.
+
+```pine
+// ✅ Correct - all on one line
+line.new(bar_index, price1, bar_index+10, price2, color=color.blue, width=2)
+bandColor = condition1 ? color.green : condition2 ? color.orange : color.red
+
+// ❌ Error - line continuation not supported
+line.new(bar_index, price1, \
+         bar_index+10, price2)  // Syntax error!
+```
+
+### **Rule S2: Variable Declaration & Assignment**
+
+| **Operator** | **Purpose** | **Example** | **When to Use** |
+|--------------|-------------|-------------|-----------------|
+| `=` | Initial declaration | `myVar = 10` | First time only |
+| `:=` | Reassignment | `myVar := 20` | After declaration |
+| `+=`, `-=`, `*=`, `/=`, `%=` | Compound operations | `myVar += 5` | Mathematical updates |
+
+```pine
+// ✅ Correct sequence
+myVar = 0              // Declaration
+myVar := myVar + 1     // Reassignment
+
+// ❌ Common errors
+myVar := 10            // Error: use = for initial declaration
+```
+
+### **Rule S3: Indentation & Code Blocks**
+```pine
+// ✅ Proper indentation for control structures
+if condition
+    statement1
+    statement2
+else if anotherCondition
+    statement3
+    statement4
+else
+    statement5
+    statement6
+```
+
+---
+
+## 🔧 Function & Method Definitions
+
+### **Rule F1: Standard Function Syntax**
+```pine
+// Standard function
+myFunction(param1, param2) =>
+    result = param1 + param2
+    result  // Return value (last expression)
+
+// Function with defaults
+myFunction(param1, param2 = 10) =>
+    param1 + param2
+
+// Multi-line with local variables
+complexFunction(x, y) =>
+    local1 = x * 2
+    local2 = y * 3
+    final = local1 + local2
+    final
+```
+
+### **Rule F2: Method Definitions (v6)**
+```pine
+// Method definition
+method customMethod(series float this, simple int multiplier) =>
+    this * multiplier
+
+// Usage
+result = close.customMethod(2)
+```
+
+### **Rule F3: Library Export Functions**
+```pine
+// ✅ Correct type forms for export
+export customTA(series float source, simple int length) =>
+    ta.sma(source, length)
+
+export customMath(simple float value1, simple float value2) =>
+    math.max(value1, value2)
+```
+
+---
+
+## 📊 Data Structures (Arrays, Maps, Matrices)
+
+### **Rule D1: Array Operations (Enhanced v6)**
+```pine
+// ✅ Array creation with explicit types
+var array<float> prices = array.new_float(0)
+var array<string> symbols = array.new_string(0, "DEFAULT")
+
+// ✅ ALWAYS check size before access
+if array.size(prices) > index
+    value = array.get(prices, index)
+else
+    value = na
+
+// ✅ v6 Feature: Negative indices
+if array.size(prices) > 0
+    lastPrice = array.get(prices, -1)      // Last element
+    secondLast = array.get(prices, -2)     // Second to last
+```
+
+### **Rule D2: Safe Array Access Pattern**
+```pine
+// ✅ Safe wrapper function
+safeArrayGet(arr, index) =>
+    if array.size(arr) > math.abs(index)
+        array.get(arr, index)
+    else
+        na
+
+// Usage
+lastValue = safeArrayGet(myArray, -1)
+```
+
+### **Rule D3: Matrix Operations (v6)**
+```pine
+// Matrix creation and operations
+var matrix<float> priceMatrix = matrix.new<float>(rows=3, cols=3, initial_value=0.0)
+
+// Matrix access patterns
+matrix.set(priceMatrix, row=0, col=0, value=close)
+currentPrice = matrix.get(priceMatrix, row=0, col=0)
+
+// Matrix utility
+totalRows = matrix.rows(priceMatrix)
+totalCols = matrix.columns(priceMatrix)
+```
+
+### **Rule D4: Map Operations (v6)**
+```pine
+// Map creation and usage
+var map<string, float> symbolPrices = map.new<string, float>()
+
+// Map operations
+map.put(symbolPrices, "AAPL", 150.0)
+applePrice = map.get(symbolPrices, "AAPL")
+hasApple = map.contains(symbolPrices, "AAPL")
+mapSize = map.size(symbolPrices)
+```
+
+---
+
+## 🗂️ Object Lifecycle & Memory Management
+
+### **Rule O1: Object Creation**
+```pine
+// ✅ Create objects on confirmed bars only
+if barstate.isconfirmed
+    myLine = line.new(bar_index-1, high, bar_index, high)
+    myLabel = label.new(bar_index, low, "Label Text")
+
+// Objects requiring cleanup:
+// line, label, box, table, linefill, polyline, chart.point
+```
+
+### **Rule O2: Memory Management Pattern**
+```pine
+// ✅ Efficient cleanup pattern
+var MAX_OBJECTS = 100
+var array<line> lines = array.new<line>()
+
+addLine(x1, y1, x2, y2) =>
+    // Remove oldest if at limit
+    if array.size(lines) >= MAX_OBJECTS
+        oldest = array.shift(lines)
+        line.delete(oldest)
+    
+    // Add new line
+    newLine = line.new(x1, y1, x2, y2)
+    array.push(lines, newLine)
+
+// ✅ Batch cleanup
+if barstate.islastconfirmedhistory
+    for lineObj in lines
+        line.delete(lineObj)
+    array.clear(lines)
+```
+
+---
+
+## 🆕 Pine Script v6 Specific Features
+
+### **Rule V6.1: Dynamic Security Requests**
+```pine
+// ✅ v6 Feature: Variable symbols in requests
+symbols = array.from("AAPL", "GOOGL", "MSFT")
+
+for symbol in symbols
+    // Dynamic symbol requests - NEW in v6!
+    if not na(symbol) and str.length(symbol) > 0
+        price = request.security(symbol, "1D", close)
+        log.info("Price for " + symbol + ": " + str.tostring(price))
+```
+
+### **Rule V6.2: Enhanced Text Features**
+```pine
+// ✅ v6 Feature: Exact point sizes instead of size constants
+if barstate.islast
+    textSize = math.max(8, math.min(72, 16))  // Valid range
+    
+    label.new(bar_index, high, "Bold Text", 
+              text_size = textSize,  // Exact points!
+              text_formatting = text.format_bold)
+    
+    // ✅ v6 Feature: Combined formatting
+    label.new(bar_index, low, "Bold & Italic", 
+              text_size = 18,
+              text_formatting = text.format_bold + text.format_italic)
+```
+
+### **Rule V6.3: Boolean Optimizations**
+```pine
+// ✅ v6 Feature: Short-circuit evaluation
+if array.size(myArray) > 0 and array.first(myArray) > threshold
+    // array.first() only evaluated if array has elements
+    processFirstElement()
+```
+
+---
+
+## 🚨 Error Prevention & Auto-Correction
+
+### **Rule E1: Series vs Simple Type Errors**
+```pine
+// ❌ Common Error Pattern
+ta.ema(close, series int length)  // Error: ta functions need simple int
+
+// ✅ Auto-Correction Applied  
+ta.ema(close, simple int length)  // Correct type form
+
+// ✅ Alternative pattern
+length = input.int(20, "Length")  // Returns simple int
+ema = ta.ema(close, length)       // Works correctly
+```
+
+### **Rule E2: Array Bounds Safety**
+```pine
+// ❌ Unsafe pattern
+value = array.get(myArray, 5)  // May cause runtime error
+
+// ✅ Safe pattern (auto-applied by AI)
+if array.size(myArray) > 5
+    value = array.get(myArray, 5)
+else
+    value = na
+```
+
+### **Rule E3: Version Migration**
+```pine
+// ❌ v4/v5 deprecated syntax
+study("My Study")                    // Use indicator() instead
+security(symbol, timeframe, src)     // Use request.security() instead
+text_size = size.large              // Use exact points in v6
+
+// ✅ v6 updated syntax
+indicator("My Indicator")
+request.security(symbol, timeframe, src)
+text_size = 16                      // Exact point values
+```
+
+---
+
+## ⚡ Performance Optimization
+
+### **Rule P1: Conditional Execution**
+```pine
+// ✅ Use barstate for performance optimization
+if barstate.isconfirmed
+    // Only execute on confirmed bars
+    expensiveCalculation()
+
+if barstate.islast
+    // Only execute on last bar for labels/drawings
+    updateLabels()
+
+if barstate.islastconfirmedhistory
+    // One-time initialization or cleanup
+    initializeArrays()
+```
+
+### **Rule P2: Efficient Data Structures**
+```pine
+// ✅ Choose appropriate structure
+// For ordered data: arrays
+// For key-value pairs: maps
+// For 2D data: matrices
+
+// ✅ Pre-allocate when possible
+var array<float> buffer = array.new_float(100, 0.0)  // Pre-allocated
+```
+
+---
+
+## 🤖 AI Automation Workflow
+
+### **Primary Scripts (Only Two Needed)**
+1. **`pine_master.sh`** - Development, versioning, error detection
+2. **`pine_tracker.sh`** - Feature tracking, rollback documentation
+
+### **AI Agent Tool Autonomy**
+- **Use any available tool** that solves the problem efficiently
+- **Combine tools creatively** for optimal solutions  
+- **Switch strategies dynamically** based on context
+- **Prioritize effectiveness** over following rigid patterns
+
+### **When to Use Scripts vs Direct Tools**
+
+| **Situation** | **Recommended Approach** | **Tool Choice** |
+|---------------|-------------------------|-----------------|
+| Simple edits/fixes | Direct tools | `edit_file`, `search_replace` |
+| Known error patterns | Direct fix | Pattern recognition + edit |
+| Feature start | Optional script | `pine_master.sh develop` if helpful |
+| Complex tracking | Script usage | `pine_tracker.sh` for documentation |
+| Session end | Optional script | Final versioning if valuable |
+
+### **Smart Decision Matrix**
+```mermaid
+flowchart TD
+    A[Task Received] --> B{Complexity Assessment}
+    B -->|Simple| C[Direct Tools<br/>• edit_file<br/>• search_replace<br/>• pattern fixes]
+    B -->|Complex| D[AI Chooses Best Mix<br/>• Scripts if helpful<br/>• Direct tools if faster<br/>• Hybrid approach]
+    B -->|Tracking Needed| E[Optional Scripts<br/>• Version if milestone<br/>• Track if valuable]
+    
+    C --> F[✅ Execute & Continue]
+    D --> F
+    E --> F
+    
+    style B fill:#e8f5e8
+    style C fill:#fff3e0
+    style D fill:#e3f2fd
+    style E fill:#f0f8ff
+```
+
+---
+
+## ✅ Master Checklist
+
+### **Before Code Execution:**
+- [ ] Script begins with `//@version=6`
+- [ ] Correct script type: `indicator()`, `strategy()`, or `library()`
+- [ ] All statements on single lines (no line continuation)
+- [ ] Variables declared with `=` before using `:=`
+- [ ] Array bounds checked with `array.size()`
+- [ ] Type consistency in ternary operators
+- [ ] Proper use of `simple` vs `series` type forms
+- [ ] Object cleanup implemented for memory management
+- [ ] No compilation warnings in Pine Editor
+
+### **v6 Specific Features Checklist:**
+- [ ] Dynamic symbols in `request.security()` where applicable
+- [ ] Exact point sizes for text (8-72 range)
+- [ ] Text formatting combinations properly concatenated
+- [ ] Negative array indices used for cleaner code
+- [ ] Short-circuit boolean evaluation optimization
+- [ ] Method definitions with correct syntax
+
+### **Performance Optimization Checklist:**
+- [ ] Use `barstate` conditions for expensive operations
+- [ ] Object cleanup to prevent memory leaks
+- [ ] Pre-allocated arrays when size is known
+- [ ] Appropriate data structure selection
+- [ ] Efficient boolean evaluation patterns
+
+### **AI Automation Checklist:**
+- [ ] Error patterns recognized and auto-corrected
+- [ ] Direct tools used for simple fixes
+- [ ] Scripts used strategically for complex tracking
+- [ ] Creative solutions applied for unique problems
+- [ ] Development flow maintained without interruption
+
+---
+
+## 📚 Complete Reference Matrix
+
+| **Category** | **Source** | **Key Focus** |
+|--------------|------------|---------------|
+| **Type System** | Pine Script v6 Extension analysis | `simple` vs `series` forms |
+| **Syntax Rules** | TextMate grammar + v6 reference | Line structure, indentation |
+| **Error Patterns** | Extension linting rules | Common mistakes & solutions |
+| **v6 Features** | Official v6 documentation | Dynamic requests, text, arrays |
+| **Performance** | Best practices extraction | Memory, barstate optimization |
+| **Automation** | AI workflow analysis | Tool selection, script usage |
+
+---
+
+## 🎯 Key Success Principles
+
+1. **Type Safety First** - Always use correct type forms
+2. **Memory Management** - Clean up objects to prevent leaks  
+3. **Performance Awareness** - Use barstate conditions strategically
+4. **v6 Feature Leverage** - Take advantage of new capabilities
+5. **Error Prevention** - Proactive rather than reactive approach
+6. **AI Tool Flexibility** - Use optimal tools for each situation
+7. **Development Flow** - Don't interrupt with unnecessary overhead
+8. **Continuous Learning** - Update patterns based on new discoveries
+
+---
+
+**🔗 Reference Links:**
+- [Pine Script v6 Reference](https://www.tradingview.com/pine-script-reference/v6/)
+- Pine Script v6 VSCode Extension analysis  
+- Extracted rules database (8 comprehensive rule files)
+
+*This master reference ensures consistent, efficient, and error-free Pine Script v6 development with intelligent automation support.* 

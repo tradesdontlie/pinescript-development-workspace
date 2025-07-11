@@ -1,0 +1,12 @@
+# Bug Reports Directory
+
+Place bug investigation and documentation here before submitting GitHub issues.
+
+Example structure:
+```
+bug-description/
+├── bug-report.md           # Complete bug documentation
+├── reproduction-steps.md   # How to reproduce
+├── error-logs.md          # Pine Script compilation errors
+└── proposed-fix.md        # Potential solution
+```

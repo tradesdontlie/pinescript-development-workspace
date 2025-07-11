@@ -1,0 +1,12 @@
+# Strategy Models Directory
+
+Place strategy development plans here before submitting GitHub issues.
+
+Example structure:
+```
+your-strategy-name/
+├── strategy-plan.md        # Complete strategy design
+├── signal-mapping.md       # Indicator signal integration
+├── risk-management.md      # Risk and position sizing
+└── backtesting-plan.md     # Testing methodology
+```

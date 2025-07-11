@@ -94,6 +94,11 @@ coverage/
 # Custom Project Ignores
 cursor-memory-bank/
 servers-archived/
+# TradingView Browser Automation (archived for future development)
+.automation-archive/
+# Legacy backup code folders
+Pinescript-Coding-Suite/Back up old code/
+archive/
 # Uncomment if needed:
 # working/testing/
 # *.pine.bak

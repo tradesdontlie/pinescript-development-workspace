@@ -1,0 +1,12 @@
+# Development Plans Directory
+
+Place feature and indicator development plans here before submitting GitHub issues.
+
+Example structure:
+```
+your-feature-name/
+├── feature-spec.md         # Complete feature specification
+├── technical-design.md     # Implementation details
+├── integration-plan.md     # How it fits with existing code
+└── testing-strategy.md     # Quality assurance plan
+```
