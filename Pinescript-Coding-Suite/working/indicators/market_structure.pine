@@ -1,0 +1,137 @@
+//@version=6
+indicator("SMC Market Structure", shorttitle="SMC-MS", overlay=true, max_lines_count=500, max_boxes_count=500)
+
+// === INPUTS ===
+swing_length = input.int(5, "Swing Detection Length", minval=3, maxval=20, group="Structure Settings")
+show_bos = input.bool(true, "Show Break of Structure (BOS)", group="Display Options")
+show_choch = input.bool(true, "Show Change of Character (CHoCH)", group="Display Options")
+show_hh_hl = input.bool(true, "Show Higher Highs/Lower Lows", group="Display Options")
+show_structure_lines = input.bool(true, "Show Structure Lines", group="Display Options")
+
+// Colors
+bos_bull_color = input.color(color.new(color.green, 0), "BOS Bullish", group="Colors")
+bos_bear_color = input.color(color.new(color.red, 0), "BOS Bearish", group="Colors")
+choch_bull_color = input.color(color.new(color.blue, 0), "CHoCH Bullish", group="Colors")
+choch_bear_color = input.color(color.new(color.orange, 0), "CHoCH Bearish", group="Colors")
+
+// === FUNCTIONS ===
+
+// Detect swing highs and lows
+is_swing_high = ta.pivothigh(high, swing_length, swing_length)
+is_swing_low = ta.pivotlow(low, swing_length, swing_length)
+
+// === VARIABLES ===
+var float last_hh = na
+var float last_lh = na
+var float last_ll = na
+var float last_hl = na
+var int last_hh_bar = na
+var int last_lh_bar = na
+var int last_ll_bar = na
+var int last_hl_bar = na
+var string current_trend = "unknown"
+var line[] structure_lines = array.new_line()
+
+// === SWING POINT DETECTION ===
+if is_swing_high
+    current_high = high[swing_length]
+    current_bar = bar_index[swing_length]
+    
+    // Determine if this is HH or LH
+    if na(last_hh) or current_high > last_hh
+        // Higher High
+        last_hh := current_high
+        last_hh_bar := current_bar
+        
+        if show_hh_hl
+            label.new(current_bar, current_high, "HH", style=label.style_label_down, 
+                     color=color.new(color.green, 80), textcolor=color.white, size=size.small)
+    else
+        // Lower High
+        last_lh := current_high
+        last_lh_bar := current_bar
+        
+        if show_hh_hl
+            label.new(current_bar, current_high, "LH", style=label.style_label_down, 
+                     color=color.new(color.red, 80), textcolor=color.white, size=size.small)
+
+if is_swing_low
+    current_low = low[swing_length]
+    current_bar = bar_index[swing_length]
+    
+    // Determine if this is LL or HL
+    if na(last_ll) or current_low < last_ll
+        // Lower Low
+        last_ll := current_low
+        last_ll_bar := current_bar
+        
+        if show_hh_hl
+            label.new(current_bar, current_low, "LL", style=label.style_label_up, 
+                     color=color.new(color.red, 80), textcolor=color.white, size=size.small)
+    else
+        // Higher Low
+        last_hl := current_low
+        last_hl_bar := current_bar
+        
+        if show_hh_hl
+            label.new(current_bar, current_low, "HL", style=label.style_label_up, 
+                     color=color.new(color.green, 80), textcolor=color.white, size=size.small)
+
+// === STRUCTURE BREAK DETECTION ===
+
+// Break of Structure (BOS) - continuation of trend
+bos_bull = false
+bos_bear = false
+
+// Change of Character (CHoCH) - trend reversal
+choch_bull = false
+choch_bear = false
+
+// Bullish BOS: Price breaks above previous HH in uptrend
+if not na(last_hh) and high > last_hh and current_trend == "bullish"
+    bos_bull := true
+    if show_bos
+        label.new(bar_index, high, "BOS", style=label.style_label_down, 
+                 color=bos_bull_color, textcolor=color.white, size=size.normal)
+
+// Bearish BOS: Price breaks below previous LL in downtrend  
+if not na(last_ll) and low < last_ll and current_trend == "bearish"
+    bos_bear := true
+    if show_bos
+        label.new(bar_index, low, "BOS", style=label.style_label_up, 
+                 color=bos_bear_color, textcolor=color.white, size=size.normal)
+
+// Bullish CHoCH: Price breaks above previous LH (trend change to bullish)
+if not na(last_lh) and high > last_lh and current_trend != "bullish"
+    choch_bull := true
+    current_trend := "bullish"
+    if show_choch
+        label.new(bar_index, high, "CHoCH", style=label.style_label_down, 
+                 color=choch_bull_color, textcolor=color.white, size=size.normal)
+
+// Bearish CHoCH: Price breaks below previous HL (trend change to bearish)
+if not na(last_hl) and low < last_hl and current_trend != "bearish"
+    choch_bear := true
+    current_trend := "bearish"
+    if show_choch
+        label.new(bar_index, low, "CHoCH", style=label.style_label_up, 
+                 color=choch_bear_color, textcolor=color.white, size=size.normal)
+
+// === STRUCTURE LINES ===
+if show_structure_lines and not na(last_hh) and not na(last_hh_bar)
+    if array.size(structure_lines) > 10
+        line.delete(array.shift(structure_lines))
+    
+    new_line = line.new(last_hh_bar, last_hh, bar_index + 10, last_hh, 
+                       color=color.new(color.gray, 70), style=line.style_dashed, width=1)
+    array.push(structure_lines, new_line)
+
+// === ALERTS ===
+alertcondition(bos_bull, "Bullish BOS", "Bullish Break of Structure detected")
+alertcondition(bos_bear, "Bearish BOS", "Bearish Break of Structure detected")
+alertcondition(choch_bull, "Bullish CHoCH", "Bullish Change of Character detected")
+alertcondition(choch_bear, "Bearish CHoCH", "Bearish Change of Character detected")
+
+// === PLOTS FOR DEBUGGING ===
+plot(current_trend == "bullish" ? 1 : current_trend == "bearish" ? -1 : 0, 
+     title="Trend", color=color.new(color.blue, 90), display=display.data_window) 

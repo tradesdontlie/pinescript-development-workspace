@@ -1,0 +1,27 @@
+{
+  "pine_script_v6_syntax": {
+    "version_pattern": "^(//)(\\@)(version)(=)([456])",
+    "supported_versions": ["4", "5", "6"],
+    "recommended_version": "6",
+    "script_types": ["indicator", "library", "strategy"],
+    "mandatory_rules": {
+      "version_declaration": "Must start with //@version=6",
+      "script_declaration": "Must include indicator(), strategy(), or library() after version",
+      "single_line_functions": "ALL function calls must be on single lines",
+      "assignment_operators": "Use = for initial declaration, := for reassignment",
+      "type_consistency": "Both branches of conditionals must return same type",
+      "array_safety": "Always check array.size() before accessing elements",
+      "object_cleanup": "Use .delete() with barstate.islastconfirmedhistory guards"
+    },
+    "type_forms": {
+      "simple": "Use for library function parameters and constants",
+      "series": "Default for most variables, explicit use rarely needed",
+      "pattern": "[simple|series] <type> <variable_name> = <value>"
+    },
+    "memory_management": {
+      "objects_requiring_cleanup": ["line", "label", "box", "table", "linefill", "polyline"],
+      "cleanup_condition": "barstate.islastconfirmedhistory",
+      "cleanup_pattern": "if barstate.islastconfirmedhistory\n    myObject.delete()"
+    }
+  }
+}

@@ -30,43 +30,43 @@ help:
 # Validate all Pine Script files
 validate-all:
 	@echo "🔍 Validating all Pine Script files..."
-	@find . -name "*.pine" -type f -exec python scripts/validate_pine_script.py {} \;
+	@find . -name "*.pine" -type f -exec python Pinescript-Coding-Suite/scripts/validate_pine_script.py {} \;
 
 # Validate working directory files
 validate-working:
 	@echo "🔍 Validating working directory files..."
-	@find working/ -name "*.pine" -type f -exec python scripts/validate_pine_script.py {} \;
+	@find Pinescript-Coding-Suite/working/ -name "*.pine" -type f -exec python Pinescript-Coding-Suite/scripts/validate_pine_script.py {} \;
 
 # Create new indicator template
 new-indicator:
 	@read -p "Enter indicator name: " name; \
 	read -p "Enter category (fvg/ghost/oracle/sessions/vortex): " category; \
-	mkdir -p "working/$$category"; \
-	echo '//@version=6' > "working/$$category/$$name.pine"; \
-	echo 'indicator("'$$name'", overlay=true)' >> "working/$$category/$$name.pine"; \
-	echo '' >> "working/$$category/$$name.pine"; \
-	echo '// Input parameters' >> "working/$$category/$$name.pine"; \
-	echo 'length = input.int(20, "Length", minval=1)' >> "working/$$category/$$name.pine"; \
-	echo '' >> "working/$$category/$$name.pine"; \
-	echo '// Main calculation' >> "working/$$category/$$name.pine"; \
-	echo 'result = ta.sma(close, length)' >> "working/$$category/$$name.pine"; \
-	echo '' >> "working/$$category/$$name.pine"; \
-	echo '// Plot' >> "working/$$category/$$name.pine"; \
-	echo 'plot(result, "'$$name'", color=color.blue)' >> "working/$$category/$$name.pine"; \
-	echo '' >> "working/$$category/$$name.pine"; \
-	echo '// Object cleanup (if using drawing objects)' >> "working/$$category/$$name.pine"; \
-	echo 'if barstate.islastconfirmedhistory' >> "working/$$category/$$name.pine"; \
-	echo '    // Clean up objects here' >> "working/$$category/$$name.pine"; \
-	echo '    //object.delete()' >> "working/$$category/$$name.pine"
-	@echo "✅ Created new indicator: working/$$category/$$name.pine"
+	mkdir -p "Pinescript-Coding-Suite/working/$$category"; \
+	echo '//@version=6' > "Pinescript-Coding-Suite/working/$$category/$$name.pine"; \
+	echo 'indicator("'$$name'", overlay=true)' >> "Pinescript-Coding-Suite/working/$$category/$$name.pine"; \
+	echo '' >> "Pinescript-Coding-Suite/working/$$category/$$name.pine"; \
+	echo '// Input parameters' >> "Pinescript-Coding-Suite/working/$$category/$$name.pine"; \
+	echo 'length = input.int(20, "Length", minval=1)' >> "Pinescript-Coding-Suite/working/$$category/$$name.pine"; \
+	echo '' >> "Pinescript-Coding-Suite/working/$$category/$$name.pine"; \
+	echo '// Main calculation' >> "Pinescript-Coding-Suite/working/$$category/$$name.pine"; \
+	echo 'result = ta.sma(close, length)' >> "Pinescript-Coding-Suite/working/$$category/$$name.pine"; \
+	echo '' >> "Pinescript-Coding-Suite/working/$$category/$$name.pine"; \
+	echo '// Plot' >> "Pinescript-Coding-Suite/working/$$category/$$name.pine"; \
+	echo 'plot(result, "'$$name'", color=color.blue)' >> "Pinescript-Coding-Suite/working/$$category/$$name.pine"; \
+	echo '' >> "Pinescript-Coding-Suite/working/$$category/$$name.pine"; \
+	echo '// Object cleanup (if using drawing objects)' >> "Pinescript-Coding-Suite/working/$$category/$$name.pine"; \
+	echo 'if barstate.islastconfirmedhistory' >> "Pinescript-Coding-Suite/working/$$category/$$name.pine"; \
+	echo '    // Clean up objects here' >> "Pinescript-Coding-Suite/working/$$category/$$name.pine"; \
+	echo '    //object.delete()' >> "Pinescript-Coding-Suite/working/$$category/$$name.pine"
+	@echo "✅ Created new indicator: Pinescript-Coding-Suite/working/$$category/$$name.pine"
 
 # Copy indicator to working directory
 copy-to-working:
 	@read -p "Enter source file path: " source; \
 	read -p "Enter target category: " category; \
-	mkdir -p "working/$$category"; \
-	cp "$$source" "working/$$category/"; \
-	echo "✅ Copied $$source to working/$$category/"
+	mkdir -p "Pinescript-Coding-Suite/working/$$category"; \
+	cp "$$source" "Pinescript-Coding-Suite/working/$$category/"; \
+	echo "✅ Copied $$source to Pinescript-Coding-Suite/working/$$category/"
 
 # Check for memory management issues
 check-memory:

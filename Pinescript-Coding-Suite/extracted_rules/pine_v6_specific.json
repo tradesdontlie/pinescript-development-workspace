@@ -1,0 +1,36 @@
+{
+  "pine_script_v6_features": {
+    "dynamic_requests": {
+      "feature": "Variable symbols in request.security",
+      "syntax": "request.security(variable_symbol, timeframe, expression)",
+      "version_introduced": "v6"
+    },
+    "enhanced_text": {
+      "exact_point_sizes": "Use text_size = 16 instead of size.large",
+      "formatting_constants": ["text.format_bold", "text.format_italic"],
+      "combinable": "text_formatting = text.format_bold + text.format_italic"
+    },
+    "array_improvements": {
+      "negative_indices": {
+        "last_element": "array.get(arr, -1)",
+        "second_last": "array.get(arr, -2)",
+        "description": "Access array elements from the end"
+      },
+      "object_arrays": "Support for all object types (line, label, box, etc.)"
+    },
+    "migration_from_v5": {
+      "text_sizing": {
+        "old": "label.new(bar_index, high, \"Text\", size=size.large)",
+        "new": "label.new(bar_index, high, \"Text\", size=16)"
+      },
+      "function_names": {
+        "study": "indicator",
+        "security": "request.security"
+      }
+    },
+    "performance_improvements": {
+      "short_circuit_evaluation": "Available in v6 for improved performance",
+      "boolean_optimizations": "Use boolean logic optimally"
+    }
+  }
+}

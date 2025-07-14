@@ -1,0 +1,40 @@
+{
+  "pine_script_best_practices": {
+    "security_data_integrity": {
+      "repainting_prevention": "Avoid repainting behaviors",
+      "historical_access": "Validate historical access patterns",
+      "confirmed_bars": "Use confirmed bar data over realtime when possible"
+    },
+    "performance_optimization": {
+      "calculation_time": "Under 500ms for most indicators",
+      "memory_usage": "Efficient memory management required",
+      "scalability": "Must work across all timeframes",
+      "optimization": "No unnecessary computations"
+    },
+    "code_quality": {
+      "naming_conventions": "Use descriptive variable names",
+      "indentation": "Maintain consistent indentation and style",
+      "comments": "Add comments for complex logic only when needed",
+      "patterns": "Follow existing patterns in the codebase"
+    },
+    "error_prevention": {
+      "array_bounds": "Always validate array access with size checks",
+      "type_forms": "Ensure consistent type forms in expressions",
+      "object_lifecycle": "Implement proper object cleanup patterns",
+      "version_compliance": "Follow Pine Script v6 standards"
+    },
+    "testing_requirements": {
+      "compilation": "Must compile without errors in TradingView",
+      "functionality": "Signals must generate as expected",
+      "performance": "Acceptable calculation times required",
+      "repainting": "No signal repainting issues allowed",
+      "integration": "TTS framework compatibility required"
+    },
+    "signal_quality": {
+      "accuracy": "Minimum 60% win rate expectation",
+      "efficiency": "Signals should not spam (cooldown mechanisms)",
+      "stability": "No repainting or signal flickering",
+      "latency": "Real-time signal generation capability"
+    }
+  }
+}

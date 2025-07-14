@@ -1,0 +1,795 @@
+//@version=6
+indicator(title = 'TBR Frequency', shorttitle = 'TBR Frequency', overlay = true)
+
+// --- Define Base Colors for Themes (opaque, for user inputs and direct use with transparency) ---
+// Light Theme
+color light_bull_base = color.new(#A6CAF0, 0)
+color light_bear_base = color.new(#FFC0CB, 0)
+color light_inversion_base = color.new(color.purple, 0)
+
+// Dark Theme
+color dark_bull_base = color.new(#00BCD4, 0)  // Cyan
+color dark_bear_base = color.new(#E91E63, 0)  // Pink/Magenta
+color dark_inversion_base = color.new(#FFEB3B, 0) // Yellow
+
+// --- Constant Default Colors for Crossover Inputs (Light Theme) ---
+var color DEF_LIGHT_BULL_FILL_COLOR = color.new(light_bull_base, 90)
+var color DEF_LIGHT_BULL_BORDER_COLOR = color.new(light_bull_base, 50)
+var color DEF_LIGHT_BEAR_FILL_COLOR = color.new(light_bear_base, 90)
+var color DEF_LIGHT_BEAR_BORDER_COLOR = color.new(light_bear_base, 50)
+var color DEF_LIGHT_INVERSION_FILL_COLOR = color.new(light_inversion_base, 90)
+var color DEF_LIGHT_INVERSION_BORDER_COLOR = color.new(light_inversion_base, 50)
+var color DEF_LIGHT_TRIANGLE_BULL_COLOR = light_bull_base
+var color DEF_LIGHT_TRIANGLE_BEAR_COLOR = light_bear_base
+
+// --- Constant Default Colors for Wave Fill Inputs (Light Theme, Opaque) ---
+var color DEF_LIGHT_WAVE_BULL_BASE = light_bull_base
+var color DEF_LIGHT_WAVE_BEAR_BASE = light_bear_base
+
+// === Reordered Fixed Period Constants ===
+
+// K: Crystalline 8/144 (EMA)
+var int FIXED_EMA8_K = 8
+var int FIXED_EMA144_K = 144
+
+// B: Culmination 9/18 (SMA)
+var int FIXED_SMA9 = 9
+var int FIXED_SMA18 = 18
+
+// E: Synergy 9/36 (SMA)
+var int FIXED_SMA9_E = 9
+var int FIXED_SMA36_E = 36
+
+// N: Apotheosis 13/144 (EMA)
+var int FIXED_EMA13_N = 13
+var int FIXED_EMA144_N = 144
+
+// H: Keystone 13/169 (EMA)
+var int FIXED_EMA13_H = 13
+var int FIXED_EMA169_H = 169
+
+// C: Compassion 18/36 (SMA)
+var int FIXED_SMA18_2 = 18 // For Cloud C
+var int FIXED_SMA36 = 36 // Note: This was FIXED_SMA36, ensure it's correctly scoped if used elsewhere for C
+
+// A: Harmony 20/110 (SMA)
+var int FIXED_SMA20 = 20
+var int FIXED_SMA110 = 110
+
+// I: Legacy 27/81 (EMA)
+var int FIXED_EMA27_I = 27
+var int FIXED_EMA81_I = 81
+
+// L: Haven 36/216 (EMA)
+var int FIXED_EMA36_L = 36
+var int FIXED_EMA216_L = 216
+
+// J: Vision 55/610 (EMA)
+var int FIXED_EMA55_J = 55
+var int FIXED_EMA610_J = 610
+
+// M: Resonance 72/432 (EMA)
+var int FIXED_EMA72_M = 72
+var int FIXED_EMA432_M = 432
+
+// D: Zenith 81/324 (SMA)
+var int FIXED_SMA81 = 81
+var int FIXED_SMA324 = 324
+
+// F: Genesis 100/1440 (SMA/EMA - check type, original was SMA) - Corrected to SMA based on later code
+var int FIXED_SMA100 = 100
+var int FIXED_SMA1440 = 1440
+// F: Genesis 100/1440 (EMA - if it was meant to be EMA)
+// var int FIXED_EMA100_F = 100 // Example if it were EMA
+// var int FIXED_EMA1440_F = 1440 // Example if it were EMA
+
+
+// O: Ascension 144/288 (EMA)
+var int FIXED_EMA144_O = 144
+var int FIXED_EMA288_O = 288
+
+// G: Attainment 169/441 (SMA)
+var int FIXED_SMA169 = 169
+var int FIXED_SMA441 = 441
+
+// --- Input Group Titles for Frequencies ---
+group_foundational = "1. Foundational & Initiating Frequencies"
+group_transformative = "2. Transformative & Expansive Frequencies"
+group_mastery_harmonic = "3. Mastery & Higher Harmonic Frequencies"
+group_culminating_universal = "4. Culminating & Universal Frequencies"
+group_global_controls = "Global Controls"
+
+// Toggle inputs for each cloud
+
+// Reordered Wave Visibility Toggles (by crossover frequency/magnitude)
+// Group 1: Foundational & Initiating Frequencies
+show_cloud_K = input.bool(false, title="Crystalline 8/144", group = group_foundational, inline = "K_Controls", tooltip = "8 (New Beginnings, Abundance) + 144 (Divine Completeness, Spiritual Awakening). Signifies foundational new beginnings leading to spiritual wholeness and enlightened manifestation.")
+show_cloud_B = input.bool(true, title="Culmination 9/18", group = group_foundational, inline = "B_Controls", tooltip = "9 (Completion, Wisdom) + 18 (Intuition, Transformation, also 9). Suggests insightful completion of cycles, leading to wisdom and intuitive understanding.")
+show_cloud_E = input.bool(false, title="Synergy 9/36", group = group_foundational, inline = "E_Controls", tooltip = "9 (Completion, Wisdom) + 36 (Success, Expansion, also 9). Implies wisdom-guided action leading to successful manifestation and unified achievement.")
+
+// Group 2: Transformative & Expansive Frequencies
+show_cloud_N = input.bool(false, title="Apotheosis 13/144", group = group_transformative, inline = "N_Controls", tooltip = "13 (Transformation, New Cycles) + 144 (Divine Completeness, Spiritual Awakening). Points to transformative breakthroughs guided by divine wisdom, leading to spiritual ascension and purpose.")
+show_cloud_H = input.bool(false, title="Keystone 13/169", group = group_transformative, inline = "H_Controls", tooltip = "13 (Transformation) + 169 (13², Amplified Transformation, Wisdom of 7). Signifies profound, foundational shifts and the wisdom gained from deep introspection and life lessons.")
+show_cloud_C = input.bool(false, title="Compassion 18/36", group = group_transformative, inline = "C_Controls", tooltip = "18 (Intuition, Completion as 9) + 36 (Success, Expansion, also 9). Combines intuitive wisdom with successful, expansive action for broad, compassionate impact.")
+show_cloud_A = input.bool(false, title="Harmony 20/110", group = group_transformative, inline = "A_Controls", tooltip = "20 (Relationships, Patience, Awakening as 2) + 110 (Divine Guidance, Purpose, also 2). Focuses on diplomatic, patient partnerships and relationships aligned with a higher purpose.")
+
+// Group 3: Mastery & Higher Harmonic Frequencies
+show_cloud_I = input.bool(false, title="Legacy 27/81", group = group_mastery_harmonic, inline = "I_Controls", tooltip = "27 (Spiritual Leadership, Empathy as 9) + 81 (Wisdom Amplified, 9², also 9). Suggests empathetic leadership and profound wisdom creating a lasting, divinely guided impact.")
+show_cloud_L = input.bool(false, title="Haven 36/216", group = group_mastery_harmonic, inline = "L_Controls", tooltip = "36 (Manifestation, Leadership as 9) + 216 (Harmony, Completion, 6³, also 9). Points to manifesting harmonious, protected spaces or states through wise leadership and creative power.")
+show_cloud_J = input.bool(false, title="Vision 55/610", group = group_mastery_harmonic, inline = "J_Controls", tooltip = "55 (Master Builder, Freedom, Change) + 610 (Fibonacci, Divine Proportion, also 7). Represents dynamic, expansive change and freedom, guided by divine proportion and intuitive wisdom, leading to inspired vision.")
+show_cloud_M = input.bool(false, title="Resonance 72/432", group = group_mastery_harmonic, inline = "M_Controls", tooltip = "72 (Cosmic Harmonics, Inner Wisdom as 9) + 432 (Universal Harmony, Healing Frequencies, also 9). Signifies deep connection to universal harmonics, healing, and profound inner wisdom.")
+show_cloud_D = input.bool(false, title="Zenith 81/324", group = group_mastery_harmonic, inline = "D_Controls", tooltip = "81 (Wisdom Amplified, 9²) + 324 (Order, Dedication, also 9). Implies the peak of wisdom and dedication leading to a well-ordered and complete understanding or state.")
+
+// Group 4: Culminating & Universal Frequencies
+show_cloud_F = input.bool(false, title="Genesis 100/1440", group = group_culminating_universal, inline = "F_Controls", tooltip = "100 (New Beginnings, Leadership as 1) + 1440 (Spiritual Completion, Daily Potential as 9). Represents potent new beginnings leading to the manifestation of divinely guided purpose and complete cycles.")
+show_cloud_O = input.bool(false, title="Ascension 144/288", group = group_culminating_universal, inline = "O_Controls", tooltip = "144 (Divine Completeness, Awakening as 9) + 288 (Amplified 144, also 9). Symbolizes profound spiritual awakening and divine structure, doubled and amplified towards completion and higher consciousness.")
+show_cloud_G = input.bool(false, title="Attainment 169/441", group = group_culminating_universal, inline = "G_Controls", tooltip = "169 (Transformative Foundations, Wisdom of 7) + 441 (Perfected Achievement, Completion as 9). Indicates profound transformation leading to the attainment of a complete, wisely manifested new state.")
+
+// Reordered Individual cloud crossover toggles (matching above order)
+// Group 1: Foundational & Initiating Frequencies
+show_crossover_cloud_K = input.bool(false, title="", group = group_foundational, inline = "K_Controls")
+show_crossover_cloud_B = input.bool(true, title="", group = group_foundational, inline = "B_Controls")  // Default true
+show_crossover_cloud_E = input.bool(false, title="", group = group_foundational, inline = "E_Controls")
+
+// Group 2: Transformative & Expansive Frequencies
+show_crossover_cloud_N = input.bool(false, title="", group = group_transformative, inline = "N_Controls")
+show_crossover_cloud_H = input.bool(false, title="", group = group_transformative, inline = "H_Controls")
+show_crossover_cloud_C = input.bool(false, title="", group = group_transformative, inline = "C_Controls")
+show_crossover_cloud_A = input.bool(false, title="", group = group_transformative, inline = "A_Controls") 
+
+// Group 3: Mastery & Higher Harmonic Frequencies
+show_crossover_cloud_I = input.bool(false, title="", group = group_mastery_harmonic, inline = "I_Controls")
+show_crossover_cloud_L = input.bool(false, title="", group = group_mastery_harmonic, inline = "L_Controls")
+show_crossover_cloud_J = input.bool(false, title="", group = group_mastery_harmonic, inline = "J_Controls")
+show_crossover_cloud_M = input.bool(false, title="", group = group_mastery_harmonic, inline = "M_Controls")
+show_crossover_cloud_D = input.bool(false, title="", group = group_mastery_harmonic, inline = "D_Controls")
+
+// Group 4: Culminating & Universal Frequencies
+show_crossover_cloud_F = input.bool(false, title="", group = group_culminating_universal, inline = "F_Controls")
+show_crossover_cloud_O = input.bool(false, title="", group = group_culminating_universal, inline = "O_Controls")
+show_crossover_cloud_G = input.bool(false, title="", group = group_culminating_universal, inline = "G_Controls")
+
+// Crossover Highlighting Settings
+CrossoverSettings = "Crossover Highlighting"
+ShowCrossoverCandles = input.bool(true, "Show Crossover Candles", group = CrossoverSettings, inline = "CO_Show")
+ShowCrossoverTriangles = input.bool(false, "Show Triangle Markers", group = CrossoverSettings, inline = "CO_Show")
+ColorCrossoverDirection = input.bool(true, "Color Direction", group = CrossoverSettings, inline = "CO_Show")
+CrossoverCandleBoxStartOffsetBars = input.int(0, title="Box Start Offset (Bars Before Crossover)", minval=0, group = CrossoverSettings)
+MinBarsBetweenTriangles = input.int(5, title="Min Bars Between Triangles", minval=0, group = CrossoverSettings)
+InvertTriangleLogic = input.bool(false, title="Invert Triangle Logic (Color & Shape)", group = CrossoverSettings)
+
+CrossoverExtensionType = input.string("Session", options= ["Realtime","Session", "Manual"], inline="CO_Ext", group=CrossoverSettings, title = "Box Extension")
+ExtendCrossoverCandleFor = input.int(6, title="Manual Extend Hours:", minval=0, inline = "CO_Ext", group = CrossoverSettings)
+
+// Crossover Candle Color Settings
+_input_CrossoverCandleBullFillColor = input.color(DEF_LIGHT_BULL_FILL_COLOR, "Bull Fill", group = CrossoverSettings, inline = "CO_Bull")
+_input_CrossoverCandleBullBorderColor = input.color(DEF_LIGHT_BULL_BORDER_COLOR, "Bull Border", group = CrossoverSettings, inline = "CO_Bull")
+_input_CrossoverCandleBearFillColor = input.color(DEF_LIGHT_BEAR_FILL_COLOR, "Bear Fill", group = CrossoverSettings, inline = "CO_Bear")
+_input_CrossoverCandleBearBorderColor = input.color(DEF_LIGHT_BEAR_BORDER_COLOR, "Bear Border", group = CrossoverSettings, inline = "CO_Bear")
+_input_CrossoverCandleInversionFillColor = input.color(DEF_LIGHT_INVERSION_FILL_COLOR, "Inversion Fill", group = CrossoverSettings, inline = "CO_Inversion")
+_input_CrossoverCandleInversionBorderColor = input.color(DEF_LIGHT_INVERSION_BORDER_COLOR, "Inversion Border", group = CrossoverSettings, inline = "CO_Inversion")
+
+// Triangle marker colors
+_input_CrossoverTriangleBullColor = input.color(DEF_LIGHT_TRIANGLE_BULL_COLOR, "Bull Triangle", group = CrossoverSettings, inline = "CO_Triangles")
+_input_CrossoverTriangleBearColor = input.color(DEF_LIGHT_TRIANGLE_BEAR_COLOR, "Bear Triangle", group = CrossoverSettings, inline = "CO_Triangles")
+
+// --- UI Settings ---
+uiSettingsGroup = "UI Settings"
+_input_WaveBullBase = input.color(DEF_LIGHT_WAVE_BULL_BASE, "Wave Bull Base", group = uiSettingsGroup, inline = "wavebase")
+_input_WaveBearBase = input.color(DEF_LIGHT_WAVE_BEAR_BASE, "Wave Bear Base", group = uiSettingsGroup, inline = "wavebase")
+uiTheme = input.string("Light", title="UI Theme", options=["Light", "Dark"], group=uiSettingsGroup)
+
+// --- Global Controls ---
+toggle_all_waves_visibility = input.bool(false, title="Show/Hide ALL Frequencies & Crossovers", group = group_global_controls)
+
+// --- Set Resolved Colors based on Theme ---
+color resolved_bull_base = uiTheme == "Dark" ? dark_bull_base : light_bull_base
+color resolved_bear_base = uiTheme == "Dark" ? dark_bear_base : light_bear_base
+color resolved_inversion_base = uiTheme == "Dark" ? dark_inversion_base : light_inversion_base
+
+// --- Effective User-Chosen Wave Base Colors (Theme-Aware) ---
+color user_wave_bull_base = (uiTheme == "Dark" and _input_WaveBullBase == DEF_LIGHT_WAVE_BULL_BASE) ? dark_bull_base : _input_WaveBullBase
+color user_wave_bear_base = (uiTheme == "Dark" and _input_WaveBearBase == DEF_LIGHT_WAVE_BEAR_BASE) ? dark_bear_base : _input_WaveBearBase
+
+// --- Effective Crossover Colors (Theme-Aware) ---
+CrossoverCandleBullFillColor = uiTheme == "Dark" and _input_CrossoverCandleBullFillColor == DEF_LIGHT_BULL_FILL_COLOR ? color.new(dark_bull_base, 90) : _input_CrossoverCandleBullFillColor
+CrossoverCandleBullBorderColor = uiTheme == "Dark" and _input_CrossoverCandleBullBorderColor == DEF_LIGHT_BULL_BORDER_COLOR ? color.new(dark_bull_base, 50) : _input_CrossoverCandleBullBorderColor
+CrossoverCandleBearFillColor = uiTheme == "Dark" and _input_CrossoverCandleBearFillColor == DEF_LIGHT_BEAR_FILL_COLOR ? color.new(dark_bear_base, 90) : _input_CrossoverCandleBearFillColor
+CrossoverCandleBearBorderColor = uiTheme == "Dark" and _input_CrossoverCandleBearBorderColor == DEF_LIGHT_BEAR_BORDER_COLOR ? color.new(dark_bear_base, 50) : _input_CrossoverCandleBearBorderColor
+CrossoverCandleInversionFillColor = uiTheme == "Dark" and _input_CrossoverCandleInversionFillColor == DEF_LIGHT_INVERSION_FILL_COLOR ? color.new(dark_inversion_base, 90) : _input_CrossoverCandleInversionFillColor
+CrossoverCandleInversionBorderColor = uiTheme == "Dark" and _input_CrossoverCandleInversionBorderColor == DEF_LIGHT_INVERSION_BORDER_COLOR ? color.new(dark_inversion_base, 50) : _input_CrossoverCandleInversionBorderColor
+CrossoverTriangleBullColor = uiTheme == "Dark" and _input_CrossoverTriangleBullColor == DEF_LIGHT_TRIANGLE_BULL_COLOR ? dark_bull_base : _input_CrossoverTriangleBullColor
+CrossoverTriangleBearColor = uiTheme == "Dark" and _input_CrossoverTriangleBearColor == DEF_LIGHT_TRIANGLE_BEAR_COLOR ? dark_bear_base : _input_CrossoverTriangleBearColor
+
+// Type definition for crossover candles
+type CrossoverCandle
+    box CandleBox
+    line MidpointLine
+    float MidpointValue
+    float HighValue
+    float LowValue
+    int TimeValue
+    string Direction // "Bull" or "Bear"
+    string CloudPair // Which cloud pair (e.g., "9/18", "18/36", "81/324")
+    bool IsActive
+
+// Arrays for managing crossover candles
+var array<CrossoverCandle> ArrayOfCrossoverCandles = array.new<CrossoverCandle>()
+
+// Extension logic variables
+var bool ExtendCrossoverCandle = false
+var bool ManualCrossoverCandleExtension = false
+
+if CrossoverExtensionType == "Session"
+    ExtendCrossoverCandle := false
+    ManualCrossoverCandleExtension := false
+else if CrossoverExtensionType == "Realtime"
+    ExtendCrossoverCandle := true
+    ManualCrossoverCandleExtension := false
+else if CrossoverExtensionType == "Manual"
+    ExtendCrossoverCandle := false
+    ManualCrossoverCandleExtension := true
+
+// === Reordered MA/EMA Calculations ===
+
+// K: Crystalline 8/144 (EMA)
+ema8_K_o = ta.ema(open, FIXED_EMA8_K)
+ema144_K_c = ta.ema(close, FIXED_EMA144_K)
+
+// B: Culmination 9/18 (SMA)
+sma9_B_o = ta.sma(open, FIXED_SMA9)
+sma18_B_c = ta.sma(close, FIXED_SMA18)
+
+// E: Synergy 9/36 (SMA)
+sma9_E_o = ta.sma(open, FIXED_SMA9_E)
+sma36_E_c = ta.sma(close, FIXED_SMA36_E)
+
+// N: Apotheosis 13/144 (EMA)
+ema13_N_o = ta.ema(open, FIXED_EMA13_N)
+ema144_N_c = ta.ema(close, FIXED_EMA144_N)
+
+// H: Keystone 13/169 (EMA)
+ema13_H_o = ta.ema(open, FIXED_EMA13_H)
+ema169_H_c = ta.ema(close, FIXED_EMA169_H)
+
+// C: Compassion 18/36 (SMA)
+sma18_C_o = ta.sma(open, FIXED_SMA18_2)
+sma36_C_c = ta.sma(close, FIXED_SMA36)
+
+// A: Harmony 20/110 (SMA)
+sma20_A_o = ta.sma(open, FIXED_SMA20)
+sma110_A_c = ta.sma(close, FIXED_SMA110)
+
+// I: Legacy 27/81 (EMA)
+ema27_I_o = ta.ema(open, FIXED_EMA27_I)
+ema81_I_c = ta.ema(close, FIXED_EMA81_I)
+
+// L: Haven 36/216 (EMA)
+ema36_L_o = ta.ema(open, FIXED_EMA36_L)
+ema216_L_c = ta.ema(close, FIXED_EMA216_L)
+
+// J: Vision 55/610 (EMA)
+ema55_J_o = ta.ema(open, FIXED_EMA55_J)
+ema610_J_c = ta.ema(close, FIXED_EMA610_J)
+
+// M: Resonance 72/432 (EMA)
+ema72_M_o = ta.ema(open, FIXED_EMA72_M)
+ema432_M_c = ta.ema(close, FIXED_EMA432_M)
+
+// D: Zenith 81/324 (SMA)
+sma81_D_o = ta.sma(open, FIXED_SMA81)
+sma324_D_c = ta.sma(close, FIXED_SMA324)
+
+// F: Genesis 100/1440 (SMA)
+sma100_F_o = ta.sma(open, FIXED_SMA100)
+sma1440_F_c = ta.sma(close, FIXED_SMA1440)
+
+// O: Ascension 144/288 (EMA)
+ema144_O_o = ta.ema(open, FIXED_EMA144_O)
+ema288_O_c = ta.ema(close, FIXED_EMA288_O)
+
+// G: Attainment 169/441 (SMA)
+sma169_G_o = ta.sma(open, FIXED_SMA169)
+sma441_G_c = ta.sma(close, FIXED_SMA441)
+
+// === Reordered Plotting ===
+
+// K: Crystalline 8/144
+ema8_K_plot = plot((toggle_all_waves_visibility or show_cloud_K) ? ema8_K_o : na, color = #3abc0b00, style = plot.style_line, linewidth = 2, title = 'EMA(8) Crystalline', display = display.none)
+ema144_K_plot = plot((toggle_all_waves_visibility or show_cloud_K) ? ema144_K_c : na, color = #d9008600, style = plot.style_line, linewidth = 2, title = 'EMA(144) Crystalline', display = display.none)
+var color color_K_fill = color.new(color.black, 100)
+if (toggle_all_waves_visibility or show_cloud_K)
+    if (ema8_K_o > ema144_K_c)
+        color_K_fill := close >= ema144_K_c ? color.new(user_wave_bull_base, 93) : color.new(resolved_inversion_base, 93)
+    else
+        color_K_fill := close <= ema144_K_c ? color.new(user_wave_bear_base, 93) : color.new(resolved_inversion_base, 93)
+fill(ema8_K_plot, ema144_K_plot, color = color_K_fill, editable = true, title="Crystalline 8/144 Frequency")
+
+// B: Culmination 9/18
+sma9_B_plot = plot((toggle_all_waves_visibility or show_cloud_B) ? sma9_B_o : na, color = #3abc0b00, style = plot.style_line, linewidth = 2, title = 'MA(9) Pivot', display = display.none)
+sma18_B_plot = plot((toggle_all_waves_visibility or show_cloud_B) ? sma18_B_c : na, color = #d9008600, style = plot.style_line, linewidth = 2, title = 'MA(18) Pivot', display = display.none)
+var color color_B_fill = na
+if (toggle_all_waves_visibility or show_cloud_B)
+    if (sma9_B_o > sma18_B_c)
+        color_B_fill := close >= sma18_B_c ? color.new(user_wave_bull_base, 70) : color.new(resolved_inversion_base, 70)
+    else
+        color_B_fill := close <= sma18_B_c ? color.new(user_wave_bear_base, 70) : color.new(resolved_inversion_base, 70)
+fill(sma9_B_plot, sma18_B_plot, color = color_B_fill, editable = true, title="Culmination 9/18 Frequency")
+
+// E: Synergy 9/36
+sma9_E_plot = plot((toggle_all_waves_visibility or show_cloud_E) ? sma9_E_o : na, color = #3abc0b00, style = plot.style_line, linewidth = 2, title = 'MA(9) Tide', display = display.none)
+sma36_E_plot = plot((toggle_all_waves_visibility or show_cloud_E) ? sma36_E_c : na, color = #d9008600, style = plot.style_line, linewidth = 2, title = 'MA(36) Tide', display = display.none)
+var color color_E_fill = na
+if (toggle_all_waves_visibility or show_cloud_E)
+    if (sma9_E_o > sma36_E_c)
+        color_E_fill := close >= sma36_E_c ? color.new(user_wave_bull_base, 72) : color.new(resolved_inversion_base, 72)
+    else
+        color_E_fill := close <= sma36_E_c ? color.new(user_wave_bear_base, 72) : color.new(resolved_inversion_base, 72)
+fill(sma9_E_plot, sma36_E_plot, color = color_E_fill, editable = true, title="Synergy 9/36 Frequency")
+
+// N: Apotheosis 13/144
+ema13_N_plot = plot((toggle_all_waves_visibility or show_cloud_N) ? ema13_N_o : na, color = #3abc0b00, style = plot.style_line, linewidth = 2, title = 'EMA(13) Apotheosis', display = display.none)
+ema144_N_plot = plot((toggle_all_waves_visibility or show_cloud_N) ? ema144_N_c : na, color = #d9008600, style = plot.style_line, linewidth = 2, title = 'EMA(144) Apotheosis', display = display.none)
+var color color_N_fill = na
+if (toggle_all_waves_visibility or show_cloud_N)
+    if (ema13_N_o > ema144_N_c)
+        color_N_fill := close >= ema144_N_c ? color.new(user_wave_bull_base, 68) : color.new(resolved_inversion_base, 68)
+    else
+        color_N_fill := close <= ema144_N_c ? color.new(user_wave_bear_base, 68) : color.new(resolved_inversion_base, 68)
+fill(ema13_N_plot, ema144_N_plot, color = color_N_fill, editable = true, title="Apotheosis 13/144 Frequency")
+
+// H: Keystone 13/169
+ema13_H_plot = plot((toggle_all_waves_visibility or show_cloud_H) ? ema13_H_o : na, color = #3abc0b00, style = plot.style_line, linewidth = 2, title = 'EMA(13) Flux', display = display.none)
+ema169_H_plot = plot((toggle_all_waves_visibility or show_cloud_H) ? ema169_H_c : na, color = #d9008600, style = plot.style_line, linewidth = 2, title = 'EMA(169) Flux', display = display.none)
+var color color_H_fill = na
+if (toggle_all_waves_visibility or show_cloud_H)
+    if (ema13_H_o > ema169_H_c)
+        color_H_fill := close >= ema169_H_c ? color.new(user_wave_bull_base, 85) : color.new(resolved_inversion_base, 85)
+    else
+        color_H_fill := close <= ema169_H_c ? color.new(user_wave_bear_base, 85) : color.new(resolved_inversion_base, 85)
+fill(ema13_H_plot, ema169_H_plot, color = color_H_fill, editable = true, title="Keystone 13/169 Frequency")
+
+// C: Compassion 18/36
+sma18_C_plot = plot((toggle_all_waves_visibility or show_cloud_C) ? sma18_C_o : na, color = #3abc0b00, style = plot.style_line, linewidth = 2, title = 'MA(18) Flow', display = display.none)
+sma36_C_plot = plot((toggle_all_waves_visibility or show_cloud_C) ? sma36_C_c : na, color = #d9008600, style = plot.style_line, linewidth = 2, title = 'MA(36) Flow', display = display.none)
+var color color_C_fill = na
+if (toggle_all_waves_visibility or show_cloud_C)
+    if (sma18_C_o > sma36_C_c)
+        color_C_fill := close >= sma36_C_c ? color.new(user_wave_bull_base, 80) : color.new(resolved_inversion_base, 80)
+    else
+        color_C_fill := close <= sma36_C_c ? color.new(user_wave_bear_base, 80) : color.new(resolved_inversion_base, 80)
+fill(sma18_C_plot, sma36_C_plot, color = color_C_fill, editable = true, title="Compassion 18/36 Frequency")
+
+// A: Harmony 20/110
+sma20_A_plot = plot((toggle_all_waves_visibility or show_cloud_A) ? sma20_A_o : na, color = #3abc0b00, style = plot.style_line, linewidth = 2, title = 'MA(20) Ripple', display = display.none)
+sma110_A_plot = plot((toggle_all_waves_visibility or show_cloud_A) ? sma110_A_c : na, color = #d9008600, style = plot.style_line, linewidth = 2, title = 'MA(110) Ripple', display = display.none)
+var color color_A_fill = na
+if (toggle_all_waves_visibility or show_cloud_A)
+    if (sma20_A_o > sma110_A_c)
+        color_A_fill := close >= sma110_A_c ? color.new(user_wave_bull_base, 65) : color.new(resolved_inversion_base, 65)
+    else
+        color_A_fill := close <= sma110_A_c ? color.new(user_wave_bear_base, 65) : color.new(resolved_inversion_base, 65)
+fill(sma20_A_plot, sma110_A_plot, color = color_A_fill, editable = true, title="Harmony 20/110 Frequency")
+
+// I: Legacy 27/81
+ema27_I_plot = plot((toggle_all_waves_visibility or show_cloud_I) ? ema27_I_o : na, color = #3abc0b00, style = plot.style_line, linewidth = 2, title = 'EMA(27) PO3', display = display.none)
+ema81_I_plot = plot((toggle_all_waves_visibility or show_cloud_I) ? ema81_I_c : na, color = #d9008600, style = plot.style_line, linewidth = 2, title = 'EMA(81) PO3', display = display.none)
+var color color_I_fill = na
+if (toggle_all_waves_visibility or show_cloud_I)
+    if (ema27_I_o > ema81_I_c)
+        color_I_fill := close >= ema81_I_c ? color.new(user_wave_bull_base, 88) : color.new(resolved_inversion_base, 88)
+    else
+        color_I_fill := close <= ema81_I_c ? color.new(user_wave_bear_base, 88) : color.new(resolved_inversion_base, 88)
+fill(ema27_I_plot, ema81_I_plot, color = color_I_fill, editable = true, title="Legacy 27/81 Frequency")
+
+// L: Haven 36/216
+ema36_L_plot = plot((toggle_all_waves_visibility or show_cloud_L) ? ema36_L_o : na, color = #3abc0b00, style = plot.style_line, linewidth = 2, title = 'EMA(36) Haven', display = display.none)
+ema216_L_plot = plot((toggle_all_waves_visibility or show_cloud_L) ? ema216_L_c : na, color = #d9008600, style = plot.style_line, linewidth = 2, title = 'EMA(216) Haven', display = display.none)
+var color color_L_fill = na
+if (toggle_all_waves_visibility or show_cloud_L)
+    if (ema36_L_o > ema216_L_c)
+        color_L_fill := close >= ema216_L_c ? color.new(user_wave_bull_base, 95) : color.new(resolved_inversion_base, 95)
+    else
+        color_L_fill := close <= ema216_L_c ? color.new(user_wave_bear_base, 95) : color.new(resolved_inversion_base, 95)
+fill(ema36_L_plot, ema216_L_plot, color = color_L_fill, editable = true, title="Haven 36/216 Frequency")
+
+// J: Vision 55/610
+ema55_J_plot = plot((toggle_all_waves_visibility or show_cloud_J) ? ema55_J_o : na, color = #3abc0b00, style = plot.style_line, linewidth = 2, title = 'EMA(55) Reversion', display = display.none)
+ema610_J_plot = plot((toggle_all_waves_visibility or show_cloud_J) ? ema610_J_c : na, color = #d9008600, style = plot.style_line, linewidth = 2, title = 'EMA(610) Reversion', display = display.none)
+var color color_J_fill = na
+if (toggle_all_waves_visibility or show_cloud_J)
+    if (ema55_J_o > ema610_J_c)
+        color_J_fill := close >= ema610_J_c ? color.new(user_wave_bull_base, 91) : color.new(resolved_inversion_base, 91)
+    else
+        color_J_fill := close <= ema610_J_c ? color.new(user_wave_bear_base, 91) : color.new(resolved_inversion_base, 91)
+fill(ema55_J_plot, ema610_J_plot, color = color_J_fill, editable = true, title="Vision 55/610 Frequency")
+
+// M: Resonance 72/432
+ema72_M_plot = plot((toggle_all_waves_visibility or show_cloud_M) ? ema72_M_o : na, color = #3abc0b00, style = plot.style_line, linewidth = 2, title = 'EMA(72) Resonance', display = display.none)
+ema432_M_plot = plot((toggle_all_waves_visibility or show_cloud_M) ? ema432_M_c : na, color = #d9008600, style = plot.style_line, linewidth = 2, title = 'EMA(432) Resonance', display = display.none)
+var color color_M_fill = na
+if (toggle_all_waves_visibility or show_cloud_M)
+    if (ema72_M_o > ema432_M_c)
+        color_M_fill := close >= ema432_M_c ? color.new(user_wave_bull_base, 97) : color.new(resolved_inversion_base, 97)
+    else
+        color_M_fill := close <= ema432_M_c ? color.new(user_wave_bear_base, 97) : color.new(resolved_inversion_base, 97)
+fill(ema72_M_plot, ema432_M_plot, color = color_M_fill, editable = true, title="Resonance 72/432 Frequency")
+
+// D: Zenith 81/324
+sma81_D_plot = plot((toggle_all_waves_visibility or show_cloud_D) ? sma81_D_o : na, color = #3abc0b00, style = plot.style_line, linewidth = 2, title = 'MA(81) Current', display = display.none)
+sma324_D_plot = plot((toggle_all_waves_visibility or show_cloud_D) ? sma324_D_c : na, color = #d9008600, style = plot.style_line, linewidth = 2, title = 'MA(324) Current', display = display.none)
+var color color_D_fill = na
+if (toggle_all_waves_visibility or show_cloud_D)
+    if (sma81_D_o > sma324_D_c)
+        color_D_fill := close >= sma324_D_c ? color.new(user_wave_bull_base, 90) : color.new(resolved_inversion_base, 90)
+    else
+        color_D_fill := close <= sma324_D_c ? color.new(user_wave_bear_base, 90) : color.new(resolved_inversion_base, 90)
+fill(sma81_D_plot, sma324_D_plot, color = color_D_fill, editable = true, title="Zenith 81/324 Frequency")
+
+// F: Genesis 100/1440
+sma100_F_plot = plot((toggle_all_waves_visibility or show_cloud_F) ? sma100_F_o : na, color = #3abc0b00, style = plot.style_line, linewidth = 2, title = 'MA(100) Pulse', display = display.none)
+sma1440_F_plot = plot((toggle_all_waves_visibility or show_cloud_F) ? sma1440_F_c : na, color = #d9008600, style = plot.style_line, linewidth = 2, title = 'MA(1440) Pulse', display = display.none)
+var color color_F_fill = na
+if (toggle_all_waves_visibility or show_cloud_F)
+    if (sma100_F_o > sma1440_F_c)
+        color_F_fill := close >= sma1440_F_c ? color.new(user_wave_bull_base, 77) : color.new(resolved_inversion_base, 77)
+    else
+        color_F_fill := close <= sma1440_F_c ? color.new(user_wave_bear_base, 77) : color.new(resolved_inversion_base, 77)
+fill(sma100_F_plot, sma1440_F_plot, color = color_F_fill, editable = true, title="Genesis 100/1440 Frequency")
+
+// O: Ascension 144/288
+ema144_O_plot = plot((toggle_all_waves_visibility or show_cloud_O) ? ema144_O_o : na, color = #3abc0b00, style = plot.style_line, linewidth = 2, title = 'EMA(144) Ascension', display = display.none)
+ema288_O_plot = plot((toggle_all_waves_visibility or show_cloud_O) ? ema288_O_c : na, color = #d9008600, style = plot.style_line, linewidth = 2, title = 'EMA(288) Ascension', display = display.none)
+var color color_O_fill = na
+if (toggle_all_waves_visibility or show_cloud_O)
+    if (ema144_O_o > ema288_O_c)
+        color_O_fill := close >= ema288_O_c ? color.new(user_wave_bull_base, 73) : color.new(resolved_inversion_base, 73)
+    else
+        color_O_fill := close <= ema288_O_c ? color.new(user_wave_bear_base, 73) : color.new(resolved_inversion_base, 73)
+fill(ema144_O_plot, ema288_O_plot, color = color_O_fill, editable = true, title="Ascension 144/288 Frequency")
+
+// G: Attainment 169/441
+sma169_G_plot = plot((toggle_all_waves_visibility or show_cloud_G) ? sma169_G_o : na, color = #3abc0b00, style = plot.style_line, linewidth = 2, title = 'MA(169) Attainment', display = display.none)
+sma441_G_plot = plot((toggle_all_waves_visibility or show_cloud_G) ? sma441_G_c : na, color = #d9008600, style = plot.style_line, linewidth = 2, title = 'MA(441) Attainment', display = display.none)
+var color color_G_fill = na
+if (toggle_all_waves_visibility or show_cloud_G)
+    if (sma169_G_o > sma441_G_c)
+        color_G_fill := close >= sma441_G_c ? color.new(user_wave_bull_base, 82) : color.new(resolved_inversion_base, 82)
+    else
+        color_G_fill := close <= sma441_G_c ? color.new(user_wave_bear_base, 82) : color.new(resolved_inversion_base, 82)
+fill(sma169_G_plot, sma441_G_plot, color = color_G_fill, editable = true, title="Attainment 169/441 Frequency")
+
+// Crossover Detection Logic
+var bool BullCrossoverMark = false
+var bool BearCrossoverMark = false
+
+// === Reordered Crossover Detection Logic ===
+
+// K: Crystalline 8/144
+bool cloud_K_bull_cross = (toggle_all_waves_visibility or show_crossover_cloud_K) and ta.crossover(ema8_K_o, ema144_K_c) and barstate.isconfirmed
+bool cloud_K_bear_cross = (toggle_all_waves_visibility or show_crossover_cloud_K) and ta.crossunder(ema8_K_o, ema144_K_c) and barstate.isconfirmed
+
+// B: Culmination 9/18
+bool cloud_B_bull_cross = (toggle_all_waves_visibility or show_crossover_cloud_B) and ta.crossover(sma9_B_o, sma18_B_c) and barstate.isconfirmed
+bool cloud_B_bear_cross = (toggle_all_waves_visibility or show_crossover_cloud_B) and ta.crossunder(sma9_B_o, sma18_B_c) and barstate.isconfirmed
+
+// E: Synergy 9/36
+bool cloud_E_bull_cross = (toggle_all_waves_visibility or show_crossover_cloud_E) and ta.crossover(sma9_E_o, sma36_E_c) and barstate.isconfirmed
+bool cloud_E_bear_cross = (toggle_all_waves_visibility or show_crossover_cloud_E) and ta.crossunder(sma9_E_o, sma36_E_c) and barstate.isconfirmed
+
+// N: Apotheosis 13/144
+bool cloud_N_bull_cross = (toggle_all_waves_visibility or show_crossover_cloud_N) and ta.crossover(ema13_N_o, ema144_N_c) and barstate.isconfirmed
+bool cloud_N_bear_cross = (toggle_all_waves_visibility or show_crossover_cloud_N) and ta.crossunder(ema13_N_o, ema144_N_c) and barstate.isconfirmed
+
+// H: Keystone 13/169
+bool cloud_H_bull_cross = (toggle_all_waves_visibility or show_crossover_cloud_H) and ta.crossover(ema13_H_o, ema169_H_c) and barstate.isconfirmed
+bool cloud_H_bear_cross = (toggle_all_waves_visibility or show_crossover_cloud_H) and ta.crossunder(ema13_H_o, ema169_H_c) and barstate.isconfirmed
+
+// C: Compassion 18/36
+bool cloud_C_bull_cross = (toggle_all_waves_visibility or show_crossover_cloud_C) and ta.crossover(sma18_C_o, sma36_C_c) and barstate.isconfirmed
+bool cloud_C_bear_cross = (toggle_all_waves_visibility or show_crossover_cloud_C) and ta.crossunder(sma18_C_o, sma36_C_c) and barstate.isconfirmed
+
+// A: Harmony 20/110
+bool cloud_A_bull_cross = (toggle_all_waves_visibility or show_crossover_cloud_A) and ta.crossover(sma20_A_o, sma110_A_c) and barstate.isconfirmed
+bool cloud_A_bear_cross = (toggle_all_waves_visibility or show_crossover_cloud_A) and ta.crossunder(sma20_A_o, sma110_A_c) and barstate.isconfirmed
+
+// I: Legacy 27/81
+bool cloud_I_bull_cross = (toggle_all_waves_visibility or show_crossover_cloud_I) and ta.crossover(ema27_I_o, ema81_I_c) and barstate.isconfirmed
+bool cloud_I_bear_cross = (toggle_all_waves_visibility or show_crossover_cloud_I) and ta.crossunder(ema27_I_o, ema81_I_c) and barstate.isconfirmed
+
+// L: Haven 36/216
+bool cloud_L_bull_cross = (toggle_all_waves_visibility or show_crossover_cloud_L) and ta.crossover(ema36_L_o, ema216_L_c) and barstate.isconfirmed
+bool cloud_L_bear_cross = (toggle_all_waves_visibility or show_crossover_cloud_L) and ta.crossunder(ema36_L_o, ema216_L_c) and barstate.isconfirmed
+
+// J: Vision 55/610
+bool cloud_J_bull_cross = (toggle_all_waves_visibility or show_crossover_cloud_J) and ta.crossover(ema55_J_o, ema610_J_c) and barstate.isconfirmed
+bool cloud_J_bear_cross = (toggle_all_waves_visibility or show_crossover_cloud_J) and ta.crossunder(ema55_J_o, ema610_J_c) and barstate.isconfirmed
+
+// M: Resonance 72/432
+bool cloud_M_bull_cross = (toggle_all_waves_visibility or show_crossover_cloud_M) and ta.crossover(ema72_M_o, ema432_M_c) and barstate.isconfirmed
+bool cloud_M_bear_cross = (toggle_all_waves_visibility or show_crossover_cloud_M) and ta.crossunder(ema72_M_o, ema432_M_c) and barstate.isconfirmed
+
+// D: Zenith 81/324
+bool cloud_D_bull_cross = (toggle_all_waves_visibility or show_crossover_cloud_D) and ta.crossover(sma81_D_o, sma324_D_c) and barstate.isconfirmed
+bool cloud_D_bear_cross = (toggle_all_waves_visibility or show_crossover_cloud_D) and ta.crossunder(sma81_D_o, sma324_D_c) and barstate.isconfirmed
+
+// F: Genesis 100/1440
+bool cloud_F_bull_cross = (toggle_all_waves_visibility or show_crossover_cloud_F) and ta.crossover(sma100_F_o, sma1440_F_c) and barstate.isconfirmed
+bool cloud_F_bear_cross = (toggle_all_waves_visibility or show_crossover_cloud_F) and ta.crossunder(sma100_F_o, sma1440_F_c) and barstate.isconfirmed
+
+// O: Ascension 144/288
+bool cloud_O_bull_cross = (toggle_all_waves_visibility or show_crossover_cloud_O) and ta.crossover(ema144_O_o, ema288_O_c) and barstate.isconfirmed
+bool cloud_O_bear_cross = (toggle_all_waves_visibility or show_crossover_cloud_O) and ta.crossunder(ema144_O_o, ema288_O_c) and barstate.isconfirmed
+
+// G: Attainment 169/441
+bool cloud_G_bull_cross = (toggle_all_waves_visibility or show_crossover_cloud_G) and ta.crossover(sma169_G_o, sma441_G_c) and barstate.isconfirmed
+bool cloud_G_bear_cross = (toggle_all_waves_visibility or show_crossover_cloud_G) and ta.crossunder(sma169_G_o, sma441_G_c) and barstate.isconfirmed
+
+// Variables to track the bar index of the last plotted triangle
+var int lastBullTriangleBar = na
+var int lastBearTriangleBar = na
+var float bullCrossoverMidpoint = na
+var float bearCrossoverMidpoint = na
+
+// Function to create crossover candle
+createCrossoverCandle(direction, cloudPair) =>
+    if ShowCrossoverCandles
+        // Determine colors
+        color boxColor = direction == "Bull" ? CrossoverCandleBullFillColor : CrossoverCandleBearFillColor
+        color borderColor = direction == "Bull" ? CrossoverCandleBullBorderColor : CrossoverCandleBearBorderColor
+        
+        // Calculate start and end time for the box
+        int boxStartTime = time[CrossoverCandleBoxStartOffsetBars]
+        int boxEndTime = time
+        if ManualCrossoverCandleExtension
+            boxEndTime := time + ExtendCrossoverCandleFor * 3600000
+        else
+            boxEndTime := time + 3600000 // Default 1 hour if not realtime extending
+
+        int finalBoxEndTime = ExtendCrossoverCandle ? time + 3600000 : boxEndTime
+
+        // Create box
+        box crossoverBox = box.new(boxStartTime, high, finalBoxEndTime, low,
+                                  xloc = xloc.bar_time,
+                                  border_color = borderColor, 
+                                  bgcolor = boxColor, 
+                                  border_width = 1,
+                                  text = "",
+                                  text_color = na,
+                                  text_size = size.small,
+                                  text_halign = text.align_right,
+                                  text_valign = text.align_top)
+        
+        // Create midpoint line
+        float midpoint = low + (high - low) / 2
+        line midpointLine = line.new(boxStartTime, midpoint, finalBoxEndTime, midpoint, xloc.bar_time, color = borderColor, style = line.style_dashed, width = 1)
+        
+        // Store crossover candle
+        array.push(ArrayOfCrossoverCandles, 
+                   CrossoverCandle.new(crossoverBox, midpointLine, midpoint, high, low, time, direction, cloudPair, true))
+
+// === Reordered Create Crossover Candle Calls ===
+
+// K: Crystalline 8/144
+if cloud_K_bull_cross
+    bullCrossoverMidpoint := (high + low) / 2
+    BullCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bull", "Crystalline 8/144")
+if cloud_K_bear_cross
+    bearCrossoverMidpoint := (high + low) / 2
+    BearCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bear", "Crystalline 8/144")
+
+// B: Culmination 9/18
+if cloud_B_bull_cross
+    bullCrossoverMidpoint := (high + low) / 2
+    BullCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bull", "Culmination 9/18")
+if cloud_B_bear_cross
+    bearCrossoverMidpoint := (high + low) / 2
+    BearCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bear", "Culmination 9/18")
+
+// E: Synergy 9/36
+if cloud_E_bull_cross
+    bullCrossoverMidpoint := (high + low) / 2
+    BullCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bull", "Synergy 9/36")
+if cloud_E_bear_cross
+    bearCrossoverMidpoint := (high + low) / 2
+    BearCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bear", "Synergy 9/36")
+
+// N: Apotheosis 13/144
+if cloud_N_bull_cross
+    bullCrossoverMidpoint := (high + low) / 2
+    BullCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bull", "Apotheosis 13/144")
+if cloud_N_bear_cross
+    bearCrossoverMidpoint := (high + low) / 2
+    BearCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bear", "Apotheosis 13/144")
+
+// H: Keystone 13/169
+if cloud_H_bull_cross
+    bullCrossoverMidpoint := (high + low) / 2
+    BullCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bull", "Keystone 13/169")
+if cloud_H_bear_cross
+    bearCrossoverMidpoint := (high + low) / 2
+    BearCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bear", "Keystone 13/169")
+
+// C: Compassion 18/36
+if cloud_C_bull_cross
+    bullCrossoverMidpoint := (high + low) / 2
+    BullCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bull", "Compassion 18/36")
+if cloud_C_bear_cross
+    bearCrossoverMidpoint := (high + low) / 2
+    BearCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bear", "Compassion 18/36")
+
+// A: Harmony 20/110
+if cloud_A_bull_cross
+    bullCrossoverMidpoint := (high + low) / 2
+    BullCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bull", "Harmony 20/110")
+if cloud_A_bear_cross
+    bearCrossoverMidpoint := (high + low) / 2
+    BearCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bear", "Harmony 20/110")
+
+// I: Legacy 27/81
+if cloud_I_bull_cross
+    bullCrossoverMidpoint := (high + low) / 2
+    BullCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bull", "Legacy 27/81")
+if cloud_I_bear_cross
+    bearCrossoverMidpoint := (high + low) / 2
+    BearCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bear", "Legacy 27/81")
+
+// L: Haven 36/216
+if cloud_L_bull_cross
+    bullCrossoverMidpoint := (high + low) / 2
+    BullCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bull", "Haven 36/216")
+if cloud_L_bear_cross
+    bearCrossoverMidpoint := (high + low) / 2
+    BearCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bear", "Haven 36/216")
+
+// J: Vision 55/610
+if cloud_J_bull_cross
+    bullCrossoverMidpoint := (high + low) / 2
+    BullCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bull", "Vision 55/610")
+if cloud_J_bear_cross
+    bearCrossoverMidpoint := (high + low) / 2
+    BearCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bear", "Vision 55/610")
+
+// M: Resonance 72/432
+if cloud_M_bull_cross
+    bullCrossoverMidpoint := (high + low) / 2
+    BullCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bull", "Resonance 72/432")
+if cloud_M_bear_cross
+    bearCrossoverMidpoint := (high + low) / 2
+    BearCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bear", "Resonance 72/432")
+
+// D: Zenith 81/324
+if cloud_D_bull_cross
+    bullCrossoverMidpoint := (high + low) / 2
+    BullCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bull", "Zenith 81/324")
+if cloud_D_bear_cross
+    bearCrossoverMidpoint := (high + low) / 2
+    BearCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bear", "Zenith 81/324")
+
+// F: Genesis 100/1440
+if cloud_F_bull_cross
+    bullCrossoverMidpoint := (high + low) / 2
+    BullCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bull", "Genesis 100/1440")
+if cloud_F_bear_cross
+    bearCrossoverMidpoint := (high + low) / 2
+    BearCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bear", "Genesis 100/1440")
+
+// O: Ascension 144/288
+if cloud_O_bull_cross
+    bullCrossoverMidpoint := (high + low) / 2
+    BullCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bull", "Ascension 144/288")
+if cloud_O_bear_cross
+    bearCrossoverMidpoint := (high + low) / 2
+    BearCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bear", "Ascension 144/288")
+
+// G: Attainment 169/441
+if cloud_G_bull_cross
+    bullCrossoverMidpoint := (high + low) / 2
+    BullCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bull", "Attainment 169/441")
+if cloud_G_bear_cross
+    bearCrossoverMidpoint := (high + low) / 2
+    BearCrossoverMark := ShowCrossoverTriangles
+    createCrossoverCandle("Bear", "Attainment 169/441")
+
+// Determine if triangles can be plotted based on spacing
+bool canPlotBullTriangle = false
+if BullCrossoverMark and ShowCrossoverTriangles and (na(lastBullTriangleBar) or (bar_index - lastBullTriangleBar >= MinBarsBetweenTriangles))
+    canPlotBullTriangle := true
+    lastBullTriangleBar := bar_index
+
+bool canPlotBearTriangle = false
+if BearCrossoverMark and ShowCrossoverTriangles and (na(lastBearTriangleBar) or (bar_index - lastBearTriangleBar >= MinBarsBetweenTriangles))
+    canPlotBearTriangle := true
+    lastBearTriangleBar := bar_index
+
+// Plot triangle markers
+plotshape(series = canPlotBullTriangle,
+          title = "Bullish Crossover Event",
+          color = InvertTriangleLogic ? CrossoverTriangleBearColor : (not na(bullCrossoverMidpoint) and close >= bullCrossoverMidpoint ? CrossoverTriangleBullColor : CrossoverCandleInversionBorderColor),
+          location = InvertTriangleLogic ? location.belowbar : location.abovebar,
+          style = InvertTriangleLogic ? shape.triangledown : shape.triangleup,
+          size = size.tiny)
+
+plotshape(series = canPlotBearTriangle,
+          title = "Bearish Crossover Event",
+          color = InvertTriangleLogic ? CrossoverTriangleBullColor : (not na(bearCrossoverMidpoint) and close <= bearCrossoverMidpoint ? CrossoverTriangleBearColor : CrossoverCandleInversionBorderColor),
+          location = InvertTriangleLogic ? location.abovebar : location.belowbar,
+          style = InvertTriangleLogic ? shape.triangleup : shape.triangledown,
+          size = size.tiny)
+
+// Reset markers
+BullCrossoverMark := false
+BearCrossoverMark := false
+
+// Crossover Candle Management and Color Updates
+if ShowCrossoverCandles and array.size(ArrayOfCrossoverCandles) > 0
+    for i = 0 to array.size(ArrayOfCrossoverCandles) - 1
+        currentCandle = array.get(ArrayOfCrossoverCandles, i)
+        
+        // Extend boxes in realtime if enabled
+        if ExtendCrossoverCandle
+            box.set_right(currentCandle.CandleBox, time)
+            line.set_x2(currentCandle.MidpointLine, time)
+        
+        // Update colors based on direction vs current price (inversion logic)
+        if ColorCrossoverDirection and not na(currentCandle.MidpointValue)
+            if currentCandle.Direction == "Bull"
+                if close < currentCandle.MidpointValue
+                    // Bull crossover but price below midpoint = inversion
+                    box.set_bgcolor(currentCandle.CandleBox, CrossoverCandleInversionFillColor)
+                    box.set_border_color(currentCandle.CandleBox, CrossoverCandleInversionBorderColor)
+                    line.set_color(currentCandle.MidpointLine, CrossoverCandleInversionBorderColor)
+                else
+                    // Bull crossover with price above midpoint = following through
+                    box.set_bgcolor(currentCandle.CandleBox, CrossoverCandleBullFillColor)
+                    box.set_border_color(currentCandle.CandleBox, CrossoverCandleBullBorderColor)
+                    line.set_color(currentCandle.MidpointLine, CrossoverCandleBullBorderColor)
+            else if currentCandle.Direction == "Bear"
+                if close > currentCandle.MidpointValue
+                    // Bear crossover but price above midpoint = inversion
+                    box.set_bgcolor(currentCandle.CandleBox, CrossoverCandleInversionFillColor)
+                    box.set_border_color(currentCandle.CandleBox, CrossoverCandleInversionBorderColor)
+                    line.set_color(currentCandle.MidpointLine, CrossoverCandleInversionBorderColor)
+                else
+                    // Bear crossover with price below midpoint = following through
+                    box.set_bgcolor(currentCandle.CandleBox, CrossoverCandleBearFillColor)
+                    box.set_border_color(currentCandle.CandleBox, CrossoverCandleBearBorderColor)
+                    line.set_color(currentCandle.MidpointLine, CrossoverCandleBearBorderColor)
+
+// Cleanup old crossover candles (keep only recent ones)
+var int MaxCrossoverCandles = 500
+if array.size(ArrayOfCrossoverCandles) > MaxCrossoverCandles
+    oldCandle = array.shift(ArrayOfCrossoverCandles)
+    if not na(oldCandle.CandleBox)
+        box.delete(oldCandle.CandleBox)
+    if not na(oldCandle.MidpointLine)
+        line.delete(oldCandle.MidpointLine)

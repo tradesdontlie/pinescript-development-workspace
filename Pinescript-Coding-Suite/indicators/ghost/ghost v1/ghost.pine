@@ -1,0 +1,2791 @@
+//  
+//  ██████   ██   ██    ██████    ██████   ████████  
+// ██        ██   ██   ██    ██  ██           ██     
+// ██  ███   ██   ██   ██    ██  ██           ██     
+// ██   ██   ███████   ██    ██   ██████      ██     
+// ██   ██   ██   ██   ██    ██        ██     ██     
+// ██   ██   ██   ██   ██    ██        ██     ██     
+//  ██████   ██   ██    ██████    ██████      ██     
+//  
+// ███   ███  ███   ███  ██    ██  ███   ███  
+// ████ ████  ████ ████   ██  ██   ████ ████  
+// ██ ███ ██  ██ ███ ██    ████    ██ ███ ██  
+// ██  █  ██  ██  █  ██     ██     ██  █  ██  
+// ██     ██  ██     ██    ████    ██     ██  
+// ██     ██  ██     ██   ██  ██   ██     ██  
+// ██     ██  ██     ██  ██    ██  ██     ██  
+
+
+//@version=6
+indicator(title = 'Ghost MMXM', shorttitle = 'Ghost MMXM', overlay = true, max_boxes_count = 500, max_lines_count = 500, max_labels_count = 500)
+
+// ---- LTF Data Declarations ----
+var array<float> ltf_high = na
+var array<float> ltf_low = na
+var array<int> ltf_time = na
+
+
+// ---- Global Cycle-box Visibility Toggles ----
+CycleBoxDisplay = 'Cycle Box Display'
+ShowWickBoxes = input.bool(true, title = 'Show Wick Boxes', group = CycleBoxDisplay, inline = 'disp_toggles') // Group Wick/Body Toggles
+ShowBodyBoxes = input.bool(false, title = 'Show Body Boxes', group = CycleBoxDisplay, inline = 'disp_toggles') // Group Wick/Body Toggles
+
+// ---- Individual Cycle Box Toggles ----
+ShowC2ExtBelowBox = input.bool(true, title = 'Delta Discount', group = CycleBoxDisplay, inline = 'c2_ext_toggles') // Group C2 Ext Toggles
+ShowC2ExtAboveBox = input.bool(true, title = 'Delta Premium', group = CycleBoxDisplay, inline = 'c2_ext_toggles') // Group C2 Ext Toggles
+EnableC2ExtSizeLimit = input.bool(true, title='Limit Ext. Size', group = CycleBoxDisplay, inline = 'c2_ext_options')
+C2ExtLimitType = input.string("A1 Target", title="Limit By", options=["Fixed Value", "A1 Target"], group = CycleBoxDisplay, inline = 'c2_ext_options')
+C2ExtA1Multiplier = input.float(1.0, title='A1 Limit Multiplier', group = CycleBoxDisplay, inline = 'c2_ext_a1_mult', minval=0.01, step=0.01)
+MaxC2ExtDiscountSize = input.float(10.0, title='Max Disc. Fixed Size', group = CycleBoxDisplay, inline = 'c2_ext_fixed_values', minval=0.1, step=0.1)
+MaxC2ExtPremiumSize = input.float(10.0, title='Max Prem. Fixed Size', group = CycleBoxDisplay, inline = 'c2_ext_fixed_values', minval=0.1, step=0.1)
+ShowA1Boxes = input.bool(false, title = 'A1', group = CycleBoxDisplay, inline = 'cycle_toggles1') // Group A1-A4
+ShowA2Boxes = input.bool(false, title = 'A2', group = CycleBoxDisplay, inline = 'cycle_toggles1') // Group A1-A4
+ShowA3Boxes = input.bool(false, title = 'A3', group = CycleBoxDisplay, inline = 'cycle_toggles1') // Group A1-A4
+ShowA4Boxes = input.bool(false, title = 'A4', group = CycleBoxDisplay, inline = 'cycle_toggles1') // Group A1-A4
+ShowA5Boxes = input.bool(false, title = 'A5', group = CycleBoxDisplay, inline = 'cycle_toggles1') // Group A1-A5
+A5SizeMultiplier = input.float(1.0, title = 'A5 Size Multiplier', minval = 0.01, step = 0.001, group = CycleBoxDisplay, inline = 'cycle_toggles1')
+ShowC2Boxes = input.bool(false, title = 'C2', group = CycleBoxDisplay, inline = 'cycle_toggles2') // Group C2-C4
+ShowC3Boxes = input.bool(false, title = 'C3', group = CycleBoxDisplay, inline = 'cycle_toggles2') // Group C2-C4
+ShowC4Boxes = input.bool(false, title = 'C4', group = CycleBoxDisplay, inline = 'cycle_toggles2') // Group C2-C4
+
+// ---- Ghost Projection Line Toggles ----
+GhostLinesGrp = 'Ghost Projection Lines'
+ShowGhostA1 = input.bool(false, title = 'Ghost A1', group = GhostLinesGrp, inline = 'ghost_toggles1')
+ShowGhostC2 = input.bool(false, title = 'Ghost C2', group = GhostLinesGrp, inline = 'ghost_toggles2')
+ShowGhostC3 = input.bool(true, title = 'Ghost C3', group = GhostLinesGrp, inline = 'ghost_toggles2')
+ShowGhostC4 = input.bool(true, title = 'Ghost C4', group = GhostLinesGrp, inline = 'ghost_toggles2')
+ShowGhostA2 = input.bool(false, title = 'Ghost A2', group = GhostLinesGrp, inline = 'ghost_toggles1')
+ShowGhostA3 = input.bool(false, title = 'Ghost A3', group = GhostLinesGrp, inline = 'ghost_toggles1')
+ShowGhostA4 = input.bool(false, title = 'Ghost A4', group = GhostLinesGrp, inline = 'ghost_toggles1')
+ShowGhostA5 = input.bool(false, title = 'Ghost A5', group = GhostLinesGrp, inline = 'ghost_toggles1')
+// New ghost toggles for C2 extension limits
+ShowGhostC2WickExtLimits = input.bool(true, title = 'Ghost C2 Wick Ext Limits', group = GhostLinesGrp, inline = 'ghost_toggles3')
+ShowGhostC2BodyExtLimits = input.bool(false, title = 'Ghost C2 Body Ext Limits', group = GhostLinesGrp, inline = 'ghost_toggles3')
+
+// Session Toggles (Reorganized with inline grouping)
+DRDistCyclesGrp = 'DR Distribution Cycles'
+ShowADR = input.bool(false, title = 'ADR', group = DRDistCyclesGrp, inline = 'dr_dist') // Changed default to false
+ShowODR = input.bool(false, title = 'ODR', group = DRDistCyclesGrp, inline = 'dr_dist')
+ShowRDR = input.bool(true, title = 'RDR', group = DRDistCyclesGrp, inline = 'dr_dist') // Changed default to true
+
+BaseModelDistGrp = 'Base Model Distributions'
+ShowAllBaseDistributions = input.bool(false, title = 'Show ALL Base Distributions', group = BaseModelDistGrp)
+ShowADRQ1 = input.bool(true, title = 'Alpha', group = BaseModelDistGrp, inline = 'base_dist1')
+ShowADRQ2 = input.bool(true, title = 'Bravo', group = BaseModelDistGrp, inline = 'base_dist1') // Changed default to false
+ShowADRQ4 = input.bool(false, title = 'Delta', group = BaseModelDistGrp, inline = 'base_dist1')
+ShowODRQ1 = input.bool(false, title = 'Echo', group = BaseModelDistGrp, inline = 'base_dist2')
+ShowODRQ2 = input.bool(false, title = 'Foxtrot', group = BaseModelDistGrp, inline = 'base_dist2') // Changed default to true
+ShowRDRQ1 = input.bool(true, title = 'Golf', group = BaseModelDistGrp, inline = 'base_dist2')
+ShowRDRQ2 = input.bool(false, title = 'Hotel', group = BaseModelDistGrp, inline = 'base_dist2') // Changed default to true
+ShowRDRQ3 = input.bool(false, title = 'India', group = BaseModelDistGrp, inline = 'base_dist3')
+ShowRDRQ4 = input.bool(false, title = 'Juliet', group = BaseModelDistGrp, inline = 'base_dist3')
+
+HTFBaseModelDistGrp = 'HTF Base Model Distributions'
+ShowHTF1 = input.bool(false, title = 'Kilo', group = HTFBaseModelDistGrp, inline = 'htf_dist_klc') // New inline group name
+ShowHTF2 = input.bool(true, title = 'Lima', group = HTFBaseModelDistGrp, inline = 'htf_dist_klc') // New inline group name
+ShowADRQ3 = input.bool(false, title = 'Charlie', group = HTFBaseModelDistGrp, inline = 'htf_dist_klc') // Moved here
+
+// ---- Master Macro Toggles ----
+MasterMacroGrp = 'MASTER MACRO TOGGLES' // Renamed for clarity, holds the ALL toggle
+ShowAllMacrosMaster = input.bool(false, title = 'Show ALL Macros', group = MasterMacroGrp)
+
+// --- Define New Macro Group Names ---
+BaseModelMacroGrpName = 'BASE MODEL MACRO TOGGLES'
+DrMacroGrpName = 'DR MACRO TOGGLES'
+HtfKlcMacroGrpName = 'HTF/KLC MACRO TOGGLES'
+
+// --- DR Macro Groups ---
+ShowADRMacros = input.bool(false, title = 'ADR Macros', group = DrMacroGrpName)
+ShowODRMacros = input.bool(false, title = 'ODR Macros', group = DrMacroGrpName)
+ShowRDRMacros = input.bool(false, title = 'RDR Macros', group = DrMacroGrpName)
+
+
+// --- Base Model Groups (Macros) ---
+// Group 1
+ShowAlphaMacros = input.bool(false, title = 'Alpha Macros', group = BaseModelMacroGrpName, inline = 'master1')
+ShowBravoMacros = input.bool(false, title = 'Bravo Macros', group = BaseModelMacroGrpName, inline = 'master1')
+// Group 2
+ShowDeltaMacros = input.bool(false, title = 'Delta Macros', group = BaseModelMacroGrpName, inline = 'master2')
+ShowEchoMacros = input.bool(false, title = 'Echo Macros', group = BaseModelMacroGrpName, inline = 'master2')
+// Group 3
+ShowFoxtrotMacros = input.bool(false, title = 'Foxtrot Macros', group = BaseModelMacroGrpName, inline = 'master3')
+// Group 4
+ShowGolfMacros = input.bool(false, title = 'Golf Macros', group = BaseModelMacroGrpName, inline = 'master4')
+ShowHotelMacros = input.bool(false, title = 'Hotel Macros', group = BaseModelMacroGrpName, inline = 'master4')
+// Group 5
+ShowIndiaMacros = input.bool(false, title = 'India Macros', group = BaseModelMacroGrpName, inline = 'master5')
+ShowJulietMacros = input.bool(false, title = 'Juliet Macros', group = BaseModelMacroGrpName, inline = 'master5')
+
+
+// --- Kilo, Lima, Charlie (KLC) Macro Group ---
+ShowKiloMacros = input.bool(false, title = 'Kilo Macros', group = HtfKlcMacroGrpName)
+ShowLimaMacros = input.bool(false, title = 'Lima Macros', group = HtfKlcMacroGrpName)
+ShowCharlieMacros = input.bool(false, title = 'Charlie Macros', group = HtfKlcMacroGrpName)
+
+// ---- New TBR Session Toggles (Internalized - always true) ----
+TbrLonMacroGrp = 'TBR London Macros'
+TbrNyMacroGrp = 'TBR New York Macros'
+Tbr5010MacroGrp = 'TBR 50-10 Macros'
+Tbr2040MacroGrp = 'TBR 20-40 Macros'
+TbrLastHourMacroGrp = 'TBR Last Hour Macro'
+
+// London
+ShowYankee = true // input.bool(false, title="Yankee (0233-0300)", group=TbrLonMacroGrp)
+ShowZulu = true // input.bool(true,  title="Zulu (0403-0430)", group=TbrLonMacroGrp)
+
+// New York
+ShowMike = true // input.bool(false, title="Mike (0730-0900)", group=TbrNyMacroGrp)
+ShowNovember = true // input.bool(false, title="November (0800-0830)", group=TbrNyMacroGrp)
+
+// 50-10
+ShowOscar = true // input.bool(false, title="Oscar (0750-0810)", group=Tbr5010MacroGrp)
+ShowPapa = true // input.bool(false, title="Papa (0850-0910)", group=Tbr5010MacroGrp)
+ShowTBR_5010_0950 = true // input.bool(false, title="0950-1010", group=Tbr5010MacroGrp)
+ShowTBR_5010_1050 = true // input.bool(true,  title="1050-1110", group=Tbr5010MacroGrp)
+ShowTBR_5010_1150 = true // input.bool(false, title="1150-1210", group=Tbr5010MacroGrp)
+ShowTBR_5010_1310 = true // input.bool(false, title="1310-1340", group=Tbr5010MacroGrp)
+ShowTBR_5010_1450 = true // input.bool(false, title="1450-1510", group=Tbr5010MacroGrp)
+
+// 20-40
+ShowTBR_2040_0820 = true // input.bool(false, title="0820-0840", group=Tbr2040MacroGrp)
+ShowTBR_2040_0920 = true // input.bool(false, title="0920-0940", group=Tbr2040MacroGrp)
+ShowTBR_2040_1020 = true // input.bool(false, title="1020-1040", group=Tbr2040MacroGrp)
+ShowTBR_2040_1120 = true // input.bool(false, title="1120-1140", group=Tbr2040MacroGrp)
+ShowTBR_2040_1220 = true // input.bool(false, title="1220-1240", group=Tbr2040MacroGrp)
+ShowTBR_2040_1320 = true // input.bool(false, title="1320-1340", group=Tbr2040MacroGrp)
+ShowTBR_2040_1420 = true // input.bool(false, title="1420-1440", group=Tbr2040MacroGrp)
+
+// Last Hour
+ShowTBR_LH_1515 = true // input.bool(false, title="1515-1545", group=TbrLastHourMacroGrp)
+
+// ---- New TBR Afternoon Macros ----
+TbrAftMacroGrp = 'TBR Afternoon Macros'
+ShowTBR_AFT_1550 = true // input.bool(false, title="1550-1610", group=TbrAftMacroGrp)
+ShowTBR_AFT_1610 = true // input.bool(false, title="1610-1659", group=TbrAftMacroGrp)
+
+// ---- New TBR Evening/Night Macros ----
+TbrEveNightMacroGrp = 'TBR Evening/Night Macros'
+ShowTBR_EN_1800 = true // input.bool(false, title="1800-1809", group=TbrEveNightMacroGrp, inline="en1")
+ShowTBR_EN_1850 = true // input.bool(false, title="1850-1910", group=TbrEveNightMacroGrp, inline="en1")
+ShowTBR_EN_1950 = true // input.bool(false, title="1950-2010", group=TbrEveNightMacroGrp, inline="en2")
+ShowTBR_EN_2050 = true // input.bool(false, title="2050-2110", group=TbrEveNightMacroGrp, inline="en2")
+ShowTBR_EN_2120 = true // input.bool(false, title="2120-2140", group=TbrEveNightMacroGrp, inline="en3")
+ShowTBR_EN_2150 = true // input.bool(false, title="2150-2210", group=TbrEveNightMacroGrp, inline="en3")
+ShowTBR_EN_2250 = true // input.bool(false, title="2250-2310", group=TbrEveNightMacroGrp, inline="en4")
+ShowTBR_EN_2350 = true // input.bool(false, title="2350-0010", group=TbrEveNightMacroGrp, inline="en4")
+ShowTBR_EN_0050 = true // input.bool(false, title="0050-0110", group=TbrEveNightMacroGrp, inline="en5")
+ShowTBR_EN_0150 = true // input.bool(false, title="0150-0210", group=TbrEveNightMacroGrp, inline="en5")
+ShowTBR_EN_0250 = true // input.bool(false, title="0250-0310", group=TbrEveNightMacroGrp, inline="en6")
+
+
+
+
+
+// ---- Cycle Box Colors ----
+CycleColorGrp = 'Cycle Box Colors'
+ColorA1Wick = input.color(color.new(color.blue, 80), title = 'A1 Wick', group = CycleColorGrp, inline = 'a1_colors') // Group A1 Colors
+ColorA1Body = input.color(color.new(color.orange, 80), title = 'A1 Body', group = CycleColorGrp, inline = 'a1_colors') // Group A1 Colors
+ColorC2Wick = input.color(color.new(color.green, 80), title = 'C2 Wick', group = CycleColorGrp, inline = 'c2_colors') // Group C2 Colors
+ColorC2Body = input.color(color.new(color.green, 80), title = 'C2 Body', group = CycleColorGrp, inline = 'c2_colors') // Group C2 Colors
+ColorC3Wick = input.color(color.new(color.purple, 80), title = 'C3 Wick', group = CycleColorGrp, inline = 'c3_colors') // Group C3 Colors
+ColorC3Body = input.color(color.new(color.purple, 80), title = 'C3 Body', group = CycleColorGrp, inline = 'c3_colors') // Group C3 Colors
+ColorC4Wick = input.color(color.new(#007a0c, 80), title = 'C4 Wick', group = CycleColorGrp, inline = 'c4_colors') // Group C4 Colors
+ColorC4Body = input.color(color.new(color.red, 80), title = 'C4 Body', group = CycleColorGrp, inline = 'c4_colors') // Group C4 Colors
+// A2 / A3 / A4 colors (chained cycles)
+ColorA2Wick = input.color(color.new(color.teal, 80), title = 'A2 Wick', group = CycleColorGrp, inline = 'a2_colors') // Group A2 Colors
+ColorA2Body = input.color(color.new(color.teal, 80), title = 'A2 Body', group = CycleColorGrp, inline = 'a2_colors') // Group A2 Colors
+ColorA3Wick = input.color(color.new(color.green, 80), title = 'A3 Wick', group = CycleColorGrp, inline = 'a3_colors') // Group A3 Colors
+ColorA3Body = input.color(color.new(color.green, 80), title = 'A3 Body', group = CycleColorGrp, inline = 'a3_colors') // Group A3 Colors
+ColorA4Wick = input.color(color.new(color.orange, 80), title = 'A4 Wick', group = CycleColorGrp, inline = 'a4_colors') // Group A4 Colors
+ColorA4Body = input.color(color.new(color.orange, 80), title = 'A4 Body', group = CycleColorGrp, inline = 'a4_colors') // Group A4 Colors
+ColorA5Wick = input.color(color.new(color.fuchsia, 80), title = 'A5 Wick', group = CycleColorGrp, inline = 'a5_colors') // Group A5 Colors
+ColorA5Body = input.color(color.new(color.fuchsia, 70), title = 'A5 Body', group = CycleColorGrp, inline = 'a5_colors') // Group A5 Colors
+
+// ---- C2 Extension color constants ----
+ColorC2ExtBelow = input.color(color.new(color.navy, 70), title = 'Delta Discount', group = CycleColorGrp, inline = 'c2_ext_colors') // Group C2 Ext Colors
+ColorC2ExtAbove = input.color(color.new(#680000, 70), title = 'Delta Premium', group = CycleColorGrp, inline = 'c2_ext_colors') // Group C2 Ext Colors
+
+// ---- Ghost Projection Colors ----
+GhostColorGrp = 'Ghost Projection Colors'
+ColorA1Ghost = input.color(color.new(color.blue, 70), title = 'A1 Ghost', group = GhostColorGrp, inline = 'g1')
+ColorC2Ghost = input.color(color.new(color.green, 70), title = 'C2 Ghost', group = GhostColorGrp, inline = 'g2')
+ColorC3Ghost = input.color(color.new(color.purple, 70), title = 'C3 Ghost', group = GhostColorGrp, inline = 'g3')
+ColorC4Ghost = input.color(color.new(#007a0c, 70), title = 'C4 Ghost', group = GhostColorGrp, inline = 'g4')
+ColorA2Ghost = input.color(color.new(color.teal, 70), title = 'A2 Ghost', group = GhostColorGrp, inline = 'a2g')
+ColorA3Ghost = input.color(color.new(color.green, 70), title = 'A3 Ghost', group = GhostColorGrp, inline = 'a3g')
+ColorA4Ghost = input.color(color.new(color.orange, 70), title = 'A4 Ghost', group = GhostColorGrp, inline = 'a4g')
+ColorA5Ghost = input.color(color.new(color.fuchsia, 70), title = 'A5 Ghost', group = GhostColorGrp, inline = 'a5g')
+// New colors for C2 extension ghost limit lines
+ColorC2ExtLimitDiscountGhost = input.color(color.new(color.navy, 70), title = 'C2 Ext Discount Limit', group = GhostColorGrp, inline = 'c2ext_g')
+ColorC2ExtLimitPremiumGhost = input.color(color.new(#680000, 70), title = 'C2 Ext Premium Limit', group = GhostColorGrp, inline = 'c2ext_g')
+
+// ---- Ghost Line Appearance ----
+GhostAppearanceGrp = 'Ghost Line Appearance'
+GhostLineStyleInput = input.string('solid', title = 'Line Style', options = ['solid', 'dotted', 'dashed'], group = GhostAppearanceGrp)
+GhostLineWidth = input.int(3, title = 'Line Width', minval = 1, maxval = 4, group = GhostAppearanceGrp)
+ShowGhostLabels = input.bool(false, title = 'Show Labels', group = GhostAppearanceGrp)
+GhostLabelColor = input.color(color.white, title = 'Label Color', group = GhostAppearanceGrp)
+GhostLabelSize = input.string('tiny', title = 'Label Size', options = ['tiny', 'small', 'normal', 'large', 'huge'], group = GhostAppearanceGrp)
+
+// ---- Ghost Label Colors ----
+GhostLabelColorGrp = 'Ghost Label Colors'
+LabelColorA1Ghost = input.color(color.white, title = 'A1 Label', group = GhostLabelColorGrp, inline = 'label_a_colors')
+LabelColorA2Ghost = input.color(color.white, title = 'A2 Label', group = GhostLabelColorGrp, inline = 'label_a_colors')
+LabelColorA3Ghost = input.color(color.white, title = 'A3 Label', group = GhostLabelColorGrp, inline = 'label_a_colors')
+LabelColorA4Ghost = input.color(color.white, title = 'A4 Label', group = GhostLabelColorGrp, inline = 'label_a_colors')
+LabelColorA5Ghost = input.color(color.white, title = 'A5 Label', group = GhostLabelColorGrp, inline = 'label_a_colors')
+LabelColorC2Ghost = input.color(color.white, title = 'C2 Label', group = GhostLabelColorGrp, inline = 'label_c_colors')
+LabelColorC3Ghost = input.color(color.white, title = 'C3 Label', group = GhostLabelColorGrp, inline = 'label_c_colors')
+LabelColorC4Ghost = input.color(color.white, title = 'C4 Label', group = GhostLabelColorGrp, inline = 'label_c_colors')
+LabelColorC2ExtLimitGhost = input.color(color.white, title = 'C2 Ext Limit Label', group = GhostLabelColorGrp, inline = 'label_ext_colors')
+
+// Session Time-window strings & end-time constants (copied from v3)
+const string s_ADRQ1_TIMES = '18:45-21:15'
+const string s_ADRQ2_TIMES = '21:30-00:00'
+const string s_ADR_TIMES = '19:30-02:00'
+const string s_ADRQ3_TIMES = '21:30-02:45'
+const string s_ADRQ4_TIMES = '00:15-02:45'
+const string s_ODRQ1_TIMES = '03:00-05:45'
+const string s_ODR_TIMES = '03:00-08:30'
+const string s_HTF1_TIMES = '04:30-16:00'
+const string s_ODRQ2_TIMES = '06:00-08:15'
+const string s_RDRQ1_TIMES = '08:45-11:15'
+const string s_RDR_TIMES = '09:30-16:00'
+const string s_RDRQ2_TIMES = '11:30-14:00'
+const string s_RDRQ3_TIMES = '11:30-14:45'
+const string s_HTF2_TIMES = '11:30-16:45'
+const string s_RDRQ4_TIMES = '14:15-16:45'
+
+const int s1_ADRQ1_END_HOUR_CONST = 21
+const int s1_ADRQ1_END_MINUTE_CONST = 15
+const int s3_ADRQ2_END_HOUR_CONST = 0
+const int s3_ADRQ2_END_MINUTE_CONST = 0
+const int s2_ADR_END_HOUR_CONST = 2
+const int s2_ADR_END_MINUTE_CONST = 0
+const int s4_ADRQ3_END_HOUR_CONST = 2
+const int s4_ADRQ3_END_MINUTE_CONST = 45
+const int s5_ADRQ4_END_HOUR_CONST = 2
+const int s5_ADRQ4_END_MINUTE_CONST = 45
+const int s6_ODRQ1_END_HOUR_CONST = 5
+const int s6_ODRQ1_END_MINUTE_CONST = 45
+const int s7_ODR_END_HOUR_CONST = 8
+const int s7_ODR_END_MINUTE_CONST = 30
+const int s8_HTF1_END_HOUR_CONST = 16
+const int s8_HTF1_END_MINUTE_CONST = 0
+const int s9_ODRQ2_END_HOUR_CONST = 8
+const int s9_ODRQ2_END_MINUTE_CONST = 15
+const int s10_RDRQ1_END_HOUR_CONST = 11
+const int s10_RDRQ1_END_MINUTE_CONST = 15
+const int s11_RDR_END_HOUR_CONST = 16
+const int s11_RDR_END_MINUTE_CONST = 0
+const int s12_RDRQ2_END_HOUR_CONST = 14
+const int s12_RDRQ2_END_MINUTE_CONST = 0
+const int s13_RDRQ3_END_HOUR_CONST = 14
+const int s13_RDRQ3_END_MINUTE_CONST = 45
+const int s14_HTF2_END_HOUR_CONST = 16
+const int s14_HTF2_END_MINUTE_CONST = 45
+const int s15_RDRQ4_END_HOUR_CONST = 16
+const int s15_RDRQ4_END_MINUTE_CONST = 45
+
+// ---- New TBR Session Time Strings ----
+const string s_TBR_LON_0233_TIMES = '02:33-03:00'
+const string s_TBR_LON_0403_TIMES = '04:03-04:30'
+const string s_TBR_NY_0730_TIMES = '07:30-09:00'
+const string s_TBR_NY_0800_TIMES = '08:00-08:30'
+const string s_TBR_5010_0750_TIMES = '07:50-08:10'
+const string s_TBR_5010_0850_TIMES = '08:50-09:10'
+const string s_TBR_5010_0950_TIMES = '09:50-10:10'
+const string s_TBR_5010_1050_TIMES = '10:50-11:10'
+const string s_TBR_5010_1150_TIMES = '11:50-12:10'
+const string s_TBR_5010_1310_TIMES = '13:10-13:40'
+const string s_TBR_5010_1450_TIMES = '14:50-15:10'
+const string s_TBR_2040_0820_TIMES = '08:20-08:40'
+const string s_TBR_2040_0920_TIMES = '09:20-09:40'
+const string s_TBR_2040_1020_TIMES = '10:20-10:40'
+const string s_TBR_2040_1120_TIMES = '11:20-11:40'
+const string s_TBR_2040_1220_TIMES = '12:20-12:40'
+const string s_TBR_2040_1320_TIMES = '13:20-13:40'
+const string s_TBR_2040_1420_TIMES = '14:20-14:40'
+const string s_TBR_LH_1515_TIMES = '15:15-15:45'
+
+// ---- New TBR Session End Time Constants ----
+const int s16_TBR_LON_0233_END_HOUR_CONST = 3
+const int s16_TBR_LON_0233_END_MINUTE_CONST = 0
+const int s17_TBR_LON_0403_END_HOUR_CONST = 4
+const int s17_TBR_LON_0403_END_MINUTE_CONST = 30
+const int s18_TBR_NY_0730_END_HOUR_CONST = 9
+const int s18_TBR_NY_0730_END_MINUTE_CONST = 0
+const int s19_TBR_NY_0800_END_HOUR_CONST = 8
+const int s19_TBR_NY_0800_END_MINUTE_CONST = 30
+const int s20_TBR_5010_0750_END_HOUR_CONST = 8
+const int s20_TBR_5010_0750_END_MINUTE_CONST = 10
+const int s21_TBR_5010_0850_END_HOUR_CONST = 9
+const int s21_TBR_5010_0850_END_MINUTE_CONST = 10
+const int s22_TBR_5010_0950_END_HOUR_CONST = 10
+const int s22_TBR_5010_0950_END_MINUTE_CONST = 10
+const int s23_TBR_5010_1050_END_HOUR_CONST = 11
+const int s23_TBR_5010_1050_END_MINUTE_CONST = 10
+const int s24_TBR_5010_1150_END_HOUR_CONST = 12
+const int s24_TBR_5010_1150_END_MINUTE_CONST = 10
+const int s25_TBR_5010_1310_END_HOUR_CONST = 13
+const int s25_TBR_5010_1310_END_MINUTE_CONST = 40
+const int s26_TBR_5010_1450_END_HOUR_CONST = 15
+const int s26_TBR_5010_1450_END_MINUTE_CONST = 10
+const int s27_TBR_2040_0820_END_HOUR_CONST = 8
+const int s27_TBR_2040_0820_END_MINUTE_CONST = 40
+const int s28_TBR_2040_0920_END_HOUR_CONST = 9
+const int s28_TBR_2040_0920_END_MINUTE_CONST = 40
+const int s29_TBR_2040_1020_END_HOUR_CONST = 10
+const int s29_TBR_2040_1020_END_MINUTE_CONST = 40
+const int s30_TBR_2040_1120_END_HOUR_CONST = 11
+const int s30_TBR_2040_1120_END_MINUTE_CONST = 40
+const int s31_TBR_2040_1220_END_HOUR_CONST = 12
+const int s31_TBR_2040_1220_END_MINUTE_CONST = 40
+const int s32_TBR_2040_1320_END_HOUR_CONST = 13
+const int s32_TBR_2040_1320_END_MINUTE_CONST = 40
+const int s33_TBR_2040_1420_END_HOUR_CONST = 14
+const int s33_TBR_2040_1420_END_MINUTE_CONST = 40
+const int s34_TBR_LH_1515_END_HOUR_CONST = 15
+const int s34_TBR_LH_1515_END_MINUTE_CONST = 45
+
+// ---- New TBR Session Time Strings ----
+const string s_Yankee_TIMES = '02:33-03:00'
+const string s_Zulu_TIMES = '04:03-04:30'
+const string s_Mike_TIMES = '07:30-09:00'
+const string s_November_TIMES = '08:00-08:30'
+const string s_Oscar_TIMES = '07:50-08:10'
+const string s_Papa_TIMES = '08:50-09:10'
+
+// ---- New TBR Session End Time Constants ----
+const int s_Yankee_END_HOUR_CONST = 3
+const int s_Yankee_END_MINUTE_CONST = 0
+const int s_Zulu_END_HOUR_CONST = 4
+const int s_Zulu_END_MINUTE_CONST = 30
+const int s_Mike_END_HOUR_CONST = 9
+const int s_Mike_END_MINUTE_CONST = 0
+const int s_November_END_HOUR_CONST = 8
+const int s_November_END_MINUTE_CONST = 30
+const int s_Oscar_END_HOUR_CONST = 8
+const int s_Oscar_END_MINUTE_CONST = 10
+const int s_Papa_END_HOUR_CONST = 9
+const int s_Papa_END_MINUTE_CONST = 10
+
+
+
+// ---- New TBR Afternoon Session Times ----
+const string s_TBR_AFT_1550_TIMES = '15:50-16:10'
+const string s_TBR_AFT_1610_TIMES = '16:10-16:59'
+
+// ---- New TBR Afternoon Session End Times ----
+const int s35_TBR_AFT_1550_END_HOUR_CONST = 16
+const int s35_TBR_AFT_1550_END_MINUTE_CONST = 10
+const int s36_TBR_AFT_1610_END_HOUR_CONST = 16
+const int s36_TBR_AFT_1610_END_MINUTE_CONST = 59
+
+// ---- New TBR Evening/Night Session Times ----
+const string s_TBR_EN_1800_TIMES = '18:00-18:09'
+const string s_TBR_EN_1850_TIMES = '18:50-19:10'
+const string s_TBR_EN_1950_TIMES = '19:50-20:10'
+const string s_TBR_EN_2050_TIMES = '20:50-21:10'
+const string s_TBR_EN_2120_TIMES = '21:20-21:40'
+const string s_TBR_EN_2150_TIMES = '21:50-22:10'
+const string s_TBR_EN_2250_TIMES = '22:50-23:10'
+const string s_TBR_EN_2350_TIMES = '23:50-00:10' // Crosses midnight
+const string s_TBR_EN_0050_TIMES = '00:50-01:10'
+const string s_TBR_EN_0150_TIMES = '01:50-02:10'
+const string s_TBR_EN_0250_TIMES = '02:50-03:10'
+
+// ---- New TBR Evening/Night Session End Times ----
+const int s37_TBR_EN_1800_END_HOUR_CONST = 18
+const int s37_TBR_EN_1800_END_MINUTE_CONST = 9
+const int s38_TBR_EN_1850_END_HOUR_CONST = 19
+const int s38_TBR_EN_1850_END_MINUTE_CONST = 10
+const int s39_TBR_EN_1950_END_HOUR_CONST = 20
+const int s39_TBR_EN_1950_END_MINUTE_CONST = 10
+const int s40_TBR_EN_2050_END_HOUR_CONST = 21
+const int s40_TBR_EN_2050_END_MINUTE_CONST = 10
+const int s41_TBR_EN_2120_END_HOUR_CONST = 21
+const int s41_TBR_EN_2120_END_MINUTE_CONST = 40
+const int s42_TBR_EN_2150_END_HOUR_CONST = 22
+const int s42_TBR_EN_2150_END_MINUTE_CONST = 10
+const int s43_TBR_EN_2250_END_HOUR_CONST = 23
+const int s43_TBR_EN_2250_END_MINUTE_CONST = 10
+const int s44_TBR_EN_2350_END_HOUR_CONST = 0 // End time is 00:10
+const int s44_TBR_EN_2350_END_MINUTE_CONST = 10
+const int s45_TBR_EN_0050_END_HOUR_CONST = 1
+const int s45_TBR_EN_0050_END_MINUTE_CONST = 10
+const int s46_TBR_EN_0150_END_HOUR_CONST = 2
+const int s46_TBR_EN_0150_END_MINUTE_CONST = 10
+const int s47_TBR_EN_0250_END_HOUR_CONST = 3
+const int s47_TBR_EN_0250_END_MINUTE_CONST = 10
+
+
+
+// === DATA TABLE SETTINGS ===
+TableSettings = 'Data Table Settings'
+ShowDataTable = input.bool(false, title = 'Show Data Table', group = TableSettings)
+TablePositionInput = input.string('Bottom Right', 'Table Position', ['Top Left', 'Top Center', 'Top Right', 'Middle Left', 'Middle Center', 'Middle Right', 'Bottom Left', 'Bottom Center', 'Bottom Right'], group = TableSettings)
+TableFontSizeInput = input.string('small', 'Font Size', ['tiny', 'small', 'normal', 'large', 'huge'], group = TableSettings)
+TableBGColor = input.color(color.new(color.black, 80), title = 'Table Background', group = TableSettings)
+TableTextColor = input.color(color.white, title = 'Text Color', group = TableSettings)
+TableBorderColor = input.color(color.white, title = 'Border Color', group = TableSettings)
+
+// === FVG SETTINGS ===
+FVGSettingsGrp = 'FVG Settings'
+ShowFVGs = input.bool(true, title='Show FVGs', group = FVGSettingsGrp)
+fvgMinTickSize = input.int(4, title='Min FVG Size (Ticks)', minval=1, group = FVGSettingsGrp)
+fvgBullColor = input.color(color.new(color.green, 75), title='Bullish FVG Color', group = FVGSettingsGrp, inline='fvgcolors')
+fvgBearColor = input.color(color.new(color.red, 75), title='Bearish FVG Color', group = FVGSettingsGrp, inline='fvgcolors')
+fvgLtfOptionSelected = input.string("Chart Timeframe", title="FVG Detection Timeframe", options=["Chart Timeframe", "1 Minute", "15 Seconds"], group = FVGSettingsGrp, tooltip="Use 'Chart Timeframe' to detect on current chart. '1 Minute' for 1-min, '15 Seconds' for 15-sec FVGs. LTF detection is more resource intensive.")
+fvgShowOnlyFirstInSession = input.bool(true, title='Show Only 1st FVG in Session', group = FVGSettingsGrp, tooltip="If true, only the first bullish and first bearish FVG per session will be drawn. If OFF, no session FVGs will draw.")
+fvgShowOnlyFirstInC2Ext = input.bool(true, title='Show Only 1st FVG in C2 Ext.', group = FVGSettingsGrp, tooltip="If true, only the first bullish and first bearish FVG that forms within a C2 Wick Extension will be drawn.")
+fvgExtendBoxes = input.bool(true, title="Extend FVG Boxes", group = FVGSettingsGrp)
+fvgShowFirstTypeOverall = input.bool(false, title="Show Only First FVG Type Overall (Session & C2 Ext)", group = FVGSettingsGrp, tooltip="If ON, only the first type of FVG (bull or bear) that forms will be shown for Session FVGs, and separately for C2 Extension FVGs. E.g., if bull FVG appears first in session, no bear session FVGs will show.")
+
+// New Color Inputs for C2 Extension FVGs
+fvgC2ExtBullFillColor = input.color(color.new(color.blue, 85), title='C2 Ext. Bull FVG Fill', group = FVGSettingsGrp, inline='fvg_c2ext_colors')
+fvgC2ExtBullBorderColor = input.color(color.new(color.blue, 100), title='C2 Ext. Bull FVG Border', group = FVGSettingsGrp, inline='fvg_c2ext_colors')
+fvgC2ExtBearFillColor = input.color(color.new(color.orange, 85), title='C2 Ext. Bear FVG Fill', group = FVGSettingsGrp, inline='fvg_c2ext_colors2')
+fvgC2ExtBearBorderColor = input.color(color.new(color.orange, 100), title='C2 Ext. Bear FVG Border', group = FVGSettingsGrp, inline='fvg_c2ext_colors2')
+
+
+// ---- GENERIC CONFIG & STATE TYPES ----
+
+type SessionCfg
+	string name
+	string sessStr
+	bool toggle
+	int endHour
+	int endMinute
+	int sessLen
+	bool isTBRMacro = false // Added field to identify TBR macros
+
+type SessionState
+	bool sesActive = false
+	bool sesPrev = false
+	bool sesFirst = false
+	int startTs = na
+	float openPrice = na
+	float hiPrice = na
+	float loPrice = na
+	int tsHi = na
+	int tsLo = na
+
+	array<float> mHist = na
+	array<float> dHist = na
+	array<int> mtHist = na
+	array<int> dtHist = na
+
+	float avgM = na
+	float avgD = na
+	float avgMT = na
+	float avgDT = na
+
+	float targetA1 = na
+	float targetC2 = na
+	float targetC3 = na
+	float targetC4 = na
+
+	// ---- Simple A1 cycle tracking (Phase-3) ----
+	float a1_hiWick = na
+	float a1_loWick = na
+	float a1_hiBody = na
+	float a1_loBody = na
+	bool a1_wickHit = false
+	bool a1_bodyHit = false
+	int a1_hitTimeWick = na
+	int a1_hitTimeBody = na
+	// box handles will be added later once plotting is wired in
+
+	// ---- A2 chained cycle ----
+	bool a2_wickActive = false
+	bool a2_bodyActive = false
+	float a2_hiWick = na
+	float a2_loWick = na
+	float a2_hiBody = na
+	float a2_loBody = na
+	bool a2_wickHit = false
+	bool a2_bodyHit = false
+	int a2_hitTimeWick = na
+	int a2_hitTimeBody = na
+
+	// ---- C2-C4 cycle hit flags (for generic plotting) ----
+	bool c2_wickHit = false
+	bool c2_bodyHit = false
+	int c2_hitTimeWick = na
+	int c2_hitTimeBody = na
+	bool c3_wickHit = false
+	bool c3_bodyHit = false
+	int c3_hitTimeWick = na
+	int c3_hitTimeBody = na
+	bool c4_wickHit = false
+	bool c4_bodyHit = false
+	int c4_hitTimeWick = na
+	int c4_hitTimeBody = na
+
+	// ---- A3 chained cycle ----
+	bool a3_wickActive = false
+	bool a3_bodyActive = false
+	float a3_hiWick = na
+	float a3_loWick = na
+	float a3_hiBody = na
+	float a3_loBody = na
+	bool a3_wickHit = false
+	bool a3_bodyHit = false
+	int a3_hitTimeWick = na
+	int a3_hitTimeBody = na
+
+	// ---- A4 chained cycle ----
+	bool a4_wickActive = false
+	bool a4_bodyActive = false
+	float a4_hiWick = na
+	float a4_loWick = na
+	float a4_hiBody = na
+	float a4_loBody = na
+	bool a4_wickHit = false
+	bool a4_bodyHit = false
+	int a4_hitTimeWick = na
+	int a4_hitTimeBody = na
+
+	// Start timestamps for chained cycles (for box left edge)
+	int a2_startTimeWick = na
+	int a2_startTimeBody = na
+	int a3_startTimeWick = na
+	int a3_startTimeBody = na
+	int a4_startTimeWick = na
+	int a4_startTimeBody = na
+
+	// ---- A5 chained cycle ----
+	bool a5_wickActive = false
+	bool a5_bodyActive = false
+	float a5_hiWick = na
+	float a5_loWick = na
+	float a5_hiBody = na
+	float a5_loBody = na
+	bool a5_wickHit = false
+	bool a5_bodyHit = false
+	int a5_hitTimeWick = na
+	int a5_hitTimeBody = na
+	int a5_startTimeWick = na
+	int a5_startTimeBody = na
+	box a5_wickBox = na
+	box a5_bodyBox = na
+	line a5_ghostUp = na
+	line a5_ghostDown = na
+	label a5_ghostUpLbl = na
+	label a5_ghostDownLbl = na
+
+	// ---- Session-level absolute end timestamp ----
+	int endAbsTs = na
+
+	// ---- Box handles for C-cycles ----
+	box c2_wickBox = na
+	box c2_bodyBox = na
+	box c3_wickBox = na
+	box c3_bodyBox = na
+	box c4_wickBox = na
+	box c4_bodyBox = na
+	box a1_wickBox = na
+	box a1_bodyBox = na
+	box a2_wickBox = na
+	box a2_bodyBox = na
+	box a3_wickBox = na
+	box a3_bodyBox = na
+	box a4_wickBox = na
+	box a4_bodyBox = na
+
+
+
+	// ---- Ghost Projection Lines ----
+	line a1_ghostUp = na
+	line a1_ghostDown = na
+	line c2_ghostUp = na
+	line c2_ghostDown = na
+	line c3_ghostUp = na
+	line c3_ghostDown = na
+	line c4_ghostUp = na
+	line c4_ghostDown = na
+
+	// Ghost projection labels
+	label a1_ghostUpLbl = na
+	label a1_ghostDownLbl = na
+	label c2_ghostUpLbl = na
+	label c2_ghostDownLbl = na
+	label c3_ghostUpLbl = na
+	label c3_ghostDownLbl = na
+	label c4_ghostUpLbl = na
+	label c4_ghostDownLbl = na
+
+	// Ghost lines for A2, A3, A4
+	line a2_ghostUp = na
+	line a2_ghostDown = na
+	line a3_ghostUp = na
+	line a3_ghostDown = na
+	line a4_ghostUp = na
+	line a4_ghostDown = na
+
+	// Ghost projection labels
+	label a2_ghostUpLbl = na
+	label a2_ghostDownLbl = na
+	label a3_ghostUpLbl = na
+	label a3_ghostDownLbl = na
+	label a4_ghostUpLbl = na
+	label a4_ghostDownLbl = na
+
+	// ---- C2 Extension tracking ----
+	float c2_boundBottom = na // bottom price of C2 box (lower bound)
+	float c2_boundTop = na // top price of C2 box (upper bound)
+
+	// Lower extension (price moves below C2 box)
+	bool c2_extLowerActive = false
+	float c2_extLowerExtreme = na // lowest price reached below boundBottom
+	int c2_extLowerStartTime = na
+	box c2_extLowerBox = na
+
+	// Upper extension (price moves above C2 box)
+	bool c2_extUpperActive = false
+	float c2_extUpperExtreme = na // highest price reached above boundTop
+	int c2_extUpperStartTime = na
+	box c2_extUpperBox = na
+
+	// ---- C2 Body Extension tracking ----
+	float c2_bodyBoundBottom = na
+	float c2_bodyBoundTop = na
+	bool c2_bodyExtLowerActive = false
+	float c2_bodyExtLowerExtreme = na
+	int c2_bodyExtLowerStartTime = na
+	box c2_bodyExtLowerBox = na
+	bool c2_bodyExtUpperActive = false
+	float c2_bodyExtUpperExtreme = na
+	int c2_bodyExtUpperStartTime = na
+	box c2_bodyExtUpperBox = na
+
+	// ---- C2 Extension Ghost Limit Lines ----
+	line c2_extLimitLowerGhost = na
+	line c2_extLimitUpperGhost = na
+	label c2_extLimitLowerGhostLbl = na
+	label c2_extLimitUpperGhostLbl = na
+
+	// ---- C2 Body Extension Ghost Limit Lines ----
+	line c2_bodyExtLimitLowerGhost = na
+	line c2_bodyExtLimitUpperGhost = na
+	label c2_bodyExtLimitLowerGhostLbl = na
+	label c2_bodyExtLimitUpperGhostLbl = na
+
+    // FVG Tracking
+    bool fvg_firstBullPlottedInSession = false
+    bool fvg_firstBearPlottedInSession = false
+    box fvg_sessionBullBox = na
+    box fvg_sessionBearBox = na
+
+    // FVG in C2 Extension Tracking
+    bool c2_ext_firstFvgBullPlotted = false
+    bool c2_ext_firstFvgBearPlotted = false
+    box c2_ext_fvgBullBox = na
+    box c2_ext_fvgBearBox = na
+    int fvg_lastBearBar = na // for C2 ext FVG detection
+    int fvg_lastBullBar = na // for C2 ext FVG detection
+
+    // Overall FVG Type Tracking (for fvgShowFirstTypeOverall toggle)
+    bool session_bullFvgPlottedOverallContext = false
+    bool session_bearFvgPlottedOverallContext = false
+    bool c2ext_bullFvgPlottedOverallContext = false
+    bool c2ext_bearFvgPlottedOverallContext = false
+
+// Helper to map string to position constant
+f_to_position(string _pos) =>
+    switch _pos
+        'Top Left' => position.top_left
+        'Top Center' => position.top_center
+        'Top Right' => position.top_right
+        'Middle Left' => position.middle_left
+        'Middle Center' => position.middle_center
+        'Middle Right' => position.middle_right
+        'Bottom Left' => position.bottom_left
+        'Bottom Center' => position.bottom_center
+        => position.bottom_right // default
+
+// Helper to map string to size constant
+f_to_size(string _sz) =>
+    switch _sz
+        'tiny' => size.tiny
+        'small' => size.small
+        'normal' => size.normal
+        'large' => size.large
+        => size.huge
+
+var _tablePositionConst = f_to_position(TablePositionInput)
+var _tableTextSizeConst = f_to_size(TableFontSizeInput)
+
+// Helper to map ghost label size string to size constant
+f_to_ghost_label_size(string _sz) =>
+    switch _sz
+        'tiny' => size.tiny
+        'small' => size.small
+        'normal' => size.normal
+        'large' => size.large
+        => size.huge
+
+var _ghostLabelSizeConst = f_to_ghost_label_size(GhostLabelSize)
+
+// Helper to map string to line style constant
+f_to_line_style(string _s) =>
+    switch _s
+        'solid' => line.style_solid
+        'dotted' => line.style_dotted
+        => line.style_dashed
+
+var _ghostLineStyleConst = f_to_line_style(GhostLineStyleInput)
+
+
+// ---- HELPER: Calculate candle duration in milliseconds ----
+f_get_candle_duration_ms(bool isLtf, string ltfRes, string chartTfPeriod) =>
+    float durationMs = na // Changed from 'durationMs = 0' to 'float durationMs = na'
+    if isLtf
+        if ltfRes == "1" // 1 minute
+            durationMs := 60 * 1000
+        else if ltfRes == "15S" // 15 seconds
+            durationMs := 15 * 1000
+        else if ltfRes != "" // Other LTF resolution (future-proofing)
+            // Attempt to get duration from ltfRes string if it's a valid TF string
+            // For "1" or "15S", timeframe.in_seconds would require "1S", "1T" etc.
+            // The direct ms values are safer for "1" and "15S" as given.
+            // This branch is unlikely to be hit with current inputs.
+            durationMs := timeframe.in_seconds(ltfRes) * 1000 // Fallback attempt
+            if durationMs == 0 // if ltfRes wasn't a valid TF string for timeframe.in_seconds
+                durationMs := 60000 // Default to 1 min if unknown LTF
+        else // Fallback if ltfRes is empty but isLtf is true (should not happen with current logic)
+            durationMs := timeframe.in_seconds(chartTfPeriod) * 1000
+    else // Chart Timeframe
+        durationMs := timeframe.in_seconds(chartTfPeriod) * 1000
+    durationMs
+
+
+// ---- FVG Detection and Plotting ----
+// st: SessionState, cfg: SessionCfg, hi: current high, lo: current low, 
+// hi2: high[2], lo2: low[2], barIdx: current bar_index, fvgTime: current time (for box extension)
+f_detectAndPlotFVGs(SessionState st, SessionCfg cfg, float hi, float lo, float hi2, float lo2, int barIdxOrTimeLeft, int fvgTimeCurrent, string fvgLtfResSecParam) =>
+    float function_return_value = na
+    string extend_session = extend.none // Declare and initialize
+    string extend_c2ext = extend.none   // Declare and initialize
+    minTickActualSize = syminfo.mintick * fvgMinTickSize
+    bool plotSessionBull = false
+    bool plotSessionBear = false
+    bool plotC2ExtBull = false
+    bool plotC2ExtBear = false
+
+    // Determine if we are using actual bar_index (chart TF) or time (LTF)
+    // For LTF, barIdxOrTimeLeft is the time of the left-most candle of the 3-candle FVG pattern.
+    // fvgTimeCurrent is the time of the right-most candle of the 3-candle FVG pattern.
+    bool isLtfDetection = barIdxOrTimeLeft != bar_index // A simple heuristic; bar_index is an int, time is a large int (timestamp)
+    
+    // FVG Box coordinates
+    fvgBullTop = lo
+    fvgBullBottom = hi2
+    fvgBearTop = lo2
+    fvgBearBottom = hi
+
+    // ---- NEW LOGIC for box x-coordinates and extension ----
+    int x1_session = na
+    int x2_session = na
+
+    int x1_c2ext = na
+    int x2_c2ext = na
+
+    // Common start time for the FVG box (the bar it's confirmed on)
+    // For LTF, fvgTimeCurrent is the timestamp of the 3rd (confirming) candle of the pattern.
+    // For Chart TF, 'time' is the timestamp of the current (confirming) candle.
+    common_x1 = isLtfDetection ? fvgTimeCurrent : time
+
+    candleDurationMs_current = f_get_candle_duration_ms(isLtfDetection, fvgLtfResSecParam, timeframe.period)
+    default_x2_for_current_candle = common_x1 + candleDurationMs_current
+
+    // For Session FVGs
+    x1_session := common_x1
+    if fvgExtendBoxes
+        extend_session := extend.right // Changed = to := for consistency, already a string
+        x2_session := int(default_x2_for_current_candle) // Cast to int
+    else
+        extend_session := extend.none // Changed = to := for consistency, already a string
+        if not na(st.endAbsTs) and st.endAbsTs > common_x1 // Ensure session end is in the future
+            x2_session := st.endAbsTs // st.endAbsTs is already int
+        else
+            x2_session := int(default_x2_for_current_candle) // Cast to int
+
+    // For C2 Extension FVGs (assuming they also respect session end when not extending)
+    x1_c2ext := common_x1
+    if fvgExtendBoxes
+        extend_c2ext := extend.right // Changed = to := for consistency, already a string
+        x2_c2ext := int(default_x2_for_current_candle) // Cast to int
+    else
+        extend_c2ext := extend.none // Changed = to := for consistency, already a string
+        if not na(st.endAbsTs) and st.endAbsTs > common_x1
+            x2_c2ext := st.endAbsTs // st.endAbsTs is already int
+        else
+            x2_c2ext := int(default_x2_for_current_candle) // Cast to int
+    // ---- END NEW LOGIC ----
+
+    // Bullish FVG (BISI)
+    if not na(hi2) and lo > hi2 and (lo - hi2) >= minTickActualSize
+        // 1. Session FVG Logic
+        if fvgShowOnlyFirstInSession // "Only 1st in Session" Toggle is ON
+            if fvgShowFirstTypeOverall // "Overall Type" Toggle is ON
+                if not st.session_bearFvgPlottedOverallContext and not st.fvg_firstBullPlottedInSession
+                    plotSessionBull := true
+                    st.fvg_firstBullPlottedInSession := true
+                    st.session_bullFvgPlottedOverallContext := true
+                else
+                    plotSessionBull := false
+            else // "Overall Type" Toggle is OFF
+                if not st.fvg_firstBullPlottedInSession
+                    plotSessionBull := true
+                    st.fvg_firstBullPlottedInSession := true
+                else
+                    plotSessionBull := false
+        else // "Only 1st in Session" Toggle is OFF
+            plotSessionBull := false
+        
+        if plotSessionBull
+            box.delete(st.fvg_sessionBullBox) 
+            st.fvg_sessionBullBox := box.new(x1_session, fvgBullTop, x2_session, fvgBullBottom, 
+                                          bgcolor = fvgBullColor, border_color = fvgBullColor, 
+                                          extend = extend_session, xloc = xloc.bar_time)
+
+        // 2. C2 Extension FVG Logic
+        if ShowC2ExtBelowBox and st.c2_extLowerActive and not na(st.c2_extLowerExtreme) and not na(st.c2_boundBottom)
+            fvgFormTime = isLtfDetection ? fvgTimeCurrent : time
+            if fvgFormTime > st.c2_extLowerStartTime and fvgBullBottom < st.c2_boundBottom and fvgBullTop > st.c2_extLowerExtreme
+                bool plotC2ExtBullLocal = false
+                if fvgShowOnlyFirstInC2Ext // "Only 1st in C2 Ext" IS ON
+                    if fvgShowFirstTypeOverall // "Overall Type" IS ON
+                        if not st.c2ext_bearFvgPlottedOverallContext and not st.c2_ext_firstFvgBullPlotted
+                            plotC2ExtBullLocal := true
+                    else // "Overall Type" IS OFF
+                        if not st.c2_ext_firstFvgBullPlotted
+                            plotC2ExtBullLocal := true
+                else // "Only 1st in C2 Ext" IS OFF
+                    if fvgShowFirstTypeOverall // "Overall Type" IS ON
+                        if not st.c2ext_bearFvgPlottedOverallContext
+                            plotC2ExtBullLocal := true
+                    else // "Overall Type" IS OFF (and "Only 1st in C2 Ext" is OFF)
+                        plotC2ExtBullLocal := true
+                plotC2ExtBull := plotC2ExtBullLocal
+                
+                if plotC2ExtBull
+                    if fvgShowOnlyFirstInC2Ext
+                        st.c2_ext_firstFvgBullPlotted := true
+                    if fvgShowFirstTypeOverall
+                        st.c2ext_bullFvgPlottedOverallContext := true
+                    box.delete(st.c2_ext_fvgBullBox)
+                    st.c2_ext_fvgBullBox := box.new(x1_c2ext, fvgBullTop, x2_c2ext, fvgBullBottom,
+                                                  bgcolor = fvgC2ExtBullFillColor, 
+                                                  border_color = fvgC2ExtBullBorderColor, 
+                                                  extend = extend_c2ext, xloc = xloc.bar_time, border_width = 2)
+
+        if ShowC2ExtAboveBox and st.c2_extUpperActive and not na(st.c2_extUpperExtreme) and not na(st.c2_boundTop)
+            fvgFormTime = isLtfDetection ? fvgTimeCurrent : time
+            if fvgFormTime > st.c2_extUpperStartTime and fvgBullTop > st.c2_boundTop and fvgBullBottom < st.c2_extUpperExtreme
+                bool plotC2ExtBullLocal = false
+                if fvgShowOnlyFirstInC2Ext // "Only 1st in C2 Ext" IS ON
+                    if fvgShowFirstTypeOverall // "Overall Type" IS ON
+                        if not st.c2ext_bearFvgPlottedOverallContext and not st.c2_ext_firstFvgBullPlotted
+                            plotC2ExtBullLocal := true
+                    else // "Overall Type" IS OFF
+                        if not st.c2_ext_firstFvgBullPlotted
+                            plotC2ExtBullLocal := true
+                else // "Only 1st in C2 Ext" IS OFF
+                    if fvgShowFirstTypeOverall // "Overall Type" IS ON
+                        if not st.c2ext_bearFvgPlottedOverallContext
+                            plotC2ExtBullLocal := true
+                    else // "Overall Type" IS OFF (and "Only 1st in C2 Ext" is OFF)
+                        plotC2ExtBullLocal := true
+                plotC2ExtBull := plotC2ExtBullLocal
+                
+                if plotC2ExtBull
+                    if fvgShowOnlyFirstInC2Ext
+                        st.c2_ext_firstFvgBullPlotted := true
+                    if fvgShowFirstTypeOverall
+                        st.c2ext_bullFvgPlottedOverallContext := true
+                    box.delete(st.c2_ext_fvgBullBox) 
+                    st.c2_ext_fvgBullBox := box.new(x1_c2ext, fvgBullTop, x2_c2ext, fvgBullBottom,
+                                                  bgcolor = fvgC2ExtBullFillColor, 
+                                                  border_color = fvgC2ExtBullBorderColor, 
+                                                  extend = extend_c2ext, xloc = xloc.bar_time, border_width = 2)
+
+    // Bearish FVG (SIBI)
+    if not na(lo2) and hi < lo2 and (lo2 - hi) >= minTickActualSize
+        // 1. Session FVG Logic
+        if fvgShowOnlyFirstInSession // "Only 1st in Session" Toggle is ON
+            if fvgShowFirstTypeOverall // "Overall Type" Toggle is ON
+                if not st.session_bullFvgPlottedOverallContext and not st.fvg_firstBearPlottedInSession
+                    plotSessionBear := true
+                    st.fvg_firstBearPlottedInSession := true
+                    st.session_bearFvgPlottedOverallContext := true
+                else
+                    plotSessionBear := false
+            else // "Overall Type" Toggle is OFF
+                if not st.fvg_firstBearPlottedInSession
+                    plotSessionBear := true
+                    st.fvg_firstBearPlottedInSession := true
+                else
+                    plotSessionBear := false
+        else // "Only 1st in Session" Toggle is OFF
+            plotSessionBear := false
+
+        if plotSessionBear
+            box.delete(st.fvg_sessionBearBox) 
+            st.fvg_sessionBearBox := box.new(x1_session, fvgBearTop, x2_session, fvgBearBottom, 
+                                         bgcolor = fvgBearColor, border_color = fvgBearColor, 
+                                         extend = extend_session, xloc = xloc.bar_time)
+        
+        // 2. C2 Extension FVG Logic
+        if ShowC2ExtBelowBox and st.c2_extLowerActive and not na(st.c2_extLowerExtreme) and not na(st.c2_boundBottom)
+            fvgFormTime = isLtfDetection ? fvgTimeCurrent : time
+            if fvgFormTime > st.c2_extLowerStartTime and fvgBearTop < st.c2_boundBottom and fvgBearBottom > st.c2_extLowerExtreme
+                bool plotC2ExtBearLocal = false
+                if fvgShowOnlyFirstInC2Ext // "Only 1st in C2 Ext" IS ON
+                    if fvgShowFirstTypeOverall // "Overall Type" IS ON
+                        if not st.c2ext_bullFvgPlottedOverallContext and not st.c2_ext_firstFvgBearPlotted
+                            plotC2ExtBearLocal := true
+                    else // "Overall Type" IS OFF
+                        if not st.c2_ext_firstFvgBearPlotted
+                            plotC2ExtBearLocal := true
+                else // "Only 1st in C2 Ext" IS OFF
+                    if fvgShowFirstTypeOverall // "Overall Type" IS ON
+                        if not st.c2ext_bullFvgPlottedOverallContext
+                            plotC2ExtBearLocal := true
+                    else // "Overall Type" IS OFF (and "Only 1st in C2 Ext" is OFF)
+                        plotC2ExtBearLocal := true
+                plotC2ExtBear := plotC2ExtBearLocal
+                
+                if plotC2ExtBear
+                    if fvgShowOnlyFirstInC2Ext
+                        st.c2_ext_firstFvgBearPlotted := true
+                    if fvgShowFirstTypeOverall
+                        st.c2ext_bearFvgPlottedOverallContext := true
+                    box.delete(st.c2_ext_fvgBearBox)
+                    st.c2_ext_fvgBearBox := box.new(x1_c2ext, fvgBearTop, x2_c2ext, fvgBearBottom,
+                                                  bgcolor = fvgC2ExtBearFillColor, 
+                                                  border_color = fvgC2ExtBearBorderColor, 
+                                                  extend = extend_c2ext, xloc = xloc.bar_time, border_width = 2)
+
+        if ShowC2ExtAboveBox and st.c2_extUpperActive and not na(st.c2_extUpperExtreme) and not na(st.c2_boundTop)
+            fvgFormTime = isLtfDetection ? fvgTimeCurrent : time
+            if fvgFormTime > st.c2_extUpperStartTime and fvgBearBottom > st.c2_boundTop and fvgBearTop < st.c2_extUpperExtreme
+                bool plotC2ExtBearLocal = false
+                if fvgShowOnlyFirstInC2Ext // "Only 1st in C2 Ext" IS ON
+                    if fvgShowFirstTypeOverall // "Overall Type" IS ON
+                        if not st.c2ext_bullFvgPlottedOverallContext and not st.c2_ext_firstFvgBearPlotted
+                            plotC2ExtBearLocal := true
+                    else // "Overall Type" IS OFF
+                        if not st.c2_ext_firstFvgBearPlotted
+                            plotC2ExtBearLocal := true
+                else // "Only 1st in C2 Ext" IS OFF
+                    if fvgShowFirstTypeOverall // "Overall Type" IS ON
+                        if not st.c2ext_bullFvgPlottedOverallContext
+                            plotC2ExtBearLocal := true
+                    else // "Overall Type" IS OFF (and "Only 1st in C2 Ext" is OFF)
+                        plotC2ExtBearLocal := true
+                plotC2ExtBear := plotC2ExtBearLocal
+                
+                if plotC2ExtBear
+                    if fvgShowOnlyFirstInC2Ext
+                        st.c2_ext_firstFvgBearPlotted := true
+                    if fvgShowFirstTypeOverall
+                        st.c2ext_bearFvgPlottedOverallContext := true
+                    box.delete(st.c2_ext_fvgBearBox) 
+                    st.c2_ext_fvgBearBox := box.new(x1_c2ext, fvgBearTop, x2_c2ext, fvgBearBottom,
+                                                  bgcolor = fvgC2ExtBearFillColor, 
+                                                  border_color = fvgC2ExtBearBorderColor, 
+                                                  extend = extend_c2ext, xloc = xloc.bar_time, border_width = 2)
+
+    plotSessionBull := plotSessionBull 
+    plotSessionBear := plotSessionBear 
+    plotC2ExtBull := plotC2ExtBull 
+    plotC2ExtBear := plotC2ExtBear 
+    function_return_value := na
+    function_return_value
+
+
+
+
+
+
+
+
+// ---- HELPER: Session length minutes ----
+f_sess_len(string _sess) =>
+    startHour = str.tonumber(str.substring(_sess, 0, 2))
+    startMinute = str.tonumber(str.substring(_sess, 3, 5))
+    endHour = str.tonumber(str.substring(_sess, 6, 8))
+    endMinute = str.tonumber(str.substring(_sess, 9, 11))
+    startTotal = startHour * 60 + startMinute
+    endTotal = endHour * 60 + endMinute
+    int len = 0
+    if startTotal <= endTotal
+        len := int(endTotal - startTotal)
+        len
+    else
+        len := int(24 * 60 - startTotal + endTotal)
+        len
+    len
+
+// inside barstate.isfirst block, recreate SESSION_CFGS array
+var array<SessionCfg> SESSION_CFGS = array.new<SessionCfg>()
+if barstate.isfirst
+    array.push(SESSION_CFGS, SessionCfg.new('Alpha', s_ADRQ1_TIMES, ShowADRQ1, s1_ADRQ1_END_HOUR_CONST, s1_ADRQ1_END_MINUTE_CONST, f_sess_len(s_ADRQ1_TIMES), false))
+    array.push(SESSION_CFGS, SessionCfg.new('ADR', s_ADR_TIMES, ShowADR, s2_ADR_END_HOUR_CONST, s2_ADR_END_MINUTE_CONST, f_sess_len(s_ADR_TIMES), false))
+    array.push(SESSION_CFGS, SessionCfg.new('Bravo', s_ADRQ2_TIMES, ShowADRQ2, s3_ADRQ2_END_HOUR_CONST, s3_ADRQ2_END_MINUTE_CONST, f_sess_len(s_ADRQ2_TIMES), false))
+    array.push(SESSION_CFGS, SessionCfg.new('Charlie', s_ADRQ3_TIMES, ShowADRQ3, s4_ADRQ3_END_HOUR_CONST, s4_ADRQ3_END_MINUTE_CONST, f_sess_len(s_ADRQ3_TIMES), false))
+    array.push(SESSION_CFGS, SessionCfg.new('Delta', s_ADRQ4_TIMES, ShowADRQ4, s5_ADRQ4_END_HOUR_CONST, s5_ADRQ4_END_MINUTE_CONST, f_sess_len(s_ADRQ4_TIMES), false))
+    array.push(SESSION_CFGS, SessionCfg.new('Echo', s_ODRQ1_TIMES, ShowODRQ1, s6_ODRQ1_END_HOUR_CONST, s6_ODRQ1_END_MINUTE_CONST, f_sess_len(s_ODRQ1_TIMES), false))
+    array.push(SESSION_CFGS, SessionCfg.new('ODR', s_ODR_TIMES, ShowODR, s7_ODR_END_HOUR_CONST, s7_ODR_END_MINUTE_CONST, f_sess_len(s_ODR_TIMES), false))
+    array.push(SESSION_CFGS, SessionCfg.new('Kilo', s_HTF1_TIMES, ShowHTF1, s8_HTF1_END_HOUR_CONST, s8_HTF1_END_MINUTE_CONST, f_sess_len(s_HTF1_TIMES), false))
+    array.push(SESSION_CFGS, SessionCfg.new('Foxtrot', s_ODRQ2_TIMES, ShowODRQ2, s9_ODRQ2_END_HOUR_CONST, s9_ODRQ2_END_MINUTE_CONST, f_sess_len(s_ODRQ2_TIMES), false))
+    array.push(SESSION_CFGS, SessionCfg.new('Golf', s_RDRQ1_TIMES, ShowRDRQ1, s10_RDRQ1_END_HOUR_CONST, s10_RDRQ1_END_MINUTE_CONST, f_sess_len(s_RDRQ1_TIMES), false))
+    array.push(SESSION_CFGS, SessionCfg.new('RDR', s_RDR_TIMES, ShowRDR, s11_RDR_END_HOUR_CONST, s11_RDR_END_MINUTE_CONST, f_sess_len(s_RDR_TIMES), false))
+    array.push(SESSION_CFGS, SessionCfg.new('Hotel', s_RDRQ2_TIMES, ShowRDRQ2, s12_RDRQ2_END_HOUR_CONST, s12_RDRQ2_END_MINUTE_CONST, f_sess_len(s_RDRQ2_TIMES), false))
+    array.push(SESSION_CFGS, SessionCfg.new('India', s_RDRQ3_TIMES, ShowRDRQ3, s13_RDRQ3_END_HOUR_CONST, s13_RDRQ3_END_MINUTE_CONST, f_sess_len(s_RDRQ3_TIMES), false))
+    array.push(SESSION_CFGS, SessionCfg.new('Lima', s_HTF2_TIMES, ShowHTF2, s14_HTF2_END_HOUR_CONST, s14_HTF2_END_MINUTE_CONST, f_sess_len(s_HTF2_TIMES), false))
+    array.push(SESSION_CFGS, SessionCfg.new('Juliet', s_RDRQ4_TIMES, ShowRDRQ4, s15_RDRQ4_END_HOUR_CONST, s15_RDRQ4_END_MINUTE_CONST, f_sess_len(s_RDRQ4_TIMES), false))
+
+    // ---- Add New TBR Sessions ----
+    // London
+    array.push(SESSION_CFGS, SessionCfg.new('Yankee', s_Yankee_TIMES, ShowYankee, s_Yankee_END_HOUR_CONST, s_Yankee_END_MINUTE_CONST, f_sess_len(s_Yankee_TIMES), true))
+    array.push(SESSION_CFGS, SessionCfg.new('Zulu', s_Zulu_TIMES, ShowZulu, s_Zulu_END_HOUR_CONST, s_Zulu_END_MINUTE_CONST, f_sess_len(s_Zulu_TIMES), true))
+    // New York
+    array.push(SESSION_CFGS, SessionCfg.new('Mike', s_Mike_TIMES, ShowMike, s_Mike_END_HOUR_CONST, s_Mike_END_MINUTE_CONST, f_sess_len(s_Mike_TIMES), true))
+    array.push(SESSION_CFGS, SessionCfg.new('November', s_November_TIMES, ShowNovember, s_November_END_HOUR_CONST, s_November_END_MINUTE_CONST, f_sess_len(s_November_TIMES), true))
+    // 50-10
+    array.push(SESSION_CFGS, SessionCfg.new('Oscar', s_Oscar_TIMES, ShowOscar, s_Oscar_END_HOUR_CONST, s_Oscar_END_MINUTE_CONST, f_sess_len(s_Oscar_TIMES), true))
+    array.push(SESSION_CFGS, SessionCfg.new('Papa', s_Papa_TIMES, ShowPapa, s_Papa_END_HOUR_CONST, s_Papa_END_MINUTE_CONST, f_sess_len(s_Papa_TIMES), true))
+    array.push(SESSION_CFGS, SessionCfg.new('50-10 0950', s_TBR_5010_0950_TIMES, ShowTBR_5010_0950, s22_TBR_5010_0950_END_HOUR_CONST, s22_TBR_5010_0950_END_MINUTE_CONST, f_sess_len(s_TBR_5010_0950_TIMES), true))
+    array.push(SESSION_CFGS, SessionCfg.new('50-10 1050', s_TBR_5010_1050_TIMES, ShowTBR_5010_1050, s23_TBR_5010_1050_END_HOUR_CONST, s23_TBR_5010_1050_END_MINUTE_CONST, f_sess_len(s_TBR_5010_1050_TIMES), true))
+    array.push(SESSION_CFGS, SessionCfg.new('50-10 1150', s_TBR_5010_1150_TIMES, ShowTBR_5010_1150, s24_TBR_5010_1150_END_HOUR_CONST, s24_TBR_5010_1150_END_MINUTE_CONST, f_sess_len(s_TBR_5010_1150_TIMES), true))
+    array.push(SESSION_CFGS, SessionCfg.new('50-10 1310', s_TBR_5010_1310_TIMES, ShowTBR_5010_1310, s25_TBR_5010_1310_END_HOUR_CONST, s25_TBR_5010_1310_END_MINUTE_CONST, f_sess_len(s_TBR_5010_1310_TIMES), true))
+    array.push(SESSION_CFGS, SessionCfg.new('50-10 1450', s_TBR_5010_1450_TIMES, ShowTBR_5010_1450, s26_TBR_5010_1450_END_HOUR_CONST, s26_TBR_5010_1450_END_MINUTE_CONST, f_sess_len(s_TBR_5010_1450_TIMES), true))
+    // 20-40
+    array.push(SESSION_CFGS, SessionCfg.new('20-40 0820', s_TBR_2040_0820_TIMES, ShowTBR_2040_0820, s27_TBR_2040_0820_END_HOUR_CONST, s27_TBR_2040_0820_END_MINUTE_CONST, f_sess_len(s_TBR_2040_0820_TIMES), true))
+    array.push(SESSION_CFGS, SessionCfg.new('20-40 0920', s_TBR_2040_0920_TIMES, ShowTBR_2040_0920, s28_TBR_2040_0920_END_HOUR_CONST, s28_TBR_2040_0920_END_MINUTE_CONST, f_sess_len(s_TBR_2040_0920_TIMES), true))
+    array.push(SESSION_CFGS, SessionCfg.new('20-40 1020', s_TBR_2040_1020_TIMES, ShowTBR_2040_1020, s29_TBR_2040_1020_END_HOUR_CONST, s29_TBR_2040_1020_END_MINUTE_CONST, f_sess_len(s_TBR_2040_1020_TIMES), true))
+    array.push(SESSION_CFGS, SessionCfg.new('20-40 1120', s_TBR_2040_1120_TIMES, ShowTBR_2040_1120, s30_TBR_2040_1120_END_HOUR_CONST, s30_TBR_2040_1120_END_MINUTE_CONST, f_sess_len(s_TBR_2040_1120_TIMES), true))
+    array.push(SESSION_CFGS, SessionCfg.new('20-40 1220', s_TBR_2040_1220_TIMES, ShowTBR_2040_1220, s31_TBR_2040_1220_END_HOUR_CONST, s31_TBR_2040_1220_END_MINUTE_CONST, f_sess_len(s_TBR_2040_1220_TIMES), true))
+    array.push(SESSION_CFGS, SessionCfg.new('20-40 1320', s_TBR_2040_1320_TIMES, ShowTBR_2040_1320, s32_TBR_2040_1320_END_HOUR_CONST, s32_TBR_2040_1320_END_MINUTE_CONST, f_sess_len(s_TBR_2040_1320_TIMES), true))
+    array.push(SESSION_CFGS, SessionCfg.new('20-40 1420', s_TBR_2040_1420_TIMES, ShowTBR_2040_1420, s33_TBR_2040_1420_END_HOUR_CONST, s33_TBR_2040_1420_END_MINUTE_CONST, f_sess_len(s_TBR_2040_1420_TIMES), true))
+    // Last Hour
+    array.push(SESSION_CFGS, SessionCfg.new('LH 1515', s_TBR_LH_1515_TIMES, ShowTBR_LH_1515, s34_TBR_LH_1515_END_HOUR_CONST, s34_TBR_LH_1515_END_MINUTE_CONST, f_sess_len(s_TBR_LH_1515_TIMES), true))
+
+    // ---- Add New TBR Afternoon Sessions ----
+    array.push(SESSION_CFGS, SessionCfg.new('TBR 1550-10', s_TBR_AFT_1550_TIMES, ShowTBR_AFT_1550, s35_TBR_AFT_1550_END_HOUR_CONST, s35_TBR_AFT_1550_END_MINUTE_CONST, f_sess_len(s_TBR_AFT_1550_TIMES), true))
+    array.push(SESSION_CFGS, SessionCfg.new('TBR 1610-59', s_TBR_AFT_1610_TIMES, ShowTBR_AFT_1610, s36_TBR_AFT_1610_END_HOUR_CONST, s36_TBR_AFT_1610_END_MINUTE_CONST, f_sess_len(s_TBR_AFT_1610_TIMES), true))
+    // ---- Add New TBR Evening/Night Sessions ----
+    array.push(SESSION_CFGS, SessionCfg.new('TBR 1800-09', s_TBR_EN_1800_TIMES, ShowTBR_EN_1800, s37_TBR_EN_1800_END_HOUR_CONST, s37_TBR_EN_1800_END_MINUTE_CONST, f_sess_len(s_TBR_EN_1800_TIMES), true))
+    array.push(SESSION_CFGS, SessionCfg.new('TBR 1850-10', s_TBR_EN_1850_TIMES, ShowTBR_EN_1850, s38_TBR_EN_1850_END_HOUR_CONST, s38_TBR_EN_1850_END_MINUTE_CONST, f_sess_len(s_TBR_EN_1850_TIMES), true))
+    array.push(SESSION_CFGS, SessionCfg.new('TBR 1950-10', s_TBR_EN_1950_TIMES, ShowTBR_EN_1950, s39_TBR_EN_1950_END_HOUR_CONST, s39_TBR_EN_1950_END_MINUTE_CONST, f_sess_len(s_TBR_EN_1950_TIMES), true))
+    array.push(SESSION_CFGS, SessionCfg.new('TBR 2050-10', s_TBR_EN_2050_TIMES, ShowTBR_EN_2050, s40_TBR_EN_2050_END_HOUR_CONST, s40_TBR_EN_2050_END_MINUTE_CONST, f_sess_len(s_TBR_EN_2050_TIMES), true))
+    array.push(SESSION_CFGS, SessionCfg.new('TBR 2120-40', s_TBR_EN_2120_TIMES, ShowTBR_EN_2120, s41_TBR_EN_2120_END_HOUR_CONST, s41_TBR_EN_2120_END_MINUTE_CONST, f_sess_len(s_TBR_EN_2120_TIMES), true))
+    array.push(SESSION_CFGS, SessionCfg.new('TBR 2150-10', s_TBR_EN_2150_TIMES, ShowTBR_EN_2150, s42_TBR_EN_2150_END_HOUR_CONST, s42_TBR_EN_2150_END_MINUTE_CONST, f_sess_len(s_TBR_EN_2150_TIMES), true))
+    array.push(SESSION_CFGS, SessionCfg.new('TBR 2250-10', s_TBR_EN_2250_TIMES, ShowTBR_EN_2250, s43_TBR_EN_2250_END_HOUR_CONST, s43_TBR_EN_2250_END_MINUTE_CONST, f_sess_len(s_TBR_EN_2250_TIMES), true))
+    array.push(SESSION_CFGS, SessionCfg.new('TBR 2350-10', s_TBR_EN_2350_TIMES, ShowTBR_EN_2350, s44_TBR_EN_2350_END_HOUR_CONST, s44_TBR_EN_2350_END_MINUTE_CONST, f_sess_len(s_TBR_EN_2350_TIMES), true))
+    array.push(SESSION_CFGS, SessionCfg.new('TBR 0050-10', s_TBR_EN_0050_TIMES, ShowTBR_EN_0050, s45_TBR_EN_0050_END_HOUR_CONST, s45_TBR_EN_0050_END_MINUTE_CONST, f_sess_len(s_TBR_EN_0050_TIMES), true))
+    array.push(SESSION_CFGS, SessionCfg.new('TBR 0150-10', s_TBR_EN_0150_TIMES, ShowTBR_EN_0150, s46_TBR_EN_0150_END_HOUR_CONST, s46_TBR_EN_0150_END_MINUTE_CONST, f_sess_len(s_TBR_EN_0150_TIMES), true))
+    array.push(SESSION_CFGS, SessionCfg.new('TBR 0250-10', s_TBR_EN_0250_TIMES, ShowTBR_EN_0250, s47_TBR_EN_0250_END_HOUR_CONST, s47_TBR_EN_0250_END_MINUTE_CONST, f_sess_len(s_TBR_EN_0250_TIMES), true))
+
+var array<SessionState> SESSION_STATES = array.new<SessionState>()
+if barstate.isfirst
+    for _ = 0 to array.size(SESSION_CFGS) - 1 by 1
+        array.push(SESSION_STATES, SessionState.new())
+
+const int FIXED_LOOKBACK = 10000
+
+f_array_maint_float(array<float> a, float val, int maxSize) =>
+    a.push(val)
+    if a.size() > maxSize
+        a.shift()
+
+f_array_maint_int(array<int> a, int val, int maxSize) =>
+    a.push(val)
+    if a.size() > maxSize
+        a.shift()
+
+// ---- HELPER: Time-in-range (same as legacy) ----
+f_time_in_range_manual(string sess, string tz) =>
+    startHour = str.tonumber(str.substring(sess, 0, 2))
+    startMinute = str.tonumber(str.substring(sess, 3, 5))
+    endHour = str.tonumber(str.substring(sess, 6, 8))
+    endMinute = str.tonumber(str.substring(sess, 9, 11))
+    startTotal = startHour * 60 + startMinute
+    endTotal = endHour * 60 + endMinute
+    if startTotal > endTotal // crosses midnight
+        endTotal := endTotal == 0 ? 1440 : endTotal // 00:00 ⇒ 24:00
+        endTotal
+    currTotal = hour(time, tz) * 60 + minute(time, tz)
+    startTotal <= endTotal ? currTotal >= startTotal and currTotal < endTotal : currTotal >= startTotal or currTotal < endTotal
+
+// ---- HELPER: Create or update a horizontal ghost projection line ----
+f_update_ghost_line(line _ln, int x1, float _y, int x2, color _col, string _sty, int _w, string _txt, bool _showLbl) =>
+    line ln = _ln
+    bool created = false
+    if na(ln)
+        ln := line.new(x1, _y, x2, _y, xloc = xloc.bar_time, color = _col, style = _sty, width = _w)
+        created := true
+        created
+    else
+        line.set_xy1(ln, x1, _y)
+        line.set_xy2(ln, x2, _y)
+        line.set_color(ln, _col)
+        line.set_style(ln, _sty)
+        line.set_width(ln, _w)
+    if created and _showLbl
+        midX = x1 + int((x2 - x1) / 2)
+        label.new(midX, _y, text = _txt, style = label.style_none, color = color.new(_col, 0), textcolor = GhostLabelColor, xloc = xloc.bar_time, yloc = yloc.price, size = _ghostLabelSizeConst)
+    ln
+
+// ---- HELPER: Replacement for the (non-existent) built-in `timeframe.in_range()` ----
+f_timeframe_in_range(string tf) =>
+    // Returns the length of the supplied timeframe string in seconds.
+    // Acts as a backwards-compatibility shim for legacy code that used
+    // `timeframe.in_range()` by mistake.
+    timeframe.in_seconds(tf)
+
+// ---- HELPER: Check if any relevant Master Macro Toggles are active for a TBR session ----
+f_is_any_master_active(string _sessionName) =>
+    // Check specific master toggles based on the TBR macro name
+    bool specificMastersActive = switch _sessionName
+        // London
+        'Yankee' => ShowEchoMacros or ShowODRMacros
+        'Zulu' => ShowEchoMacros or ShowODRMacros or ShowKiloMacros
+        // New York
+        'Mike' => ShowODRMacros or ShowKiloMacros or ShowFoxtrotMacros
+        'November' => ShowODRMacros or ShowKiloMacros or ShowFoxtrotMacros
+        // 50-10
+        'Oscar' => ShowODRMacros or ShowKiloMacros or ShowFoxtrotMacros
+        'Papa' => ShowKiloMacros or ShowGolfMacros
+        '50-10 0950' => ShowKiloMacros or ShowGolfMacros or ShowRDRMacros
+        '50-10 1050' => ShowKiloMacros or ShowGolfMacros or ShowRDRMacros
+        '50-10 1150' => ShowKiloMacros or ShowRDRMacros or ShowHotelMacros or ShowIndiaMacros or ShowLimaMacros
+        '50-10 1310' => ShowKiloMacros or ShowRDRMacros or ShowHotelMacros or ShowIndiaMacros or ShowLimaMacros
+        '50-10 1450' => ShowKiloMacros or ShowRDRMacros or ShowLimaMacros or ShowJulietMacros
+        // 20-40
+        '20-40 0820' => ShowODRMacros or ShowKiloMacros
+        '20-40 0920' => ShowKiloMacros or ShowGolfMacros or ShowRDRMacros
+        '20-40 1020' => ShowKiloMacros or ShowGolfMacros or ShowRDRMacros
+        '20-40 1120' => ShowKiloMacros or ShowRDRMacros or ShowHotelMacros or ShowIndiaMacros or ShowLimaMacros
+        '20-40 1220' => ShowKiloMacros or ShowRDRMacros or ShowHotelMacros or ShowIndiaMacros or ShowLimaMacros
+        '20-40 1320' => ShowKiloMacros or ShowRDRMacros or ShowHotelMacros or ShowIndiaMacros or ShowLimaMacros
+        '20-40 1420' => ShowKiloMacros or ShowRDRMacros or ShowIndiaMacros or ShowLimaMacros or ShowJulietMacros
+        // Last Hour
+        'LH 1515' => ShowKiloMacros or ShowRDRMacros or ShowLimaMacros or ShowJulietMacros
+        // Afternoon
+        'TBR 1550-10' => ShowKiloMacros or ShowRDRMacros or ShowLimaMacros or ShowJulietMacros
+        'TBR 1610-59' => ShowLimaMacros or ShowJulietMacros
+        // Evening/Night
+        'TBR 1800-09' => ShowAlphaMacros
+        'TBR 1850-10' => ShowAlphaMacros or ShowADRMacros
+        'TBR 1950-10' => ShowAlphaMacros or ShowADRMacros
+        'TBR 2050-10' => ShowAlphaMacros or ShowADRMacros
+        'TBR 2120-40' => ShowAlphaMacros or ShowADRMacros or ShowBravoMacros or ShowCharlieMacros // Overlaps Alpha end, ADR, Bravo, Charlie start
+        'TBR 2150-10' => ShowADRMacros or ShowBravoMacros or ShowCharlieMacros
+        'TBR 2250-10' => ShowADRMacros or ShowBravoMacros or ShowCharlieMacros
+        'TBR 2350-10' => ShowADRMacros or ShowBravoMacros or ShowCharlieMacros
+        'TBR 0050-10' => ShowADRMacros or ShowCharlieMacros or ShowDeltaMacros
+        'TBR 0150-10' => ShowADRMacros or ShowCharlieMacros or ShowDeltaMacros
+        'TBR 0250-10' => ShowCharlieMacros or ShowDeltaMacros // Ends after ADR
+        => true // Default for non-TBR sessions, actual check is outside
+    // Return true if specific masters are active OR if the global 'Show All Macros' toggle is active
+    specificMastersActive or ShowAllMacrosMaster
+
+// ---- MAIN PER-BAR LOOP (Phase-1 functionality: just detect session start) ----
+var string Timezone = 'America/New_York'
+
+// ---- LTF Data Fetch for FVGs (if needed) ----
+string fvgLtfResolutionForSecurity = ""
+if fvgLtfOptionSelected == "1 Minute"
+    fvgLtfResolutionForSecurity := "1"
+else if fvgLtfOptionSelected == "15 Seconds"
+    fvgLtfResolutionForSecurity := "15S"
+
+ltf_high_arr = array.new_float()
+ltf_low_arr = array.new_float()
+ltf_time_arr = array.new_int()
+
+if fvgLtfResolutionForSecurity != ""
+    [tmp_time, tmp_high, tmp_low] = request.security_lower_tf(syminfo.tickerid, fvgLtfResolutionForSecurity, [time, high, low])
+    if array.size(tmp_time) > 0
+        ltf_time_arr := tmp_time
+        ltf_high_arr := tmp_high
+        ltf_low_arr := tmp_low
+
+for idx = 0 to array.size(SESSION_CFGS) - 1 by 1
+    cfg = array.get(SESSION_CFGS, idx)
+    st = array.get(SESSION_STATES, idx)
+
+    // --- Session state machine with Saturday exclusion --------------------
+    prevActive = st.sesActive
+    // Determine base toggle state considering master toggles for TBR macros
+    // For TBR Macros (isTBRMacro=true), activation depends *only* on the master toggle(s).
+    // For non-TBR macros (isTBRMacro=false), activation depends on their original individual toggle (cfg.toggle).
+    // baseToggleActive = cfg.isTBRMacro ? f_is_any_master_active(cfg.name) : cfg.toggle // Old logic before ShowAll
+
+    // --- New Logic with Separate ShowAll Toggles ---
+    // Check if relevant macro masters OR the "Show All Macros" master is ON
+    macrosShouldBeActive = f_is_any_master_active(cfg.name) // This function now includes the ShowAllMacrosMaster check
+    // Non-TBR toggle state, considering "Show All Base Distributions" master override
+    effectiveOriginalToggle = cfg.toggle or ShowAllBaseDistributions
+    // Determine base toggle state
+    baseToggleActive = cfg.isTBRMacro ? macrosShouldBeActive : effectiveOriginalToggle
+
+    candidateActive = baseToggleActive and f_time_in_range_manual(cfg.sessStr, Timezone)
+    // Do not start NEW session instances on Saturdays so that Friday boxes
+    // remain visible throughout the weekend. Continuing sessions that
+    // started on Friday evening are still allowed to run past midnight.
+    if dayofweek(time, Timezone) == dayofweek.saturday and not prevActive
+        candidateActive := false
+    st.sesPrev := prevActive
+    st.sesActive := candidateActive
+    st.sesFirst := st.sesActive and not st.sesPrev
+
+    // ---- On first bar of session: initialise intra-session tracking ----
+    if st.sesFirst
+        st.startTs := time
+        st.openPrice := open
+        st.hiPrice := high
+        st.loPrice := low
+        st.tsHi := time
+        st.tsLo := time
+        // reset A1 ranges & hit flags
+        st.a1_hiWick := high
+        st.a1_loWick := low
+        st.a1_hiBody := math.max(open, close)
+        st.a1_loBody := math.min(open, close)
+        st.a1_wickHit := false
+        st.a1_bodyHit := false
+        st.a1_hitTimeWick := na
+        st.a1_hitTimeBody := na
+        // reset chained cycle state
+        st.a2_wickActive := false
+        st.a2_bodyActive := false
+        st.a2_wickHit := false
+        st.a2_bodyHit := false
+        st.a2_startTimeWick := na
+        st.a2_startTimeBody := na
+        st.a3_wickActive := false
+        st.a3_bodyActive := false
+        st.a3_wickHit := false
+        st.a3_bodyHit := false
+        st.a3_startTimeWick := na
+        st.a3_startTimeBody := na
+        st.a4_wickActive := false
+        st.a4_bodyActive := false
+        st.a4_wickHit := false
+        st.a4_bodyHit := false
+        st.a4_startTimeWick := na
+        st.a4_startTimeBody := na
+        // reset C2-C4 hit flags so they can fire in the new session
+        st.c2_wickHit := false
+        st.c2_bodyHit := false
+        st.c2_hitTimeWick := na
+        st.c2_hitTimeBody := na
+
+        st.c3_wickHit := false
+        st.c3_bodyHit := false
+        st.c3_hitTimeWick := na
+        st.c3_hitTimeBody := na
+
+        st.c4_wickHit := false
+        st.c4_bodyHit := false
+        st.c4_hitTimeWick := na
+        st.c4_hitTimeBody := na
+
+        // initialise arrays if first time
+        if na(st.mHist)
+            st.mHist := array.new_float()
+            st.dHist := array.new_float()
+            st.mtHist := array.new_int()
+            st.dtHist := array.new_int()
+
+        // ---- Compute absolute end-timestamp for this session instance ----
+        startYear = year(st.startTs, Timezone)
+        startMonth = month(st.startTs, Timezone)
+        startDay = dayofmonth(st.startTs, Timezone)
+        startMinutes = hour(st.startTs, Timezone) * 60 + minute(st.startTs, Timezone)
+        endMinutesConst = cfg.endHour * 60 + cfg.endMinute
+        if endMinutesConst < startMinutes or endMinutesConst == 0 and startMinutes > 0
+            // session crosses midnight → end next day
+            nextDayTs = st.startTs + 24 * 60 * 60 * 1000
+            endYear = year(nextDayTs, Timezone)
+            endMonth = month(nextDayTs, Timezone)
+            endDay = dayofmonth(nextDayTs, Timezone)
+            st.endAbsTs := timestamp(Timezone, endYear, endMonth, endDay, cfg.endHour, cfg.endMinute, 0)
+            st.endAbsTs
+        else
+            st.endAbsTs := timestamp(Timezone, startYear, startMonth, startDay, cfg.endHour, cfg.endMinute, 0)
+            st.endAbsTs
+
+        // ---- Delete boxes from previous session ----
+        box.delete(st.c2_wickBox)
+        box.delete(st.c2_bodyBox)
+        box.delete(st.c3_wickBox)
+        box.delete(st.c3_bodyBox)
+        box.delete(st.c4_wickBox)
+        box.delete(st.c4_bodyBox)
+        st.c2_wickBox := na
+        st.c2_bodyBox := na
+        st.c3_wickBox := na
+        st.c3_bodyBox := na
+        st.c4_wickBox := na
+        st.c4_bodyBox := na
+
+        box.delete(st.a1_wickBox)
+        box.delete(st.a1_bodyBox)
+        st.a1_wickBox := na
+        st.a1_bodyBox := na
+
+        // also delete any chained cycle boxes from the previous instance
+        box.delete(st.a2_wickBox)
+        box.delete(st.a2_bodyBox)
+        box.delete(st.a3_wickBox)
+        box.delete(st.a3_bodyBox)
+        box.delete(st.a4_wickBox)
+        box.delete(st.a4_bodyBox)
+        st.a2_wickBox := na
+        st.a2_bodyBox := na
+        st.a3_wickBox := na
+        st.a3_bodyBox := na
+        st.a4_wickBox := na
+        st.a4_bodyBox := na
+
+        // delete ghost lines from previous session
+        line.delete(st.a1_ghostUp)
+        line.delete(st.a1_ghostDown)
+        line.delete(st.c2_ghostUp)
+        line.delete(st.c2_ghostDown)
+        line.delete(st.c3_ghostUp)
+        line.delete(st.c3_ghostDown)
+        line.delete(st.c4_ghostUp)
+        line.delete(st.c4_ghostDown)
+        line.delete(st.a2_ghostUp)
+        line.delete(st.a2_ghostDown)
+        line.delete(st.a3_ghostUp)
+        line.delete(st.a3_ghostDown)
+        line.delete(st.a4_ghostUp)
+        line.delete(st.a4_ghostDown)
+        st.a1_ghostUp := na
+        st.a1_ghostDown := na
+        st.c2_ghostUp := na
+        st.c2_ghostDown := na
+        st.c3_ghostUp := na
+        st.c3_ghostDown := na
+        st.c4_ghostUp := na
+        st.c4_ghostDown := na
+        st.a2_ghostUp := na
+        st.a2_ghostDown := na
+        st.a3_ghostUp := na
+        st.a3_ghostDown := na
+        st.a4_ghostUp := na
+        st.a4_ghostDown := na
+
+        // delete ghost labels from previous session
+        label.delete(st.a1_ghostUpLbl)
+        label.delete(st.a1_ghostDownLbl)
+        label.delete(st.c2_ghostUpLbl)
+        label.delete(st.c2_ghostDownLbl)
+        label.delete(st.c3_ghostUpLbl)
+        label.delete(st.c3_ghostDownLbl)
+        label.delete(st.c4_ghostUpLbl)
+        label.delete(st.c4_ghostDownLbl)
+        label.delete(st.a2_ghostUpLbl)
+        label.delete(st.a2_ghostDownLbl)
+        label.delete(st.a3_ghostUpLbl)
+        label.delete(st.a3_ghostDownLbl)
+        label.delete(st.a4_ghostUpLbl)
+        label.delete(st.a4_ghostDownLbl)
+        st.a1_ghostUpLbl := na
+        st.a1_ghostDownLbl := na
+        st.c2_ghostUpLbl := na
+        st.c2_ghostDownLbl := na
+        st.c3_ghostUpLbl := na
+        st.c3_ghostDownLbl := na
+        st.c4_ghostUpLbl := na
+        st.c4_ghostDownLbl := na
+        st.a2_ghostUpLbl := na
+        st.a2_ghostDownLbl := na
+        st.a3_ghostUpLbl := na
+        st.a3_ghostDownLbl := na
+        st.a4_ghostUpLbl := na
+        st.a4_ghostDownLbl := na
+
+        // reset C2 extension tracking
+        st.c2_boundBottom := na
+        st.c2_boundTop := na
+
+        // Lower ext
+        st.c2_extLowerActive := false
+        st.c2_extLowerExtreme := na
+        st.c2_extLowerStartTime := na
+        box.delete(st.c2_extLowerBox)
+        st.c2_extLowerBox := na
+
+        // Upper ext
+        st.c2_extUpperActive := false
+        st.c2_extUpperExtreme := na
+        st.c2_extUpperStartTime := na
+        box.delete(st.c2_extUpperBox)
+        st.c2_extUpperBox := na
+
+        // reset C2 body extension tracking
+        st.c2_bodyBoundBottom := na
+        st.c2_bodyBoundTop := na
+        st.c2_bodyExtLowerActive := false
+        st.c2_bodyExtLowerExtreme := na
+        st.c2_bodyExtLowerStartTime := na
+        box.delete(st.c2_bodyExtLowerBox)
+        st.c2_bodyExtLowerBox := na
+        st.c2_bodyExtUpperActive := false
+        st.c2_bodyExtUpperExtreme := na
+        st.c2_bodyExtUpperStartTime := na
+        box.delete(st.c2_bodyExtUpperBox)
+        st.c2_bodyExtUpperBox := na
+
+        // reset A5
+        st.a5_wickActive := false
+        st.a5_bodyActive := false
+        st.a5_wickHit := false
+        st.a5_bodyHit := false
+        st.a5_startTimeWick := na
+        st.a5_startTimeBody := na
+        box.delete(st.a5_wickBox)
+        box.delete(st.a5_bodyBox)
+        st.a5_wickBox := na
+        st.a5_bodyBox := na
+        // ... existing code ...
+        line.delete(st.a4_ghostUp)
+        line.delete(st.a4_ghostDown)
+        st.a4_ghostUp := na
+        st.a4_ghostDown := na
+        // delete A5 ghost lines
+        line.delete(st.a5_ghostUp)
+        line.delete(st.a5_ghostDown)
+        st.a5_ghostUp := na
+        st.a5_ghostDown := na
+        // ... existing code ...
+        label.delete(st.a4_ghostUpLbl)
+        label.delete(st.a4_ghostDownLbl)
+        st.a4_ghostUpLbl := na
+        st.a4_ghostDownLbl := na
+        // delete A5 ghost labels
+        label.delete(st.a5_ghostUpLbl)
+        label.delete(st.a5_ghostDownLbl)
+        st.a5_ghostUpLbl := na
+        st.a5_ghostDownLbl := na
+        st.a5_ghostDownLbl
+
+        // Reset FVG states
+        st.fvg_firstBullPlottedInSession := false
+        st.fvg_firstBearPlottedInSession := false
+        box.delete(st.fvg_sessionBullBox)
+        box.delete(st.fvg_sessionBearBox)
+        st.fvg_sessionBullBox := na
+        st.fvg_sessionBearBox := na
+
+        st.c2_ext_firstFvgBullPlotted := false
+        st.c2_ext_firstFvgBearPlotted := false
+        box.delete(st.c2_ext_fvgBullBox)
+        box.delete(st.c2_ext_fvgBearBox)
+        st.c2_ext_fvgBullBox := na
+        st.c2_ext_fvgBearBox := na
+        st.fvg_lastBearBar := na
+        st.fvg_lastBullBar := na
+
+        // Reset Overall FVG Type Tracking flags
+        st.session_bullFvgPlottedOverallContext := false
+        st.session_bearFvgPlottedOverallContext := false
+        st.c2ext_bullFvgPlottedOverallContext := false
+        st.c2ext_bearFvgPlottedOverallContext := false
+
+        st.a5_ghostDownLbl := na
+        st.a5_ghostDownLbl
+
+        // delete C2 extension ghost limit lines and labels
+        line.delete(st.c2_extLimitLowerGhost)
+        line.delete(st.c2_extLimitUpperGhost)
+        label.delete(st.c2_extLimitLowerGhostLbl)
+        label.delete(st.c2_extLimitUpperGhostLbl)
+        st.c2_extLimitLowerGhost := na
+        st.c2_extLimitUpperGhost := na
+        st.c2_extLimitLowerGhostLbl := na
+        st.c2_extLimitUpperGhostLbl := na
+
+        // delete C2 body extension ghost limit lines and labels
+        line.delete(st.c2_bodyExtLimitLowerGhost)
+        line.delete(st.c2_bodyExtLimitUpperGhost)
+        label.delete(st.c2_bodyExtLimitLowerGhostLbl)
+        label.delete(st.c2_bodyExtLimitUpperGhostLbl)
+        st.c2_bodyExtLimitLowerGhost := na
+        st.c2_bodyExtLimitUpperGhost := na
+        st.c2_bodyExtLimitLowerGhostLbl := na
+        st.c2_bodyExtLimitUpperGhostLbl := na
+
+        // Reset FVG states
+        st.fvg_firstBullPlottedInSession := false
+        st.fvg_firstBearPlottedInSession := false
+        box.delete(st.fvg_sessionBullBox)
+        box.delete(st.fvg_sessionBearBox)
+        st.fvg_sessionBullBox := na
+        st.fvg_sessionBearBox := na
+
+        st.c2_ext_firstFvgBullPlotted := false
+        st.c2_ext_firstFvgBearPlotted := false
+        box.delete(st.c2_ext_fvgBullBox)
+        box.delete(st.c2_ext_fvgBearBox)
+        st.c2_ext_fvgBullBox := na
+        st.c2_ext_fvgBearBox := na
+        st.fvg_lastBearBar := na
+        st.fvg_lastBullBar := na
+
+        // Reset Overall FVG Type Tracking flags
+        st.session_bullFvgPlottedOverallContext := false
+        st.session_bearFvgPlottedOverallContext := false
+        st.c2ext_bullFvgPlottedOverallContext := false
+        st.c2ext_bearFvgPlottedOverallContext := false
+
+        st.a5_ghostDownLbl // This was the original last line of the st.sesFirst block, keeping it for context
+
+    // ---- During active session: update extremes ----
+    if st.sesActive
+        if high >= st.hiPrice or na(st.hiPrice)
+            st.hiPrice := high
+            st.tsHi := time
+            st.tsHi
+        if low <= st.loPrice or na(st.loPrice)
+            st.loPrice := low
+            st.tsLo := time
+            st.tsLo
+
+        // capture previous wick extremes BEFORE we extend them with current bar
+        prevHiWick = st.a1_hiWick
+        prevLoWick = st.a1_loWick
+
+        // accumulate A1 ranges with current bar values
+        st.a1_hiWick := na(st.a1_hiWick) ? high : math.max(st.a1_hiWick, high)
+        st.a1_loWick := na(st.a1_loWick) ? low : math.min(st.a1_loWick, low)
+        currBodyHi = math.max(open, close)
+        currBodyLo = math.min(open, close)
+        st.a1_hiBody := na(st.a1_hiBody) ? currBodyHi : math.max(st.a1_hiBody, currBodyHi)
+        st.a1_loBody := na(st.a1_loBody) ? currBodyLo : math.min(st.a1_loBody, currBodyLo)
+
+        // ---- A1 Wick hit detection (replicates VORTEX FINAL anchoring logic) ----
+        if not st.a1_wickHit and not na(st.targetA1)
+            wickRange = st.a1_hiWick - st.a1_loWick
+            if wickRange >= st.targetA1
+                st.a1_wickHit := true
+                st.a1_hitTimeWick := time
+
+                // Decide anchoring for the box so that its height equals exactly the target size
+                float boxTop = na
+                float boxBottom = na
+                float _prevHi = nz(prevHiWick, high)
+                float _prevLo = nz(prevLoWick, low)
+
+                if low < _prevLo and st.a1_hiWick - low >= st.targetA1
+                    // Range extended downward – anchor at new high
+                    boxTop := st.a1_hiWick
+                    boxBottom := st.a1_hiWick - st.targetA1
+                    boxBottom
+                else if high > _prevHi and high - st.a1_loWick >= st.targetA1
+                    // Range extended upward – anchor at low
+                    boxBottom := st.a1_loWick
+                    boxTop := st.a1_loWick + st.targetA1
+                    boxTop
+                else if st.a1_hiWick - st.a1_loWick >= st.targetA1
+                    // Default: try anchor from low
+                    boxBottom := st.a1_loWick
+                    boxTop := st.a1_loWick + st.targetA1
+                    boxTop
+                else // Fallback: anchor from high
+                    boxTop := st.a1_hiWick
+                    boxBottom := st.a1_hiWick - st.targetA1
+                    boxBottom
+
+                // schedule A2 wick for next bar (independent of visibility)
+                st.a2_startTimeWick := time
+
+                if ShowWickBoxes and ShowA1Boxes
+                    boxLeft = st.startTs
+                    _tfMs = timeframe.in_seconds(timeframe.period) * 1000
+                    _idealRight = time + _tfMs
+                    boxRight = not na(st.endAbsTs) ? math.min(_idealRight, st.endAbsTs) : _idealRight
+                    st.a1_wickBox := box.new(boxLeft, boxTop, boxRight, boxBottom, bgcolor = ColorA1Wick, border_color = ColorA1Wick, xloc = xloc.bar_time)
+                    st.a1_wickBox
+
+        // Body hit detection
+        if not st.a1_bodyHit and not na(st.targetA1)
+            if st.a1_hiBody - st.a1_loBody >= st.targetA1
+                st.a1_bodyHit := true
+                st.a1_hitTimeBody := time
+                // schedule A2 body for next bar (independent of visibility)
+                st.a2_startTimeBody := time
+
+                if ShowBodyBoxes and ShowA1Boxes
+                    boxLeft = st.startTs
+                    _tfMs = timeframe.in_seconds(timeframe.period) * 1000
+                    _idealRight = time + _tfMs
+                    boxRight = not na(st.endAbsTs) ? math.min(_idealRight, st.endAbsTs) : _idealRight
+                    st.a1_bodyBox := box.new(boxLeft, st.a1_hiBody, boxRight, st.a1_loBody, bgcolor = ColorA1Body, border_color = ColorA1Body, xloc = xloc.bar_time)
+                    st.a1_bodyBox
+
+        // ====== C2 / C3 / C4 DETECTION & BOXES ======
+        // They use the same accumulated ranges; just different target sizes.
+        wickRange = st.a1_hiWick - st.a1_loWick
+        bodyRange = st.a1_hiBody - st.a1_loBody
+
+        // --- C2
+        if not st.c2_wickHit and not na(st.targetC2) and wickRange >= st.targetC2
+            st.c2_wickHit := true
+            st.c2_hitTimeWick := time
+
+            // Determine final C2 box position *before* checking visibility
+            float boxTopC2 = na
+            float boxBottomC2 = na
+
+            // Default anchor from high (consistent with other cycles if no specific extension happens first)
+            boxTopC2 := st.a1_hiWick
+            boxBottomC2 := st.a1_hiWick - st.targetC2
+
+            // Check if range extended downward first
+            if low < prevLoWick and st.a1_hiWick - low >= st.targetC2
+                boxTopC2 := st.a1_hiWick
+                boxBottomC2 := st.a1_hiWick - st.targetC2
+                boxBottomC2
+            // Check if range extended upward first (else if to prioritize downward trigger)
+            else if high > prevHiWick and high - st.a1_loWick >= st.targetC2
+                boxBottomC2 := st.a1_loWick
+                boxTopC2 := st.a1_loWick + st.targetC2
+                boxTopC2
+
+            // Store the *final* boundaries for extension tracking
+            st.c2_boundTop := boxTopC2
+            st.c2_boundBottom := boxBottomC2
+
+            // Now draw the box if visible
+            if ShowWickBoxes and ShowC2Boxes
+                boxLeft = st.startTs
+                boxRight = time + timeframe.in_seconds(timeframe.period) * 1000
+                // Corrected variables used in box.new:
+                st.c2_wickBox := box.new(boxLeft, boxTopC2, boxRight, boxBottomC2, bgcolor = ColorC2Wick, border_color = ColorC2Wick, xloc = xloc.bar_time)
+                st.c2_wickBox
+
+        if not st.c2_bodyHit and not na(st.targetC2) and bodyRange >= st.targetC2
+            st.c2_bodyHit := true
+            st.c2_hitTimeBody := time
+            // Capture body boundaries for extension tracking
+            st.c2_bodyBoundTop := st.a1_hiBody
+            st.c2_bodyBoundBottom := st.a1_loBody
+            if ShowBodyBoxes and ShowC2Boxes
+                boxLeft = st.startTs
+                boxRight = time + timeframe.in_seconds(timeframe.period) * 1000
+                st.c2_bodyBox := box.new(boxLeft, st.a1_hiBody, boxRight, st.a1_loBody, bgcolor = ColorC2Body, border_color = ColorC2Body, xloc = xloc.bar_time)
+                st.c2_bodyBox
+
+        // --- C3
+        if not st.c3_wickHit and not na(st.targetC3) and wickRange >= st.targetC3
+            st.c3_wickHit := true
+            st.c3_hitTimeWick := time
+            if ShowWickBoxes and ShowC3Boxes
+                boxTop = st.a1_hiWick
+                boxBottom = st.a1_hiWick - st.targetC3
+                if low < prevLoWick and st.a1_hiWick - low >= st.targetC3
+                    boxTop := st.a1_hiWick
+                    boxBottom := st.a1_hiWick - st.targetC3
+                    boxBottom
+                else if high > prevHiWick and high - st.a1_loWick >= st.targetC3
+                    boxBottom := st.a1_loWick
+                    boxTop := st.a1_loWick + st.targetC3
+                    boxTop
+                boxLeft = st.startTs
+                boxRight = time + timeframe.in_seconds(timeframe.period) * 1000
+                st.c3_wickBox := box.new(boxLeft, boxTop, boxRight, boxBottom, bgcolor = ColorC3Wick, border_color = ColorC3Wick, xloc = xloc.bar_time)
+                st.c3_wickBox
+
+        if not st.c3_bodyHit and not na(st.targetC3) and bodyRange >= st.targetC3
+            st.c3_bodyHit := true
+            st.c3_hitTimeBody := time
+            if ShowBodyBoxes and ShowC3Boxes
+                boxLeft = st.startTs
+                boxRight = time + timeframe.in_seconds(timeframe.period) * 1000
+                st.c3_bodyBox := box.new(boxLeft, st.a1_hiBody, boxRight, st.a1_loBody, bgcolor = ColorC3Body, border_color = ColorC3Body, xloc = xloc.bar_time)
+                st.c3_bodyBox
+
+        // --- C4
+        if not st.c4_wickHit and not na(st.targetC4) and wickRange >= st.targetC4
+            st.c4_wickHit := true
+            st.c4_hitTimeWick := time
+            if ShowWickBoxes and ShowC4Boxes
+                boxTop = st.a1_hiWick
+                boxBottom = st.a1_hiWick - st.targetC4
+                if low < prevLoWick and st.a1_hiWick - low >= st.targetC4
+                    boxTop := st.a1_hiWick
+                    boxBottom := st.a1_hiWick - st.targetC4
+                    boxBottom
+                else if high > prevHiWick and high - st.a1_loWick >= st.targetC4
+                    boxBottom := st.a1_loWick
+                    boxTop := st.a1_loWick + st.targetC4
+                    boxTop
+                boxLeft = st.startTs
+                boxRight = time + timeframe.in_seconds(timeframe.period) * 1000
+                st.c4_wickBox := box.new(boxLeft, boxTop, boxRight, boxBottom, bgcolor = ColorC4Wick, border_color = ColorC4Wick, xloc = xloc.bar_time)
+                st.c4_wickBox
+
+        if not st.c4_bodyHit and not na(st.targetC4) and bodyRange >= st.targetC4
+            st.c4_bodyHit := true
+            st.c4_hitTimeBody := time
+            if ShowBodyBoxes and ShowC4Boxes
+                boxLeft = st.startTs
+                boxRight = time + timeframe.in_seconds(timeframe.period) * 1000
+                st.c4_bodyBox := box.new(boxLeft, st.a1_hiBody, boxRight, st.a1_loBody, bgcolor = ColorC4Body, border_color = ColorC4Body, xloc = xloc.bar_time)
+                st.c4_bodyBox
+
+        // =============================
+        //   A2  (chained from A1 hit)
+        // =============================
+        // -------- NEXT-BAR ACTIVATION FLAGS --------
+        canActivateA2W = not st.a2_wickActive and not st.a2_wickHit and not na(st.a2_startTimeWick) and time > st.a2_startTimeWick
+        canActivateA2B = not st.a2_bodyActive and not st.a2_bodyHit and not na(st.a2_startTimeBody) and time > st.a2_startTimeBody
+
+        if canActivateA2W
+            st.a2_wickActive := true
+            st.a2_hiWick := high
+            st.a2_loWick := low
+            st.a2_loWick
+        if canActivateA2B
+            st.a2_bodyActive := true
+            st.a2_hiBody := currBodyHi
+            st.a2_loBody := currBodyLo
+            st.a2_loBody
+
+        // Accumulate A2 ranges while active
+        if st.a2_wickActive
+            st.a2_hiWick := math.max(nz(st.a2_hiWick, high), high)
+            st.a2_loWick := math.min(nz(st.a2_loWick, low), low)
+            if not st.a2_wickHit and not na(st.targetA1) and st.a2_hiWick - st.a2_loWick >= st.targetA1
+                st.a2_wickHit := true
+                st.a2_hitTimeWick := time
+                // Plot
+                if ShowWickBoxes and ShowA2Boxes
+                    boxLeft = st.a2_startTimeWick
+                    boxRight = time + timeframe.in_seconds(timeframe.period) * 1000
+                    boxTop = st.a2_hiWick
+                    boxBottom = st.a2_hiWick - st.targetA1
+                    if high - st.a2_loWick >= st.targetA1
+                        boxBottom := st.a2_loWick
+                        boxTop := st.a2_loWick + st.targetA1
+                        boxTop
+                    st.a2_wickBox := box.new(boxLeft, boxTop, boxRight, boxBottom, bgcolor = ColorA2Wick, border_color = ColorA2Wick, xloc = xloc.bar_time)
+                    st.a2_wickBox
+                // schedule A3 wick for next bar
+                st.a3_startTimeWick := time
+                st.a3_hiWick := high
+                st.a3_loWick := low
+                st.a2_wickActive := false
+                st.a2_wickActive
+
+        if st.a2_bodyActive
+            st.a2_hiBody := math.max(nz(st.a2_hiBody, currBodyHi), currBodyHi)
+            st.a2_loBody := math.min(nz(st.a2_loBody, currBodyLo), currBodyLo)
+            if not st.a2_bodyHit and not na(st.targetA1) and st.a2_hiBody - st.a2_loBody >= st.targetA1
+                st.a2_bodyHit := true
+                st.a2_hitTimeBody := time
+                if ShowBodyBoxes and ShowA2Boxes
+                    boxLeft = st.a2_startTimeBody
+                    boxRight = time + timeframe.in_seconds(timeframe.period) * 1000
+                    st.a2_bodyBox := box.new(boxLeft, st.a2_hiBody, boxRight, st.a2_loBody, bgcolor = ColorA2Body, border_color = ColorA2Body, xloc = xloc.bar_time)
+                    st.a2_bodyBox
+                // schedule A3 body for next bar
+                st.a3_startTimeBody := time
+                st.a3_hiBody := currBodyHi
+                st.a3_loBody := currBodyLo
+                st.a2_bodyActive := false
+                st.a2_bodyActive
+
+        // =============================
+        //   A3  (chained from A2 hit)
+        // =============================
+        // --- A3 NEXT-BAR ACTIVATION ---
+        canActivateA3W = not st.a3_wickActive and not st.a3_wickHit and not na(st.a3_startTimeWick) and time > st.a3_startTimeWick
+        if canActivateA3W
+            st.a3_wickActive := true
+            st.a3_hiWick := high
+            st.a3_loWick := low
+            st.a3_loWick
+
+        canActivateA3B = not st.a3_bodyActive and not st.a3_bodyHit and not na(st.a3_startTimeBody) and time > st.a3_startTimeBody
+        if canActivateA3B
+            st.a3_bodyActive := true
+            st.a3_hiBody := currBodyHi
+            st.a3_loBody := currBodyLo
+            st.a3_loBody
+
+        if st.a3_wickActive
+            st.a3_hiWick := math.max(nz(st.a3_hiWick, high), high)
+            st.a3_loWick := math.min(nz(st.a3_loWick, low), low)
+            if not st.a3_wickHit and not na(st.targetA1) and st.a3_hiWick - st.a3_loWick >= st.targetA1
+                st.a3_wickHit := true
+                st.a3_hitTimeWick := time
+                if ShowWickBoxes and ShowA3Boxes
+                    boxLeft = st.a3_startTimeWick
+                    boxRight = time + timeframe.in_seconds(timeframe.period) * 1000
+                    boxTop = st.a3_hiWick
+                    boxBottom = st.a3_hiWick - st.targetA1
+                    if high - st.a3_loWick >= st.targetA1
+                        boxBottom := st.a3_loWick
+                        boxTop := st.a3_loWick + st.targetA1
+                        boxTop
+                    st.a3_wickBox := box.new(boxLeft, boxTop, boxRight, boxBottom, bgcolor = ColorA3Wick, border_color = ColorA3Wick, xloc = xloc.bar_time)
+                    st.a3_wickBox
+                // schedule A4 wick
+                st.a4_startTimeWick := time
+                st.a4_hiWick := high
+                st.a4_loWick := low
+                st.a3_wickActive := false
+                st.a3_wickActive
+
+        if st.a3_bodyActive
+            st.a3_hiBody := math.max(nz(st.a3_hiBody, currBodyHi), currBodyHi)
+            st.a3_loBody := math.min(nz(st.a3_loBody, currBodyLo), currBodyLo)
+            if not st.a3_bodyHit and not na(st.targetA1) and st.a3_hiBody - st.a3_loBody >= st.targetA1
+                st.a3_bodyHit := true
+                st.a3_hitTimeBody := time
+                if ShowBodyBoxes and ShowA3Boxes
+                    boxLeft = st.a3_startTimeBody
+                    boxRight = time + timeframe.in_seconds(timeframe.period) * 1000
+                    st.a3_bodyBox := box.new(boxLeft, st.a3_hiBody, boxRight, st.a3_loBody, bgcolor = ColorA3Body, border_color = ColorA3Body, xloc = xloc.bar_time)
+                    st.a3_bodyBox
+                // schedule A4 body
+                st.a4_startTimeBody := time
+                st.a4_hiBody := currBodyHi
+                st.a4_loBody := currBodyLo
+                st.a3_bodyActive := false
+                st.a3_bodyActive
+
+        // =============================
+        //   A4  (final chain)
+        // =============================
+        // --- A4 NEXT-BAR ACTIVATION ---
+        canActivateA4W = not st.a4_wickActive and not st.a4_wickHit and not na(st.a4_startTimeWick) and time > st.a4_startTimeWick
+        if canActivateA4W
+            st.a4_wickActive := true
+            st.a4_hiWick := high
+            st.a4_loWick := low
+            st.a4_loWick
+
+        canActivateA4B = not st.a4_bodyActive and not st.a4_bodyHit and not na(st.a4_startTimeBody) and time > st.a4_startTimeBody
+        if canActivateA4B
+            st.a4_bodyActive := true
+            st.a4_hiBody := currBodyHi
+            st.a4_loBody := currBodyLo
+            st.a4_loBody
+
+        if st.a4_wickActive
+            st.a4_hiWick := math.max(nz(st.a4_hiWick, high), high)
+            st.a4_loWick := math.min(nz(st.a4_loWick, low), low)
+            if not st.a4_wickHit and not na(st.targetA1) and st.a4_hiWick - st.a4_loWick >= st.targetA1
+                st.a4_wickHit := true
+                st.a4_hitTimeWick := time
+                if ShowWickBoxes and ShowA4Boxes
+                    boxLeft = st.a4_startTimeWick
+                    boxRight = time + timeframe.in_seconds(timeframe.period) * 1000
+                    boxTop = st.a4_hiWick
+                    boxBottom = st.a4_hiWick - st.targetA1
+                    if high - st.a4_loWick >= st.targetA1
+                        boxBottom := st.a4_loWick
+                        boxTop := st.a4_loWick + st.targetA1
+                        boxTop
+                    st.a4_wickBox := box.new(boxLeft, boxTop, boxRight, boxBottom, bgcolor = ColorA4Wick, border_color = ColorA4Wick, xloc = xloc.bar_time)
+                    st.a4_wickBox
+                // schedule A5 wick for next bar
+                st.a5_startTimeWick := time
+                st.a5_hiWick := high
+                st.a5_loWick := low
+                st.a4_wickActive := false
+                st.a4_wickActive
+
+        if st.a4_bodyActive
+            st.a4_hiBody := math.max(nz(st.a4_hiBody, currBodyHi), currBodyHi)
+            st.a4_loBody := math.min(nz(st.a4_loBody, currBodyLo), currBodyLo)
+            if not st.a4_bodyHit and not na(st.targetA1) and st.a4_hiBody - st.a4_loBody >= st.targetA1
+                st.a4_bodyHit := true
+                st.a4_hitTimeBody := time
+                if ShowBodyBoxes and ShowA4Boxes
+                    boxLeft = st.a4_startTimeBody
+                    boxRight = time + timeframe.in_seconds(timeframe.period) * 1000
+                    st.a4_bodyBox := box.new(boxLeft, st.a4_hiBody, boxRight, st.a4_loBody, bgcolor = ColorA4Body, border_color = ColorA4Body, xloc = xloc.bar_time)
+                    st.a4_bodyBox
+                // schedule A5 body for next bar
+                st.a5_startTimeBody := time
+                st.a5_hiBody := currBodyHi
+                st.a5_loBody := currBodyLo
+                st.a4_bodyActive := false
+                st.a4_bodyActive
+
+        // =============================
+        //   A5  (chained from A4 hit)
+        // =============================
+        // --- A5 NEXT-BAR ACTIVATION ---
+        canActivateA5W = not st.a5_wickActive and not st.a5_wickHit and not na(st.a5_startTimeWick) and time > st.a5_startTimeWick
+        if canActivateA5W
+            st.a5_wickActive := true
+            st.a5_hiWick := high
+            st.a5_loWick := low
+            st.a5_loWick
+
+        canActivateA5B = not st.a5_bodyActive and not st.a5_bodyHit and not na(st.a5_startTimeBody) and time > st.a5_startTimeBody
+        if canActivateA5B
+            st.a5_bodyActive := true
+            st.a5_hiBody := currBodyHi
+            st.a5_loBody := currBodyLo
+            st.a5_loBody
+
+        if st.a5_wickActive
+            st.a5_hiWick := math.max(nz(st.a5_hiWick, high), high)
+            st.a5_loWick := math.min(nz(st.a5_loWick, low), low)
+            if not st.a5_wickHit and not na(st.targetA1) and st.a5_hiWick - st.a5_loWick >= st.targetA1 * A5SizeMultiplier
+                st.a5_wickHit := true
+                st.a5_hitTimeWick := time
+                if ShowWickBoxes and ShowA5Boxes
+                    boxLeft = st.a5_startTimeWick
+                    boxRight = time + timeframe.in_seconds(timeframe.period) * 1000
+                    boxTop = st.a5_hiWick
+                    boxBottom = st.a5_hiWick - (st.targetA1 * A5SizeMultiplier)
+                    if high - st.a5_loWick >= st.targetA1 * A5SizeMultiplier
+                        boxBottom := st.a5_loWick
+                        boxTop := st.a5_loWick + (st.targetA1 * A5SizeMultiplier)
+                        boxTop
+                    st.a5_wickBox := box.new(boxLeft, boxTop, boxRight, boxBottom, bgcolor = ColorA5Wick, border_color = ColorA5Wick, xloc = xloc.bar_time)
+                    st.a5_wickBox
+                st.a5_wickActive := false
+                st.a5_wickActive
+
+        if st.a5_bodyActive
+            st.a5_hiBody := math.max(nz(st.a5_hiBody, currBodyHi), currBodyHi)
+            st.a5_loBody := math.min(nz(st.a5_loBody, currBodyLo), currBodyLo)
+            if not st.a5_bodyHit and not na(st.targetA1) and st.a5_hiBody - st.a5_loBody >= st.targetA1 * A5SizeMultiplier
+                st.a5_bodyHit := true
+                st.a5_hitTimeBody := time
+                if ShowBodyBoxes and ShowA5Boxes
+                    boxLeft = st.a5_startTimeBody
+                    boxRight = time + timeframe.in_seconds(timeframe.period) * 1000
+                    st.a5_bodyBox := box.new(boxLeft, st.a5_hiBody, boxRight, st.a5_loBody, bgcolor = ColorA5Body, border_color = ColorA5Body, xloc = xloc.bar_time)
+                    st.a5_bodyBox
+                st.a5_bodyActive := false
+                st.a5_bodyActive
+
+        // ---- Ghost Projection Lines ----
+        lineLeft = st.startTs
+        lineRight = not na(st.endAbsTs) ? st.endAbsTs : time + timeframe.in_seconds(timeframe.period) * 1000
+
+        // A1 Ghost
+        if not st.a1_wickHit and not na(st.targetA1)
+            if ShowGhostA1
+                upA1 = st.a1_loWick + st.targetA1
+                dnA1 = st.a1_hiWick - st.targetA1
+                lblText = cfg.name + ' A1'
+                st.a1_ghostUp := f_update_ghost_line(st.a1_ghostUp, lineLeft, upA1, lineRight, ColorA1Ghost, _ghostLineStyleConst, GhostLineWidth, lblText, false)
+                st.a1_ghostDown := f_update_ghost_line(st.a1_ghostDown, lineLeft, dnA1, lineRight, ColorA1Ghost, _ghostLineStyleConst, GhostLineWidth, lblText, false)
+                if ShowGhostLabels
+                    midX = lineLeft + int((lineRight - lineLeft) / 2)
+                    // Up label
+                    if not na(st.a1_ghostUp)
+                        if na(st.a1_ghostUpLbl)
+                            st.a1_ghostUpLbl := label.new(midX, upA1, text = lblText, style = label.style_none, color = color.new(ColorA1Ghost, 0), textcolor = GhostLabelColor, xloc = xloc.bar_time, yloc = yloc.price, size = _ghostLabelSizeConst)
+                            st.a1_ghostUpLbl
+                        else
+                            label.set_x(st.a1_ghostUpLbl, midX)
+                            label.set_y(st.a1_ghostUpLbl, upA1)
+                            label.set_text(st.a1_ghostUpLbl, lblText)
+                            label.set_color(st.a1_ghostUpLbl, color.new(ColorA1Ghost, 0))
+                            label.set_textcolor(st.a1_ghostUpLbl, GhostLabelColor)
+                    else
+                        label.delete(st.a1_ghostUpLbl)
+                        st.a1_ghostUpLbl := na
+                        st.a1_ghostUpLbl
+                    // Down label
+                    if not na(st.a1_ghostDown)
+                        if na(st.a1_ghostDownLbl)
+                            st.a1_ghostDownLbl := label.new(midX, dnA1, text = lblText, style = label.style_none, color = color.new(ColorA1Ghost, 0), textcolor = GhostLabelColor, xloc = xloc.bar_time, yloc = yloc.price, size = _ghostLabelSizeConst)
+                            st.a1_ghostDownLbl
+                        else
+                            label.set_x(st.a1_ghostDownLbl, midX)
+                            label.set_y(st.a1_ghostDownLbl, dnA1)
+                            label.set_text(st.a1_ghostDownLbl, lblText)
+                            label.set_color(st.a1_ghostDownLbl, color.new(ColorA1Ghost, 0))
+                            label.set_textcolor(st.a1_ghostDownLbl, GhostLabelColor)
+                    else
+                        label.delete(st.a1_ghostDownLbl)
+                        st.a1_ghostDownLbl := na
+                        st.a1_ghostDownLbl
+            else
+                line.delete(st.a1_ghostUp)
+                line.delete(st.a1_ghostDown)
+                label.delete(st.a1_ghostUpLbl)
+                label.delete(st.a1_ghostDownLbl)
+                st.a1_ghostUp := na
+                st.a1_ghostDown := na
+                st.a1_ghostUpLbl := na
+                st.a1_ghostDownLbl := na
+                st.a1_ghostDownLbl
+        else
+            line.delete(st.a1_ghostUp)
+            line.delete(st.a1_ghostDown)
+            label.delete(st.a1_ghostUpLbl)
+            label.delete(st.a1_ghostDownLbl)
+            st.a1_ghostUp := na
+            st.a1_ghostDown := na
+            st.a1_ghostUpLbl := na
+            st.a1_ghostDownLbl := na
+            st.a1_ghostDownLbl
+
+        // C2 Ghost
+        if not st.c2_wickHit and not na(st.targetC2)
+            if ShowGhostC2
+                upC2 = st.a1_loWick + st.targetC2
+                dnC2 = st.a1_hiWick - st.targetC2
+                lbl = cfg.name + ' C2'
+                st.c2_ghostUp := f_update_ghost_line(st.c2_ghostUp, lineLeft, upC2, lineRight, ColorC2Ghost, _ghostLineStyleConst, GhostLineWidth, lbl, ShowGhostLabels)
+                st.c2_ghostDown := f_update_ghost_line(st.c2_ghostDown, lineLeft, dnC2, lineRight, ColorC2Ghost, _ghostLineStyleConst, GhostLineWidth, lbl, ShowGhostLabels)
+                st.c2_ghostDown
+            else
+                line.delete(st.c2_ghostUp)
+                line.delete(st.c2_ghostDown)
+                st.c2_ghostUp := na
+                st.c2_ghostDown := na
+                st.c2_ghostDown
+        else
+            line.delete(st.c2_ghostUp)
+            line.delete(st.c2_ghostDown)
+            st.c2_ghostUp := na
+            st.c2_ghostDown := na
+            st.c2_ghostDown
+
+        // C3 Ghost
+        if not st.c3_wickHit and not na(st.targetC3)
+            if ShowGhostC3
+                upC3 = st.a1_loWick + st.targetC3
+                dnC3 = st.a1_hiWick - st.targetC3
+                lbl = cfg.name + ' C3'
+                st.c3_ghostUp := f_update_ghost_line(st.c3_ghostUp, lineLeft, upC3, lineRight, ColorC3Ghost, _ghostLineStyleConst, GhostLineWidth, lbl, ShowGhostLabels)
+                st.c3_ghostDown := f_update_ghost_line(st.c3_ghostDown, lineLeft, dnC3, lineRight, ColorC3Ghost, _ghostLineStyleConst, GhostLineWidth, lbl, ShowGhostLabels)
+                st.c3_ghostDown
+            else
+                line.delete(st.c3_ghostUp)
+                line.delete(st.c3_ghostDown)
+                st.c3_ghostUp := na
+                st.c3_ghostDown := na
+                st.c3_ghostDown
+        else
+            line.delete(st.c3_ghostUp)
+            line.delete(st.c3_ghostDown)
+            st.c3_ghostUp := na
+            st.c3_ghostDown := na
+            st.c3_ghostDown
+
+        // C4 Ghost
+        if not st.c4_wickHit and not na(st.targetC4)
+            if ShowGhostC4
+                upC4 = st.a1_loWick + st.targetC4
+                dnC4 = st.a1_hiWick - st.targetC4
+                lbl = cfg.name + ' C4'
+                st.c4_ghostUp := f_update_ghost_line(st.c4_ghostUp, lineLeft, upC4, lineRight, ColorC4Ghost, _ghostLineStyleConst, GhostLineWidth, lbl, ShowGhostLabels)
+                st.c4_ghostDown := f_update_ghost_line(st.c4_ghostDown, lineLeft, dnC4, lineRight, ColorC4Ghost, _ghostLineStyleConst, GhostLineWidth, lbl, ShowGhostLabels)
+                st.c4_ghostDown
+            else
+                line.delete(st.c4_ghostUp)
+                line.delete(st.c4_ghostDown)
+                st.c4_ghostUp := na
+                st.c4_ghostDown := na
+                st.c4_ghostDown
+        else
+            line.delete(st.c4_ghostUp)
+            line.delete(st.c4_ghostDown)
+            st.c4_ghostUp := na
+            st.c4_ghostDown := na
+            st.c4_ghostDown
+
+        // A2 Ghost
+        bool shouldUpdateA2Ghost = st.a2_wickActive and not st.a2_wickHit and not na(st.targetA1)
+        if shouldUpdateA2Ghost
+            if ShowGhostA2 and not na(st.a2_startTimeWick) and not na(st.a2_loWick) and not na(st.a2_hiWick)
+                upValA2 = st.a2_loWick + st.targetA1
+                dnValA2 = st.a2_hiWick - st.targetA1
+                lblTextA2 = cfg.name + ' A2'
+                _lineLeftA2 = st.a2_startTimeWick
+                _lineRightA2 = not na(st.endAbsTs) ? st.endAbsTs : time + timeframe.in_seconds(timeframe.period) * 1000
+
+                st.a2_ghostUp := f_update_ghost_line(st.a2_ghostUp, _lineLeftA2, upValA2, _lineRightA2, ColorA2Ghost, _ghostLineStyleConst, GhostLineWidth, lblTextA2, false)
+                st.a2_ghostDown := f_update_ghost_line(st.a2_ghostDown, _lineLeftA2, dnValA2, _lineRightA2, ColorA2Ghost, _ghostLineStyleConst, GhostLineWidth, lblTextA2, false)
+
+                if ShowGhostLabels
+                    midXA2 = _lineLeftA2 + int((_lineRightA2 - _lineLeftA2) / 2)
+                    if not na(st.a2_ghostUp)
+                        if na(st.a2_ghostUpLbl)
+                            st.a2_ghostUpLbl := label.new(midXA2, upValA2, text = lblTextA2, style = label.style_none, color = color.new(ColorA2Ghost, 0), textcolor = GhostLabelColor, xloc = xloc.bar_time, yloc = yloc.price, size = _ghostLabelSizeConst)
+                            st.a2_ghostUpLbl
+                        else
+                            label.set_x(st.a2_ghostUpLbl, midXA2)
+                            label.set_y(st.a2_ghostUpLbl, upValA2)
+                            label.set_text(st.a2_ghostUpLbl, lblTextA2)
+                            label.set_color(st.a2_ghostUpLbl, color.new(ColorA2Ghost, 0))
+                            label.set_textcolor(st.a2_ghostUpLbl, GhostLabelColor)
+                    else
+                        label.delete(st.a2_ghostUpLbl)
+                        st.a2_ghostUpLbl := na
+                        st.a2_ghostUpLbl
+
+                    if not na(st.a2_ghostDown)
+                        if na(st.a2_ghostDownLbl)
+                            st.a2_ghostDownLbl := label.new(midXA2, dnValA2, text = lblTextA2, style = label.style_none, color = color.new(ColorA2Ghost, 0), textcolor = GhostLabelColor, xloc = xloc.bar_time, yloc = yloc.price, size = _ghostLabelSizeConst)
+                            st.a2_ghostDownLbl
+                        else
+                            label.set_x(st.a2_ghostDownLbl, midXA2)
+                            label.set_y(st.a2_ghostDownLbl, dnValA2)
+                            label.set_text(st.a2_ghostDownLbl, lblTextA2)
+                            label.set_color(st.a2_ghostDownLbl, color.new(ColorA2Ghost, 0))
+                            label.set_textcolor(st.a2_ghostDownLbl, GhostLabelColor)
+                    else
+                        label.delete(st.a2_ghostDownLbl)
+                        st.a2_ghostDownLbl := na
+                        st.a2_ghostDownLbl
+                else
+                    label.delete(st.a2_ghostUpLbl)
+                    st.a2_ghostUpLbl := na
+                    label.delete(st.a2_ghostDownLbl)
+                    st.a2_ghostDownLbl := na
+                    st.a2_ghostDownLbl
+            else
+                line.delete(st.a2_ghostUp)
+                line.delete(st.a2_ghostDown)
+                label.delete(st.a2_ghostUpLbl)
+                label.delete(st.a2_ghostDownLbl)
+                st.a2_ghostUp := na
+                st.a2_ghostDown := na
+                st.a2_ghostUpLbl := na
+                st.a2_ghostDownLbl := na
+                st.a2_ghostDownLbl
+        else
+            line.delete(st.a2_ghostUp)
+            line.delete(st.a2_ghostDown)
+            label.delete(st.a2_ghostUpLbl)
+            label.delete(st.a2_ghostDownLbl)
+            st.a2_ghostUp := na
+            st.a2_ghostDown := na
+            st.a2_ghostUpLbl := na
+            st.a2_ghostDownLbl := na
+            st.a2_ghostDownLbl
+
+        // A3 Ghost
+        bool shouldUpdateA3Ghost = st.a3_wickActive and not st.a3_wickHit and not na(st.targetA1)
+        if shouldUpdateA3Ghost
+            if ShowGhostA3 and not na(st.a3_startTimeWick) and not na(st.a3_loWick) and not na(st.a3_hiWick)
+                upValA3 = st.a3_loWick + st.targetA1
+                dnValA3 = st.a3_hiWick - st.targetA1
+                lblTextA3 = cfg.name + ' A3'
+                _lineLeftA3 = st.a3_startTimeWick
+                _lineRightA3 = not na(st.endAbsTs) ? st.endAbsTs : time + timeframe.in_seconds(timeframe.period) * 1000
+
+                st.a3_ghostUp := f_update_ghost_line(st.a3_ghostUp, _lineLeftA3, upValA3, _lineRightA3, ColorA3Ghost, _ghostLineStyleConst, GhostLineWidth, lblTextA3, false)
+                st.a3_ghostDown := f_update_ghost_line(st.a3_ghostDown, _lineLeftA3, dnValA3, _lineRightA3, ColorA3Ghost, _ghostLineStyleConst, GhostLineWidth, lblTextA3, false)
+
+                if ShowGhostLabels
+                    midXA3 = _lineLeftA3 + int((_lineRightA3 - _lineLeftA3) / 2)
+                    if not na(st.a3_ghostUp)
+                        if na(st.a3_ghostUpLbl)
+                            st.a3_ghostUpLbl := label.new(midXA3, upValA3, text = lblTextA3, style = label.style_none, color = color.new(ColorA3Ghost, 0), textcolor = color.white, xloc = xloc.bar_time, yloc = yloc.price, size = size.tiny)
+                            st.a3_ghostUpLbl
+                        else
+                            label.set_x(st.a3_ghostUpLbl, midXA3)
+                            label.set_y(st.a3_ghostUpLbl, upValA3)
+                            label.set_text(st.a3_ghostUpLbl, lblTextA3)
+                            label.set_color(st.a3_ghostUpLbl, color.new(ColorA3Ghost, 0))
+                            label.set_textcolor(st.a3_ghostUpLbl, color.white)
+                    else
+                        label.delete(st.a3_ghostUpLbl)
+                        st.a3_ghostUpLbl := na
+                        st.a3_ghostUpLbl
+
+                    if not na(st.a3_ghostDown)
+                        if na(st.a3_ghostDownLbl)
+                            st.a3_ghostDownLbl := label.new(midXA3, dnValA3, text = lblTextA3, style = label.style_none, color = color.new(ColorA3Ghost, 0), textcolor = color.white, xloc = xloc.bar_time, yloc = yloc.price, size = size.tiny)
+                            st.a3_ghostDownLbl
+                        else
+                            label.set_x(st.a3_ghostDownLbl, midXA3)
+                            label.set_y(st.a3_ghostDownLbl, dnValA3)
+                            label.set_text(st.a3_ghostDownLbl, lblTextA3)
+                            label.set_color(st.a3_ghostDownLbl, color.new(ColorA3Ghost, 0))
+                            label.set_textcolor(st.a3_ghostDownLbl, color.white)
+                    else
+                        label.delete(st.a3_ghostDownLbl)
+                        st.a3_ghostDownLbl := na
+                        st.a3_ghostDownLbl
+                else
+                    label.delete(st.a3_ghostUpLbl)
+                    st.a3_ghostUpLbl := na
+                    label.delete(st.a3_ghostDownLbl)
+                    st.a3_ghostDownLbl := na
+                    st.a3_ghostDownLbl
+            else
+                line.delete(st.a3_ghostUp)
+                line.delete(st.a3_ghostDown)
+                label.delete(st.a3_ghostUpLbl)
+                label.delete(st.a3_ghostDownLbl)
+                st.a3_ghostUp := na
+                st.a3_ghostDown := na
+                st.a3_ghostUpLbl := na
+                st.a3_ghostDownLbl := na
+                st.a3_ghostDownLbl
+
+        // A4 Ghost
+        bool shouldUpdateA4Ghost = st.a4_wickActive and not st.a4_wickHit and not na(st.targetA1)
+        if shouldUpdateA4Ghost
+            if ShowGhostA4 and not na(st.a4_startTimeWick) and not na(st.a4_loWick) and not na(st.a4_hiWick)
+                upValA4 = st.a4_loWick + st.targetA1
+                dnValA4 = st.a4_hiWick - st.targetA1
+                lblTextA4 = cfg.name + ' A4'
+                _lineLeftA4 = st.a4_startTimeWick
+                _lineRightA4 = not na(st.endAbsTs) ? st.endAbsTs : time + timeframe.in_seconds(timeframe.period) * 1000
+
+                st.a4_ghostUp := f_update_ghost_line(st.a4_ghostUp, _lineLeftA4, upValA4, _lineRightA4, ColorA4Ghost, _ghostLineStyleConst, GhostLineWidth, lblTextA4, false)
+                st.a4_ghostDown := f_update_ghost_line(st.a4_ghostDown, _lineLeftA4, dnValA4, _lineRightA4, ColorA4Ghost, _ghostLineStyleConst, GhostLineWidth, lblTextA4, false)
+
+                if ShowGhostLabels
+                    midXA4 = _lineLeftA4 + int((_lineRightA4 - _lineLeftA4) / 2)
+                    if not na(st.a4_ghostUp)
+                        if na(st.a4_ghostUpLbl)
+                            st.a4_ghostUpLbl := label.new(midXA4, upValA4, text = lblTextA4, style = label.style_none, color = color.new(ColorA4Ghost, 0), textcolor = color.white, xloc = xloc.bar_time, yloc = yloc.price, size = size.tiny)
+                            st.a4_ghostUpLbl
+                        else
+                            label.set_x(st.a4_ghostUpLbl, midXA4)
+                            label.set_y(st.a4_ghostUpLbl, upValA4)
+                            label.set_text(st.a4_ghostUpLbl, lblTextA4)
+                            label.set_color(st.a4_ghostUpLbl, color.new(ColorA4Ghost, 0))
+                            label.set_textcolor(st.a4_ghostUpLbl, color.white)
+                    else
+                        label.delete(st.a4_ghostUpLbl)
+                        st.a4_ghostUpLbl := na
+                        st.a4_ghostUpLbl
+
+                    if not na(st.a4_ghostDown)
+                        if na(st.a4_ghostDownLbl)
+                            st.a4_ghostDownLbl := label.new(midXA4, dnValA4, text = lblTextA4, style = label.style_none, color = color.new(ColorA4Ghost, 0), textcolor = color.white, xloc = xloc.bar_time, yloc = yloc.price, size = size.tiny)
+                            st.a4_ghostDownLbl
+                        else
+                            label.set_x(st.a4_ghostDownLbl, midXA4)
+                            label.set_y(st.a4_ghostDownLbl, dnValA4)
+                            label.set_text(st.a4_ghostDownLbl, lblTextA4)
+                            label.set_color(st.a4_ghostDownLbl, color.new(ColorA4Ghost, 0))
+                            label.set_textcolor(st.a4_ghostDownLbl, color.white)
+                    else
+                        label.delete(st.a4_ghostDownLbl)
+                        st.a4_ghostDownLbl := na
+                        st.a4_ghostDownLbl
+                else
+                    label.delete(st.a4_ghostUpLbl)
+                    st.a4_ghostUpLbl := na
+                    label.delete(st.a4_ghostDownLbl)
+                    st.a4_ghostDownLbl := na
+                    st.a4_ghostDownLbl
+            else
+                line.delete(st.a4_ghostUp)
+                line.delete(st.a4_ghostDown)
+                label.delete(st.a4_ghostUpLbl)
+                label.delete(st.a4_ghostDownLbl)
+                st.a4_ghostUp := na
+                st.a4_ghostDown := na
+                st.a4_ghostUpLbl := na
+                st.a4_ghostDownLbl := na
+                st.a4_ghostDownLbl
+        else
+            line.delete(st.a4_ghostUp)
+            line.delete(st.a4_ghostDown)
+            label.delete(st.a4_ghostUpLbl)
+            label.delete(st.a4_ghostDownLbl)
+            st.a4_ghostUp := na
+            st.a4_ghostDown := na
+            st.a4_ghostUpLbl := na
+            st.a4_ghostDownLbl := na
+            st.a4_ghostDownLbl
+
+        // =============================
+        //   C2 Extension Overshoot (upper & lower)
+        // =============================
+        if st.c2_wickHit and not na(st.c2_boundBottom) and not na(st.c2_boundTop)
+
+            // -------- LOWER EXTENSION (below C2) --------
+            if low < st.c2_boundBottom
+                if not st.c2_extLowerActive
+                    st.c2_extLowerActive := true
+                    st.c2_extLowerStartTime := time
+                    st.c2_extLowerExtreme := low
+                    if ShowWickBoxes and ShowC2ExtBelowBox // MODIFIED: Added ShowWickBoxes check
+                        boxLeftExt = st.c2_extLowerStartTime
+                        _tfMsExt = timeframe.in_seconds(timeframe.period) * 1000
+                        _idealRightExt = time + _tfMsExt
+                        boxRightExt = not na(st.endAbsTs) ? math.min(_idealRightExt, st.endAbsTs) : _idealRightExt
+                        _a1LimitDisc = (not na(st.targetA1) and st.targetA1 > 0 and not na(C2ExtA1Multiplier) and C2ExtA1Multiplier > 0) ? st.targetA1 * C2ExtA1Multiplier : na
+                        _currentMaxDiscLimit = C2ExtLimitType == "A1 Target" and not na(_a1LimitDisc) ? _a1LimitDisc : MaxC2ExtDiscountSize
+                        _finalBoxBottomPriceExtLower = EnableC2ExtSizeLimit and not na(_currentMaxDiscLimit) and _currentMaxDiscLimit > 0 ? math.max(low, st.c2_boundBottom - _currentMaxDiscLimit) : low
+                        st.c2_extLowerBox := box.new(boxLeftExt, st.c2_boundBottom, boxRightExt, _finalBoxBottomPriceExtLower, bgcolor = ColorC2ExtBelow, border_color = ColorC2ExtBelow, xloc = xloc.bar_time)
+                else
+                    st.c2_extLowerExtreme := math.min(st.c2_extLowerExtreme, low)
+
+            // Continuously update lower box if exists
+            if not na(st.c2_extLowerBox)
+                _tfMsExt = timeframe.in_seconds(timeframe.period) * 1000
+                _idealRightExt = time + _tfMsExt
+                boxRightExt = not na(st.endAbsTs) ? math.min(_idealRightExt, st.endAbsTs) : _idealRightExt
+                box.set_right(st.c2_extLowerBox, boxRightExt)
+                _a1LimitDisc = (not na(st.targetA1) and st.targetA1 > 0 and not na(C2ExtA1Multiplier) and C2ExtA1Multiplier > 0) ? st.targetA1 * C2ExtA1Multiplier : na
+                _currentMaxDiscLimit = C2ExtLimitType == "A1 Target" and not na(_a1LimitDisc) ? _a1LimitDisc : MaxC2ExtDiscountSize
+                _finalDisplayBottomExtLower = EnableC2ExtSizeLimit and not na(_currentMaxDiscLimit) and _currentMaxDiscLimit > 0 ? math.max(st.c2_extLowerExtreme, st.c2_boundBottom - _currentMaxDiscLimit) : st.c2_extLowerExtreme
+                box.set_bottom(st.c2_extLowerBox, _finalDisplayBottomExtLower)
+
+            // -------- UPPER EXTENSION (above C2) --------
+            if high > st.c2_boundTop
+                if not st.c2_extUpperActive
+                    st.c2_extUpperActive := true
+                    st.c2_extUpperStartTime := time
+                    st.c2_extUpperExtreme := high
+                    if ShowWickBoxes and ShowC2ExtAboveBox // MODIFIED: Added ShowWickBoxes check
+                        boxLeftUp = st.c2_extUpperStartTime
+                        _tfMsUp = timeframe.in_seconds(timeframe.period) * 1000
+                        _idealRightUp = time + _tfMsUp
+                        boxRightUp = not na(st.endAbsTs) ? math.min(_idealRightUp, st.endAbsTs) : _idealRightUp
+                        _a1LimitPrem = (not na(st.targetA1) and st.targetA1 > 0 and not na(C2ExtA1Multiplier) and C2ExtA1Multiplier > 0) ? st.targetA1 * C2ExtA1Multiplier : na
+                        _currentMaxPremLimit = C2ExtLimitType == "A1 Target" and not na(_a1LimitPrem) ? _a1LimitPrem : MaxC2ExtPremiumSize
+                        _finalBoxTopPriceExtUpper = EnableC2ExtSizeLimit and not na(_currentMaxPremLimit) and _currentMaxPremLimit > 0 ? math.min(high, st.c2_boundTop + _currentMaxPremLimit) : high
+                        st.c2_extUpperBox := box.new(boxLeftUp, _finalBoxTopPriceExtUpper, boxRightUp, st.c2_boundTop, bgcolor = ColorC2ExtAbove, border_color = ColorC2ExtAbove, xloc = xloc.bar_time)
+                else
+                    st.c2_extUpperExtreme := math.max(st.c2_extUpperExtreme, high)
+            
+            // Continuously update upper box if exists
+            if not na(st.c2_extUpperBox)
+                _tfMsUp = timeframe.in_seconds(timeframe.period) * 1000
+                _idealRightUp = time + _tfMsUp
+                boxRightUp = not na(st.endAbsTs) ? math.min(_idealRightUp, st.endAbsTs) : _idealRightUp
+                box.set_right(st.c2_extUpperBox, boxRightUp)
+                _a1LimitPrem = (not na(st.targetA1) and st.targetA1 > 0 and not na(C2ExtA1Multiplier) and C2ExtA1Multiplier > 0) ? st.targetA1 * C2ExtA1Multiplier : na
+                _currentMaxPremLimit = C2ExtLimitType == "A1 Target" and not na(_a1LimitPrem) ? _a1LimitPrem : MaxC2ExtPremiumSize
+                _finalDisplayTopExtUpper = EnableC2ExtSizeLimit and not na(_currentMaxPremLimit) and _currentMaxPremLimit > 0 ? math.min(st.c2_extUpperExtreme, st.c2_boundTop + _currentMaxPremLimit) : st.c2_extUpperExtreme
+                box.set_top(st.c2_extUpperBox, _finalDisplayTopExtUpper)
+
+        // ---- C2 Extension Ghost Limit Lines ----
+        if st.c2_wickHit and not na(st.c2_boundBottom) and not na(st.c2_boundTop) and EnableC2ExtSizeLimit and ShowGhostC2WickExtLimits
+            // Calculate the limit values the same way they're calculated for boxes
+            _a1LimitDisc = (not na(st.targetA1) and st.targetA1 > 0 and not na(C2ExtA1Multiplier) and C2ExtA1Multiplier > 0) ? st.targetA1 * C2ExtA1Multiplier : na
+            _a1LimitPrem = (not na(st.targetA1) and st.targetA1 > 0 and not na(C2ExtA1Multiplier) and C2ExtA1Multiplier > 0) ? st.targetA1 * C2ExtA1Multiplier : na
+            
+            _currentMaxDiscLimit = C2ExtLimitType == "A1 Target" and not na(_a1LimitDisc) ? _a1LimitDisc : MaxC2ExtDiscountSize
+            _currentMaxPremLimit = C2ExtLimitType == "A1 Target" and not na(_a1LimitPrem) ? _a1LimitPrem : MaxC2ExtPremiumSize
+            
+            // Only draw if limits are valid
+            if not na(_currentMaxDiscLimit) and _currentMaxDiscLimit > 0
+                discLimitLevel = st.c2_boundBottom - _currentMaxDiscLimit
+                lblTextDisc = cfg.name + ' Disc. Limit'
+                lineLeft = st.startTs
+                lineRight = not na(st.endAbsTs) ? st.endAbsTs : time + timeframe.in_seconds(timeframe.period) * 1000
+                
+                st.c2_extLimitLowerGhost := f_update_ghost_line(st.c2_extLimitLowerGhost, lineLeft, discLimitLevel, lineRight, 
+                                                          ColorC2ExtLimitDiscountGhost, _ghostLineStyleConst, GhostLineWidth, lblTextDisc, false)
+                
+                // Add label if enabled
+                if ShowGhostLabels
+                    midX = lineLeft + int((lineRight - lineLeft) / 2)
+                    if not na(st.c2_extLimitLowerGhost)
+                        if na(st.c2_extLimitLowerGhostLbl)
+                            st.c2_extLimitLowerGhostLbl := label.new(midX, discLimitLevel, text = lblTextDisc, 
+                                                                      style = label.style_none, 
+                                                                      color = color.new(ColorC2ExtLimitDiscountGhost, 0), 
+                                                                      textcolor = color.white, 
+                                                                      xloc = xloc.bar_time, 
+                                                                      yloc = yloc.price, 
+                                                                      size = size.tiny)
+                        else
+                            label.set_x(st.c2_extLimitLowerGhostLbl, midX)
+                            label.set_y(st.c2_extLimitLowerGhostLbl, discLimitLevel)
+                            label.set_text(st.c2_extLimitLowerGhostLbl, lblTextDisc)
+                            label.set_color(st.c2_extLimitLowerGhostLbl, color.new(ColorC2ExtLimitDiscountGhost, 0))
+                            label.set_textcolor(st.c2_extLimitLowerGhostLbl, color.white)
+            
+            // Only draw if limits are valid
+            if not na(_currentMaxPremLimit) and _currentMaxPremLimit > 0
+                premLimitLevel = st.c2_boundTop + _currentMaxPremLimit
+                lblTextPrem = cfg.name + ' Prem. Limit'
+                lineLeft = st.startTs
+                lineRight = not na(st.endAbsTs) ? st.endAbsTs : time + timeframe.in_seconds(timeframe.period) * 1000
+                
+                st.c2_extLimitUpperGhost := f_update_ghost_line(st.c2_extLimitUpperGhost, lineLeft, premLimitLevel, lineRight, 
+                                                          ColorC2ExtLimitPremiumGhost, _ghostLineStyleConst, GhostLineWidth, lblTextPrem, false)
+                
+                // Add label if enabled
+                if ShowGhostLabels
+                    midX = lineLeft + int((lineRight - lineLeft) / 2)
+                    if not na(st.c2_extLimitUpperGhost)
+                        if na(st.c2_extLimitUpperGhostLbl)
+                            st.c2_extLimitUpperGhostLbl := label.new(midX, premLimitLevel, text = lblTextPrem, 
+                                                                      style = label.style_none, 
+                                                                      color = color.new(ColorC2ExtLimitPremiumGhost, 0), 
+                                                                      textcolor = color.white, 
+                                                                      xloc = xloc.bar_time, 
+                                                                      yloc = yloc.price, 
+                                                                      size = size.tiny)
+                        else
+                            label.set_x(st.c2_extLimitUpperGhostLbl, midX)
+                            label.set_y(st.c2_extLimitUpperGhostLbl, premLimitLevel)
+                            label.set_text(st.c2_extLimitUpperGhostLbl, lblTextPrem)
+                            label.set_color(st.c2_extLimitUpperGhostLbl, color.new(ColorC2ExtLimitPremiumGhost, 0))
+                            label.set_textcolor(st.c2_extLimitUpperGhostLbl, color.white)
+        else
+            // Clean up if not showing ghost lines
+            line.delete(st.c2_extLimitLowerGhost)
+            line.delete(st.c2_extLimitUpperGhost)
+            label.delete(st.c2_extLimitLowerGhostLbl)
+            label.delete(st.c2_extLimitUpperGhostLbl)
+            st.c2_extLimitLowerGhost := na
+            st.c2_extLimitUpperGhost := na
+            st.c2_extLimitLowerGhostLbl := na
+            st.c2_extLimitUpperGhostLbl := na
+
+        // ---- C2 Body Extension Ghost Limit Lines ----
+        if st.c2_bodyHit and not na(st.c2_bodyBoundBottom) and not na(st.c2_bodyBoundTop) and EnableC2ExtSizeLimit and ShowGhostC2BodyExtLimits
+            // Calculate the limit values the same way they're calculated for boxes
+            _a1LimitDiscBody = (not na(st.targetA1) and st.targetA1 > 0 and not na(C2ExtA1Multiplier) and C2ExtA1Multiplier > 0) ? st.targetA1 * C2ExtA1Multiplier : na
+            _a1LimitPremBody = (not na(st.targetA1) and st.targetA1 > 0 and not na(C2ExtA1Multiplier) and C2ExtA1Multiplier > 0) ? st.targetA1 * C2ExtA1Multiplier : na
+            
+            _currentMaxDiscLimitBody = C2ExtLimitType == "A1 Target" and not na(_a1LimitDiscBody) ? _a1LimitDiscBody : MaxC2ExtDiscountSize
+            _currentMaxPremLimitBody = C2ExtLimitType == "A1 Target" and not na(_a1LimitPremBody) ? _a1LimitPremBody : MaxC2ExtPremiumSize
+            
+            // Only draw if limits are valid
+            if not na(_currentMaxDiscLimitBody) and _currentMaxDiscLimitBody > 0
+                discLimitLevelBody = st.c2_bodyBoundBottom - _currentMaxDiscLimitBody
+                lblTextDiscBody = cfg.name + ' Body Disc. Limit'
+                lineLeft = st.startTs
+                lineRight = not na(st.endAbsTs) ? st.endAbsTs : time + timeframe.in_seconds(timeframe.period) * 1000
+                
+                st.c2_bodyExtLimitLowerGhost := f_update_ghost_line(st.c2_bodyExtLimitLowerGhost, lineLeft, discLimitLevelBody, lineRight, 
+                                                          ColorC2ExtLimitDiscountGhost, _ghostLineStyleConst, GhostLineWidth, lblTextDiscBody, false)
+                
+                // Add label if enabled
+                if ShowGhostLabels
+                    midX = lineLeft + int((lineRight - lineLeft) / 2)
+                    if not na(st.c2_bodyExtLimitLowerGhost)
+                        if na(st.c2_bodyExtLimitLowerGhostLbl)
+                            st.c2_bodyExtLimitLowerGhostLbl := label.new(midX, discLimitLevelBody, text = lblTextDiscBody, 
+                                                                      style = label.style_none, 
+                                                                      color = color.new(ColorC2ExtLimitDiscountGhost, 0), 
+                                                                      textcolor = color.white, 
+                                                                      xloc = xloc.bar_time, 
+                                                                      yloc = yloc.price, 
+                                                                      size = size.tiny)
+                        else
+                            label.set_x(st.c2_bodyExtLimitLowerGhostLbl, midX)
+                            label.set_y(st.c2_bodyExtLimitLowerGhostLbl, discLimitLevelBody)
+                            label.set_text(st.c2_bodyExtLimitLowerGhostLbl, lblTextDiscBody)
+                            label.set_color(st.c2_bodyExtLimitLowerGhostLbl, color.new(ColorC2ExtLimitDiscountGhost, 0))
+                            label.set_textcolor(st.c2_bodyExtLimitLowerGhostLbl, color.white)
+            
+            // Only draw if limits are valid
+            if not na(_currentMaxPremLimitBody) and _currentMaxPremLimitBody > 0
+                premLimitLevelBody = st.c2_bodyBoundTop + _currentMaxPremLimitBody
+                lblTextPremBody = cfg.name + ' Body Prem. Limit'
+                lineLeft = st.startTs
+                lineRight = not na(st.endAbsTs) ? st.endAbsTs : time + timeframe.in_seconds(timeframe.period) * 1000
+                
+                st.c2_bodyExtLimitUpperGhost := f_update_ghost_line(st.c2_bodyExtLimitUpperGhost, lineLeft, premLimitLevelBody, lineRight, 
+                                                          ColorC2ExtLimitPremiumGhost, _ghostLineStyleConst, GhostLineWidth, lblTextPremBody, false)
+                
+                // Add label if enabled
+                if ShowGhostLabels
+                    midX = lineLeft + int((lineRight - lineLeft) / 2)
+                    if not na(st.c2_bodyExtLimitUpperGhost)
+                        if na(st.c2_bodyExtLimitUpperGhostLbl)
+                            st.c2_bodyExtLimitUpperGhostLbl := label.new(midX, premLimitLevelBody, text = lblTextPremBody, 
+                                                                      style = label.style_none, 
+                                                                      color = color.new(ColorC2ExtLimitPremiumGhost, 0), 
+                                                                      textcolor = color.white, 
+                                                                      xloc = xloc.bar_time, 
+                                                                      yloc = yloc.price, 
+                                                                      size = size.tiny)
+                        else
+                            label.set_x(st.c2_bodyExtLimitUpperGhostLbl, midX)
+                            label.set_y(st.c2_bodyExtLimitUpperGhostLbl, premLimitLevelBody)
+                            label.set_text(st.c2_bodyExtLimitUpperGhostLbl, lblTextPremBody)
+                            label.set_color(st.c2_bodyExtLimitUpperGhostLbl, color.new(ColorC2ExtLimitPremiumGhost, 0))
+                            label.set_textcolor(st.c2_bodyExtLimitUpperGhostLbl, color.white)
+        else
+            // Clean up if not showing ghost lines
+            line.delete(st.c2_bodyExtLimitLowerGhost)
+            line.delete(st.c2_bodyExtLimitUpperGhost)
+            label.delete(st.c2_bodyExtLimitLowerGhostLbl)
+            label.delete(st.c2_bodyExtLimitUpperGhostLbl)
+            st.c2_bodyExtLimitLowerGhost := na
+            st.c2_bodyExtLimitUpperGhost := na
+            st.c2_bodyExtLimitLowerGhostLbl := na
+            st.c2_bodyExtLimitUpperGhostLbl := na
+
+        // =============================
+        //   C2 BODY Extension Overshoot (analogous to wick extension)
+        // =============================
+        if st.c2_bodyHit and not na(st.c2_bodyBoundBottom) and not na(st.c2_bodyBoundTop)
+            // -------- LOWER BODY EXTENSION (below C2 Body) --------
+            if low < st.c2_bodyBoundBottom
+                if not st.c2_bodyExtLowerActive
+                    st.c2_bodyExtLowerActive := true
+                    st.c2_bodyExtLowerStartTime := time
+                    st.c2_bodyExtLowerExtreme := low
+                    if ShowBodyBoxes and ShowC2ExtBelowBox // MODIFIED: Added ShowBodyBoxes check
+                        boxLeftBodyExt = st.c2_bodyExtLowerStartTime
+                        _tfMsBodyExt = timeframe.in_seconds(timeframe.period) * 1000
+                        _idealRightBodyExt = time + _tfMsBodyExt
+                        boxRightBodyExt = not na(st.endAbsTs) ? math.min(_idealRightBodyExt, st.endAbsTs) : _idealRightBodyExt
+                        _a1LimitDiscBody = (not na(st.targetA1) and st.targetA1 > 0 and not na(C2ExtA1Multiplier) and C2ExtA1Multiplier > 0) ? st.targetA1 * C2ExtA1Multiplier : na
+                        _currentMaxDiscLimitBody = C2ExtLimitType == "A1 Target" and not na(_a1LimitDiscBody) ? _a1LimitDiscBody : MaxC2ExtDiscountSize
+                        _finalBoxBottomPriceBodyExtLower = EnableC2ExtSizeLimit and not na(_currentMaxDiscLimitBody) and _currentMaxDiscLimitBody > 0 ? math.max(low, st.c2_bodyBoundBottom - _currentMaxDiscLimitBody) : low
+                        st.c2_bodyExtLowerBox := box.new(boxLeftBodyExt, st.c2_bodyBoundBottom, boxRightBodyExt, _finalBoxBottomPriceBodyExtLower, bgcolor = ColorC2ExtBelow, border_color = ColorC2ExtBelow, xloc = xloc.bar_time) // Use same color
+                else
+                    st.c2_bodyExtLowerExtreme := math.min(st.c2_bodyExtLowerExtreme, low)
+
+            // Continuously update lower body box if exists
+            if not na(st.c2_bodyExtLowerBox)
+                _tfMsBodyExt = timeframe.in_seconds(timeframe.period) * 1000
+                _idealRightBodyExt = time + _tfMsBodyExt
+                boxRightBodyExt = not na(st.endAbsTs) ? math.min(_idealRightBodyExt, st.endAbsTs) : _idealRightBodyExt
+                box.set_right(st.c2_bodyExtLowerBox, boxRightBodyExt)
+                _a1LimitDiscBody = (not na(st.targetA1) and st.targetA1 > 0 and not na(C2ExtA1Multiplier) and C2ExtA1Multiplier > 0) ? st.targetA1 * C2ExtA1Multiplier : na
+                _currentMaxDiscLimitBody = C2ExtLimitType == "A1 Target" and not na(_a1LimitDiscBody) ? _a1LimitDiscBody : MaxC2ExtDiscountSize
+                _finalDisplayBottomBodyExtLower = EnableC2ExtSizeLimit and not na(_currentMaxDiscLimitBody) and _currentMaxDiscLimitBody > 0 ? math.max(st.c2_bodyExtLowerExtreme, st.c2_bodyBoundBottom - _currentMaxDiscLimitBody) : st.c2_bodyExtLowerExtreme
+                box.set_bottom(st.c2_bodyExtLowerBox, _finalDisplayBottomBodyExtLower)
+
+            // -------- UPPER BODY EXTENSION (above C2 Body) --------
+            if high > st.c2_bodyBoundTop
+                if not st.c2_bodyExtUpperActive
+                    st.c2_bodyExtUpperActive := true
+                    st.c2_bodyExtUpperStartTime := time
+                    st.c2_bodyExtUpperExtreme := high
+                    if ShowBodyBoxes and ShowC2ExtAboveBox // MODIFIED: Added ShowBodyBoxes check
+                        boxLeftUpBody = st.c2_bodyExtUpperStartTime
+                        _tfMsUpBody = timeframe.in_seconds(timeframe.period) * 1000
+                        _idealRightUpBody = time + _tfMsUpBody
+                        boxRightUpBody = not na(st.endAbsTs) ? math.min(_idealRightUpBody, st.endAbsTs) : _idealRightUpBody
+                        _a1LimitPremBody = (not na(st.targetA1) and st.targetA1 > 0 and not na(C2ExtA1Multiplier) and C2ExtA1Multiplier > 0) ? st.targetA1 * C2ExtA1Multiplier : na
+                        _currentMaxPremLimitBody = C2ExtLimitType == "A1 Target" and not na(_a1LimitPremBody) ? _a1LimitPremBody : MaxC2ExtPremiumSize
+                        _finalBoxTopPriceBodyExtUpper = EnableC2ExtSizeLimit and not na(_currentMaxPremLimitBody) and _currentMaxPremLimitBody > 0 ? math.min(high, st.c2_bodyBoundTop + _currentMaxPremLimitBody) : high
+                        st.c2_bodyExtUpperBox := box.new(boxLeftUpBody, _finalBoxTopPriceBodyExtUpper, boxRightUpBody, st.c2_bodyBoundTop, bgcolor = ColorC2ExtAbove, border_color = ColorC2ExtAbove, xloc = xloc.bar_time) // Use same color
+                else
+                    st.c2_bodyExtUpperExtreme := math.max(st.c2_bodyExtUpperExtreme, high)
+
+            // Continuously update upper body box if exists
+            if not na(st.c2_bodyExtUpperBox)
+                _tfMsUpBody = timeframe.in_seconds(timeframe.period) * 1000
+                _idealRightUpBody = time + _tfMsUpBody
+                boxRightUpBody = not na(st.endAbsTs) ? math.min(_idealRightUpBody, st.endAbsTs) : _idealRightUpBody
+                box.set_right(st.c2_bodyExtUpperBox, boxRightUpBody)
+                _a1LimitPremBody = (not na(st.targetA1) and st.targetA1 > 0 and not na(C2ExtA1Multiplier) and C2ExtA1Multiplier > 0) ? st.targetA1 * C2ExtA1Multiplier : na
+                _currentMaxPremLimitBody = C2ExtLimitType == "A1 Target" and not na(_a1LimitPremBody) ? _a1LimitPremBody : MaxC2ExtPremiumSize
+                _finalDisplayTopBodyExtUpper = EnableC2ExtSizeLimit and not na(_currentMaxPremLimitBody) and _currentMaxPremLimitBody > 0 ? math.min(st.c2_bodyExtUpperExtreme, st.c2_bodyBoundTop + _currentMaxPremLimitBody) : st.c2_bodyExtUpperExtreme
+                box.set_top(st.c2_bodyExtUpperBox, _finalDisplayTopBodyExtUpper)
+
+        // A5 Ghost
+        if st.a4_bodyHit and not na(st.targetA1)
+            if ShowGhostA5
+                upA5 = st.a4_loWick + st.targetA1 * A5SizeMultiplier
+                dnA5 = st.a4_hiWick - st.targetA1 * A5SizeMultiplier
+                lblTextA5 = cfg.name + ' A5'
+                st.a5_ghostUp := f_update_ghost_line(st.a5_ghostUp, lineLeft, upA5, lineRight, ColorA5Ghost, _ghostLineStyleConst, GhostLineWidth, lblTextA5, false)
+                st.a5_ghostDown := f_update_ghost_line(st.a5_ghostDown, lineLeft, dnA5, lineRight, ColorA5Ghost, _ghostLineStyleConst, GhostLineWidth, lblTextA5, false)
+                if ShowGhostLabels
+                    midX = lineLeft + int((lineRight - lineLeft) / 2)
+                    // Up label
+                    if not na(st.a5_ghostUp)
+                        if na(st.a5_ghostUpLbl)
+                            st.a5_ghostUpLbl := label.new(midX, upA5, text = lblTextA5, style = label.style_none, color = color.new(ColorA5Ghost, 0), textcolor = color.white, xloc = xloc.bar_time, yloc = yloc.price, size = size.tiny)
+                            st.a5_ghostUpLbl
+                        else
+                            label.set_x(st.a5_ghostUpLbl, midX)
+                            label.set_y(st.a5_ghostUpLbl, upA5)
+                            label.set_text(st.a5_ghostUpLbl, lblTextA5)
+                            label.set_color(st.a5_ghostUpLbl, color.new(ColorA5Ghost, 0))
+                            label.set_textcolor(st.a5_ghostUpLbl, color.white)
+                    else
+                        label.delete(st.a5_ghostUpLbl)
+                        st.a5_ghostUpLbl := na
+                        st.a5_ghostUpLbl
+                    // Down label
+                    if not na(st.a5_ghostDown)
+                        if na(st.a5_ghostDownLbl)
+                            st.a5_ghostDownLbl := label.new(midX, dnA5, text = lblTextA5, style = label.style_none, color = color.new(ColorA5Ghost, 0), textcolor = color.white, xloc = xloc.bar_time, yloc = yloc.price, size = size.tiny)
+                            st.a5_ghostDownLbl
+                        else
+                            label.set_x(st.a5_ghostDownLbl, midX)
+                            label.set_y(st.a5_ghostDownLbl, dnA5)
+                            label.set_text(st.a5_ghostDownLbl, lblTextA5)
+                            label.set_color(st.a5_ghostDownLbl, color.new(ColorA5Ghost, 0))
+                            label.set_textcolor(st.a5_ghostDownLbl, color.white)
+                    else
+                        label.delete(st.a5_ghostDownLbl)
+                        st.a5_ghostDownLbl := na
+                        st.a5_ghostDownLbl
+            else
+                line.delete(st.a5_ghostUp)
+                line.delete(st.a5_ghostDown)
+                label.delete(st.a5_ghostUpLbl)
+                label.delete(st.a5_ghostDownLbl)
+                st.a5_ghostUp := na
+                st.a5_ghostDown := na
+                st.a5_ghostUpLbl := na
+                st.a5_ghostDownLbl := na
+                st.a5_ghostDownLbl
+
+    // ---- When session has just ended (previous bar was active) ----
+    if st.sesPrev and not st.sesActive
+        // Use previous bar's close as the session close price
+        float closePrice = close[1]
+        float mVal = na
+        float dVal = na
+        if not na(st.openPrice)
+            // Use EXACT logic from @base table.pine: treat equal close/open as bullish (>=)
+            if closePrice >= st.openPrice // bullish or doji
+                mVal := st.openPrice - st.loPrice // manipulation distance
+                dVal := st.hiPrice - st.openPrice // distribution distance
+                dVal
+            else // closePrice < openPrice  → bearish
+                mVal := st.hiPrice - st.openPrice
+                dVal := st.openPrice - st.loPrice
+                dVal
+        else // defensive fallback
+            mVal := na
+            dVal := na
+            dVal
+
+        if not na(mVal)
+            f_array_maint_float(st.mHist, mVal, FIXED_LOOKBACK)
+            f_array_maint_float(st.dHist, dVal, FIXED_LOOKBACK)
+            // (mt/dt ignored for now – could be added later)
+
+// NOTE: Ghost projection lines intentionally kept after session end for user reference.
+// They will be cleared automatically at the start of the next session instance (see sesFirst section).
+
+    // ---- Re-compute averages & dynamic targets on first bar of session ----
+    if st.sesFirst
+        st.avgM := array.size(st.mHist) > 0 ? array.avg(st.mHist) : na
+        st.avgD := array.size(st.dHist) > 0 ? array.avg(st.dHist) : na
+        st.targetA1 := not na(st.avgM) ? st.avgM : na
+        st.targetC2 := not na(st.avgM) and not na(st.avgD) ? st.avgM + (st.avgD - st.avgM) / 2 : na
+        st.targetC3 := not na(st.avgM) and not na(st.avgD) ? st.avgM + st.avgD : na
+        st.targetC4 := not na(st.avgD) ? 2 * st.avgD : na
+        st.targetC4
+
+    // DEBUG: mark first bar of each active session with a label (to confirm loop works)
+    if st.sesFirst
+        // label.new(bar_index, high, text=cfg.name + " start", style=label.style_none, color=color.new(color.blue, 80), textcolor=color.white, yloc=yloc.abovebar, size=size.tiny)
+        st.avgM := array.size(st.mHist) > 0 ? array.avg(st.mHist) : na
+        st.avgD := array.size(st.dHist) > 0 ? array.avg(st.dHist) : na
+        st.avgD
+
+    // ---- FVG Detection within Session ----
+    if ShowFVGs and st.sesActive
+        if fvgLtfOptionSelected == "Chart Timeframe"
+            // Ensure we have enough historical data for FVG (at least 3 bars on chart timeframe)
+            if bar_index >= 2
+                f_detectAndPlotFVGs(st, cfg, high, low, high[2], low[2], bar_index, time, fvgLtfResolutionForSecurity)
+        else // LTF FVG Detection
+            if array.size(ltf_high_arr) >= 3
+                // Loop through LTF candles. We need to handle indices carefully.
+                // The f_detectAndPlotFVGs expects hi, lo, hi2, lo2 relative to its current processing point.
+                for i = 2 to array.size(ltf_high_arr) - 1
+                    ltf_h = array.get(ltf_high_arr, i)
+                    ltf_l = array.get(ltf_low_arr, i)
+                    ltf_h2 = array.get(ltf_high_arr, i - 2)
+                    ltf_l2 = array.get(ltf_low_arr, i - 2)
+                    ltf_t = array.get(ltf_time_arr, i) // Time of the current LTF candle's END
+                    ltf_bar_idx_equiv = bar_index // This isn't a true bar_index for LTF, but used for box placement
+                    
+                    // Call FVG detection for each valid 3-candle LTF segment
+                    // The `fvgTime` for box extension should be the LTF candle's time.
+                    // The `barIdx` for box placement needs to be handled carefully. Since we plot on the chart bar,
+                    // we use the LTF candle times for x-coordinates.
+                    f_detectAndPlotFVGs(st, cfg, ltf_h, ltf_l, ltf_h2, ltf_l2, array.get(ltf_time_arr, i-2), ltf_t, fvgLtfResolutionForSecurity)
+                    // The f_detectAndPlotFVGs will manage st.fvg_firstBullPlottedInSession etc.
+                    // If true, it will only plot the very first one found across all LTF candles in this chart bar.
+                    if fvgShowOnlyFirstInSession and (st.fvg_firstBullPlottedInSession or st.fvg_firstBearPlottedInSession)
+                        break // Stop processing more LTF candles for this session if first already plotted
+        st.fvg_firstBearPlottedInSession // Dummy access to use st after call if needed
+
+    array.set(SESSION_STATES, idx, st)
+
+
+// Generic placeholder plot so script compiles
+plot(na)
+
+// =============================
+//   A4  (final chain)
+// =============================
+// --- C2 Extension color constants (removed duplicate definitions below) ---
+// const color ColorC2ExtBelow = color.new(color.gray, 90)
+// const color ColorC2ExtAbove = color.new(color.silver, 90)
+
+// ---- SIMPLE DATA TABLE ----------------------------------------------------
+var int lastTableRows = na
+var table g_dataTable = na
+
+// Helper to display table values (single implementation)
+getTargetDisplay(val, isActive) =>
+    na(val) ? (isActive ? "Pending" : "") : str.tostring(val, "#.##")
+
+// Count how many sessions/macros are toggled ON
+activeCount = 0
+for i = 0 to array.size(SESSION_CFGS) - 1
+    cfg = array.get(SESSION_CFGS, i)
+    // Determine if this session should be shown in the table based on effective toggles
+    bool shouldShowRow = cfg.isTBRMacro ? f_is_any_master_active(cfg.name) : (cfg.toggle or ShowAllBaseDistributions)
+    
+    if shouldShowRow
+        activeCount := activeCount + 1
+
+rowsNeeded = activeCount + 1 // +1 for header
+
+if ShowDataTable
+    if na(g_dataTable) or lastTableRows != rowsNeeded
+        if not na(g_dataTable)
+            table.delete(g_dataTable)
+        g_dataTable := table.new(columns = 5, rows = rowsNeeded, position = _tablePositionConst, border_width = 1, border_color = TableBorderColor, frame_color = TableBorderColor, frame_width = 1)
+        lastTableRows := rowsNeeded
+        // Header
+        table.cell(g_dataTable, 0, 0, 'Session', text_color = TableTextColor, bgcolor = TableBGColor, text_size = _tableTextSizeConst)
+        table.cell(g_dataTable, 1, 0, 'A1', text_color = TableTextColor, bgcolor = TableBGColor, text_size = _tableTextSizeConst)
+        table.cell(g_dataTable, 2, 0, 'C2', text_color = TableTextColor, bgcolor = TableBGColor, text_size = _tableTextSizeConst)
+        table.cell(g_dataTable, 3, 0, 'C3', text_color = TableTextColor, bgcolor = TableBGColor, text_size = _tableTextSizeConst)
+        table.cell(g_dataTable, 4, 0, 'C4', text_color = TableTextColor, bgcolor = TableBGColor, text_size = _tableTextSizeConst)
+
+    // Fill only the visible rows
+    if ShowDataTable and not na(g_dataTable)
+        row = 1 // Start from row 1 (after header)
+        for i = 0 to array.size(SESSION_CFGS) - 1
+            cfg = array.get(SESSION_CFGS, i)
+            st = array.get(SESSION_STATES, i)
+
+            // Determine if this session should be shown in the table based on effective toggles
+            bool shouldShowRow = cfg.isTBRMacro ? f_is_any_master_active(cfg.name) : (cfg.toggle or ShowAllBaseDistributions)
+
+            if shouldShowRow
+                table.cell(g_dataTable, 0, row, cfg.name, text_color = TableTextColor, bgcolor = TableBGColor, text_size = _tableTextSizeConst)
+                table.cell(g_dataTable, 1, row, getTargetDisplay(st.targetA1, st.sesActive), text_color = TableTextColor, bgcolor = TableBGColor, text_size = _tableTextSizeConst)
+                table.cell(g_dataTable, 2, row, getTargetDisplay(st.targetC2, st.sesActive), text_color = TableTextColor, bgcolor = TableBGColor, text_size = _tableTextSizeConst)
+                table.cell(g_dataTable, 3, row, getTargetDisplay(st.targetC3, st.sesActive), text_color = TableTextColor, bgcolor = TableBGColor, text_size = _tableTextSizeConst)
+                table.cell(g_dataTable, 4, row, getTargetDisplay(st.targetC4, st.sesActive), text_color = TableTextColor, bgcolor = TableBGColor, text_size = _tableTextSizeConst)
+                row := row + 1
+else
+    if not na(g_dataTable)
+        table.delete(g_dataTable)
+        g_dataTable := na
+        lastTableRows := na // Reset lastTableRows when table is hidden/deleted
+
+// Generic placeholder plot so script compiles
+// plot(na) // This might have been part of the old fixed logic, ensure it's not needed or move if it is

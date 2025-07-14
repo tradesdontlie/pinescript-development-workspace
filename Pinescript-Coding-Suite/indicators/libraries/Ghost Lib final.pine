@@ -1,0 +1,2551 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Trades-Dont-Lie
+
+//@version=5
+// @description Core library for Ghost MMXM trading system providing session management, cycle detection, target calculations, C2 extensions, FVG detection, and ghost line mitigation. v32: Added body-based ghost line support
+library("GhostMMXM_Core", overlay=true, dynamic_requests=true)
+
+// ==========================================
+// EXPORTED TYPES
+// ==========================================
+
+export type SessionConfig
+    string name
+    string timeSpec
+    bool enabled
+    int endHour
+    int endMinute
+    int sessionLength
+    bool isMacroSession = false
+
+export type SessionState
+    bool isActive = false
+    bool wasActive = false
+    bool isFirstBar = false
+    int startTime = na
+    int endTime = na
+    float openPrice = na
+    float highPrice = na
+    float lowPrice = na
+    int highTime = na
+    int lowTime = na
+    
+    // Historical data for target calculations
+    array<float> mHistory = na
+    array<float> dHistory = na
+    array<int> mtHistory = na
+    array<int> dtHistory = na
+    float avgM = na
+    float avgD = na
+    
+    // Dynamic targets
+    float targetA1 = na
+    float targetC2 = na
+    float targetC3 = na
+    float targetC4 = na
+    float targetX = na
+    
+    // Target values
+    float targetT1 = na
+    float targetT2 = na
+    
+    // A1 cycle tracking
+    float a1_highWick = na
+    float a1_lowWick = na
+    float a1_highBody = na
+    float a1_lowBody = na
+    bool a1_wickHit = false
+    bool a1_bodyHit = false
+    
+    // Chained cycles (A2-A5)
+    bool a2_active = false
+    bool a2_hit = false
+    float a2_high = na
+    float a2_low = na
+    int a2_startTime = na
+    
+    bool a3_active = false
+    bool a3_hit = false
+    float a3_high = na
+    float a3_low = na
+    int a3_startTime = na
+    
+    bool a4_active = false
+    bool a4_hit = false
+    float a4_high = na
+    float a4_low = na
+    int a4_startTime = na
+    
+    bool a5_active = false
+    bool a5_hit = false
+    float a5_high = na
+    float a5_low = na
+    int a5_startTime = na
+    
+    // M2 cycle (chained from C2)
+    bool m2_active = false
+    bool m2_hit = false
+    float m2_high = na
+    float m2_low = na
+    int m2_startTime = na
+    
+    // C-cycle tracking
+    bool c2_wickHit = false
+    bool c2_bodyHit = false
+    bool c3_wickHit = false
+    bool c3_bodyHit = false
+    bool c4_wickHit = false
+    bool c4_bodyHit = false
+    
+    // X-cycle tracking (A1 + C2)
+    bool x_wickHit = false
+    bool x_bodyHit = false
+    
+    // C2 Extension tracking (Delta Premium/Discount)
+    float c2_boundTop = na
+    float c2_boundBottom = na
+    bool c2_extLowerActive = false
+    bool c2_extUpperActive = false
+    float c2_extLowerExtreme = na
+    float c2_extUpperExtreme = na
+    int c2_extLowerStartTime = na
+    int c2_extUpperStartTime = na
+    
+    // C2 Body Extension tracking
+    float c2_bodyBoundTop = na
+    float c2_bodyBoundBottom = na
+    bool c2_bodyExtLowerActive = false
+    bool c2_bodyExtUpperActive = false
+    float c2_bodyExtLowerExtreme = na
+    float c2_bodyExtUpperExtreme = na
+    int c2_bodyExtLowerStartTime = na
+    int c2_bodyExtUpperStartTime = na
+    
+    // FVG Tracking
+    bool fvg_firstBullPlottedInSession = false
+    bool fvg_firstBearPlottedInSession = false
+    bool c2_ext_firstFvgBullPlotted = false
+    bool c2_ext_firstFvgBearPlotted = false
+    bool session_bullFvgPlottedOverallContext = false
+    bool session_bearFvgPlottedOverallContext = false
+    bool c2ext_bullFvgPlottedOverallContext = false
+    bool c2ext_bearFvgPlottedOverallContext = false
+    
+    // C2 Extension Box Handles
+    box c2_extLowerBox = na
+    box c2_extUpperBox = na
+    
+    // C2 Extension Ghost Limit Lines
+    line c2_extLimitLowerGhost = na
+    line c2_extLimitUpperGhost = na
+    
+    // Ghost projection lines (wick-based)
+    line a1_ghostUp = na
+    line a1_ghostDown = na
+    line c2_ghostUp = na
+    line c2_ghostDown = na
+    line c3_ghostUp = na
+    line c3_ghostDown = na
+    line c4_ghostUp = na
+    line c4_ghostDown = na
+    
+    // Ghost projection lines (body-based)
+    line a1_ghostUpBody = na
+    line a1_ghostDownBody = na
+    line c2_ghostUpBody = na
+    line c2_ghostDownBody = na
+    line c3_ghostUpBody = na
+    line c3_ghostDownBody = na
+    line c4_ghostUpBody = na
+    line c4_ghostDownBody = na
+    
+    // X Ghost projection lines
+    line x_ghostUp = na
+    line x_ghostDown = na
+    
+    // A2-A5 Ghost projection lines
+    line a2_ghostUp = na
+    line a2_ghostDown = na
+    line a3_ghostUp = na
+    line a3_ghostDown = na
+    line a4_ghostUp = na
+    line a4_ghostDown = na
+    line a5_ghostUp = na
+    line a5_ghostDown = na
+    
+    // M2 Ghost projection lines
+    line m2_ghostUp = na
+    line m2_ghostDown = na
+    
+    // Ghost projection labels
+    label a1_ghostUpLabel = na
+    label a1_ghostDownLabel = na
+    label c2_ghostUpLabel = na
+    label c2_ghostDownLabel = na
+    label c3_ghostUpLabel = na
+    label c3_ghostDownLabel = na
+    label c4_ghostUpLabel = na
+    label c4_ghostDownLabel = na
+    label x_ghostUpLabel = na
+    label x_ghostDownLabel = na
+    label a2_ghostUpLabel = na
+    label a2_ghostDownLabel = na
+    label a3_ghostUpLabel = na
+    label a3_ghostDownLabel = na
+    label a4_ghostUpLabel = na
+    label a4_ghostDownLabel = na
+    label a5_ghostUpLabel = na
+    label a5_ghostDownLabel = na
+    label m2_ghostUpLabel = na
+    label m2_ghostDownLabel = na
+    label c2_extLimitUpperLabel = na
+    label c2_extLimitLowerLabel = na
+
+export type CycleResult
+    bool hit
+    float topPrice
+    float bottomPrice
+    int hitTime
+    string anchorDirection
+
+export type DrawingObjects
+    box wickBox = na
+    box bodyBox = na
+    line ghostUp = na
+    line ghostDown = na
+    label ghostUpLabel = na
+    label ghostDownLabel = na
+
+export type ExtensionResult
+    bool updated
+    bool lowerActive
+    bool upperActive
+    float lowerExtreme
+    float upperExtreme
+
+export type FVGResult
+    bool bullishDetected
+    bool bearishDetected
+    float bullTop
+    float bullBottom
+    float bearTop
+    float bearBottom
+
+// ==========================================
+// SESSION TIME CONSTANTS
+// ==========================================
+
+// @function Get all session time specifications
+// @returns Array of session time strings
+export getAllSessionTimes() =>
+    sessionTimes = array.new<string>()
+    
+    // Base Model Sessions (Alpha through Lima)
+    array.push(sessionTimes, "18:45-21:15") // Alpha (ADRQ1)
+    array.push(sessionTimes, "21:30-00:00") // Bravo (ADRQ2)
+    array.push(sessionTimes, "19:30-02:00") // ADR
+    array.push(sessionTimes, "21:30-02:45") // Charlie (ADRQ3)
+    array.push(sessionTimes, "00:15-02:45") // Delta (ADRQ4)
+    array.push(sessionTimes, "03:00-05:45") // Echo (ODRQ1)
+    array.push(sessionTimes, "03:00-08:30") // ODR
+    array.push(sessionTimes, "04:30-16:00") // Kilo (HTF1)
+    array.push(sessionTimes, "06:00-08:15") // Foxtrot (ODRQ2)
+    array.push(sessionTimes, "08:45-11:15") // Golf (RDRQ1)
+    array.push(sessionTimes, "09:30-16:00") // RDR
+    array.push(sessionTimes, "11:30-14:00") // Hotel (RDRQ2)
+    array.push(sessionTimes, "11:30-14:45") // India (RDRQ3)
+    array.push(sessionTimes, "11:30-16:45") // Lima (HTF2)
+    array.push(sessionTimes, "14:15-16:45") // Juliet (RDRQ4)
+    array.push(sessionTimes, "18:00-18:00") // Daily Session Time
+    array.push(sessionTimes, "SUN18:00-SUN18:00") // Weekly Session Time Spec
+    array.push(sessionTimes, "MONTHLY18:00-MONTHLY18:00") // Monthly Session Time Spec
+    
+    // RTH Sessions (50-10 pattern) - Complete 24-hour coverage
+    array.push(sessionTimes, "00:50-01:10") // RTH_0050
+    array.push(sessionTimes, "01:50-02:10") // RTH_0150
+    array.push(sessionTimes, "02:50-03:10") // RTH_0250
+    array.push(sessionTimes, "03:50-04:10") // RTH_0350
+    array.push(sessionTimes, "04:50-05:10") // RTH_0450
+    array.push(sessionTimes, "05:50-06:10") // RTH_0550
+    array.push(sessionTimes, "06:50-07:10") // RTH_0650
+    array.push(sessionTimes, "07:50-08:10") // RTH_0750
+    array.push(sessionTimes, "08:50-09:10") // RTH_0850
+    array.push(sessionTimes, "09:50-10:10") // RTH_0950
+    array.push(sessionTimes, "10:50-11:10") // RTH_1050
+    array.push(sessionTimes, "11:50-12:10") // RTH_1150
+    array.push(sessionTimes, "12:50-13:10") // RTH_1250
+    array.push(sessionTimes, "13:50-14:10") // RTH_1350
+    array.push(sessionTimes, "14:50-15:10") // RTH_1450
+    array.push(sessionTimes, "15:50-16:10") // RTH_1550
+    array.push(sessionTimes, "16:50-17:10") // RTH_1650
+    array.push(sessionTimes, "17:50-18:10") // RTH_1750
+    array.push(sessionTimes, "18:50-19:10") // RTH_1850
+    array.push(sessionTimes, "19:50-20:10") // RTH_1950
+    array.push(sessionTimes, "20:50-21:10") // RTH_2050
+    array.push(sessionTimes, "21:50-22:10") // RTH_2150
+    array.push(sessionTimes, "22:50-23:10") // RTH_2250
+    array.push(sessionTimes, "23:50-00:10") // RTH_2350
+    
+    // ETH Sessions (20-40 pattern) - Complete 24-hour coverage  
+    array.push(sessionTimes, "00:20-00:40") // ETH_0020
+    array.push(sessionTimes, "01:20-01:40") // ETH_0120
+    array.push(sessionTimes, "02:20-02:40") // ETH_0220
+    array.push(sessionTimes, "03:20-03:40") // ETH_0320
+    array.push(sessionTimes, "04:20-04:40") // ETH_0420
+    array.push(sessionTimes, "05:20-05:40") // ETH_0520
+    array.push(sessionTimes, "06:20-06:40") // ETH_0620
+    array.push(sessionTimes, "07:20-07:40") // ETH_0720
+    array.push(sessionTimes, "08:20-08:40") // ETH_0820
+    array.push(sessionTimes, "09:20-09:40") // ETH_0920
+    array.push(sessionTimes, "10:20-10:40") // ETH_1020
+    array.push(sessionTimes, "11:20-11:40") // ETH_1120
+    array.push(sessionTimes, "12:20-12:40") // ETH_1220
+    array.push(sessionTimes, "13:20-13:40") // ETH_1320
+    array.push(sessionTimes, "14:20-14:40") // ETH_1420
+    array.push(sessionTimes, "15:20-15:40") // ETH_1520
+    array.push(sessionTimes, "16:20-16:40") // ETH_1620
+    array.push(sessionTimes, "17:20-17:40") // ETH_1720
+    array.push(sessionTimes, "18:20-18:40") // ETH_1820
+    array.push(sessionTimes, "19:20-19:40") // ETH_1920
+    array.push(sessionTimes, "20:20-20:40") // ETH_2020
+    array.push(sessionTimes, "21:20-21:40") // ETH_2120
+    array.push(sessionTimes, "22:20-22:40") // ETH_2220
+    array.push(sessionTimes, "23:20-23:40") // ETH_2320
+    
+    // Kitt's Macros
+    array.push(sessionTimes, "02:33-03:00") // Yankee
+    array.push(sessionTimes, "04:03-04:30") // Zulu
+    array.push(sessionTimes, "07:30-09:00") // Mike
+    array.push(sessionTimes, "08:00-08:30") // November
+    
+    sessionTimes
+
+// @function Get all session names
+// @returns Array of session names
+export getAllSessionNames() =>
+    sessionNames = array.new<string>()
+    
+    // Base Model Sessions
+    array.push(sessionNames, "Alpha")
+    array.push(sessionNames, "Bravo")
+    array.push(sessionNames, "ADR")
+    array.push(sessionNames, "Charlie")
+    array.push(sessionNames, "Delta")
+    array.push(sessionNames, "Echo")
+    array.push(sessionNames, "ODR")
+    array.push(sessionNames, "Kilo")
+    array.push(sessionNames, "Foxtrot")
+    array.push(sessionNames, "Golf")
+    array.push(sessionNames, "RDR")
+    array.push(sessionNames, "Hotel")
+    array.push(sessionNames, "India")
+    array.push(sessionNames, "Lima")
+    array.push(sessionNames, "Juliet")
+    array.push(sessionNames, "Daily")
+    array.push(sessionNames, "Weekly")
+    array.push(sessionNames, "Monthly")
+    
+    // RTH Sessions (50-10 pattern) - Complete 24-hour coverage
+    array.push(sessionNames, "RTH_0050")
+    array.push(sessionNames, "RTH_0150")
+    array.push(sessionNames, "RTH_0250")
+    array.push(sessionNames, "RTH_0350")
+    array.push(sessionNames, "RTH_0450")
+    array.push(sessionNames, "RTH_0550")
+    array.push(sessionNames, "RTH_0650")
+    array.push(sessionNames, "RTH_0750")
+    array.push(sessionNames, "RTH_0850")
+    array.push(sessionNames, "RTH_0950")
+    array.push(sessionNames, "RTH_1050")
+    array.push(sessionNames, "RTH_1150")
+    array.push(sessionNames, "RTH_1250")
+    array.push(sessionNames, "RTH_1350")
+    array.push(sessionNames, "RTH_1450")
+    array.push(sessionNames, "RTH_1550")
+    array.push(sessionNames, "RTH_1650")
+    array.push(sessionNames, "RTH_1750")
+    array.push(sessionNames, "RTH_1850")
+    array.push(sessionNames, "RTH_1950")
+    array.push(sessionNames, "RTH_2050")
+    array.push(sessionNames, "RTH_2150")
+    array.push(sessionNames, "RTH_2250")
+    array.push(sessionNames, "RTH_2350")
+    
+    // ETH Sessions (20-40 pattern) - Complete 24-hour coverage
+    array.push(sessionNames, "ETH_0020")
+    array.push(sessionNames, "ETH_0120")
+    array.push(sessionNames, "ETH_0220")
+    array.push(sessionNames, "ETH_0320")
+    array.push(sessionNames, "ETH_0420")
+    array.push(sessionNames, "ETH_0520")
+    array.push(sessionNames, "ETH_0620")
+    array.push(sessionNames, "ETH_0720")
+    array.push(sessionNames, "ETH_0820")
+    array.push(sessionNames, "ETH_0920")
+    array.push(sessionNames, "ETH_1020")
+    array.push(sessionNames, "ETH_1120")
+    array.push(sessionNames, "ETH_1220")
+    array.push(sessionNames, "ETH_1320")
+    array.push(sessionNames, "ETH_1420")
+    array.push(sessionNames, "ETH_1520")
+    array.push(sessionNames, "ETH_1620")
+    array.push(sessionNames, "ETH_1720")
+    array.push(sessionNames, "ETH_1820")
+    array.push(sessionNames, "ETH_1920")
+    array.push(sessionNames, "ETH_2020")
+    array.push(sessionNames, "ETH_2120")
+    array.push(sessionNames, "ETH_2220")
+    array.push(sessionNames, "ETH_2320")
+    
+    // Kitt's Macros
+    array.push(sessionNames, "Yankee")
+    array.push(sessionNames, "Zulu")
+    array.push(sessionNames, "Mike")
+    array.push(sessionNames, "November")
+    
+    sessionNames
+
+// ==========================================
+// UTILITY FUNCTIONS
+// ==========================================
+
+// @function Calculate session length in minutes
+// @param timeSpec Session time specification (e.g., "09:30-16:00" or "SUN18:00-SUN18:00" or "MONTHLY18:00-MONTHLY18:00")
+// @returns Session length in minutes
+export getSessionLength(string timeSpec) =>
+    if str.startswith(timeSpec, "SUN") and str.endswith(timeSpec, "SUN18:00")
+        7 * 24 * 60 // 7 days in minutes
+    else if str.startswith(timeSpec, "MONTHLY") and str.endswith(timeSpec, "MONTHLY18:00")
+        30 * 24 * 60 // Nominal 30 days; actual duration based on exact start/end times
+    else
+        startHour = str.tonumber(str.substring(timeSpec, 0, 2))
+        startMinute = str.tonumber(str.substring(timeSpec, 3, 5))
+        endHour = str.tonumber(str.substring(timeSpec, 6, 8))
+        endMinute = str.tonumber(str.substring(timeSpec, 9, 11))
+        
+        // If start and end times are identical, it's a 24-hour session (Daily)
+        if startHour == endHour and startMinute == endMinute
+            24 * 60
+        else
+            startTotal = startHour * 60 + startMinute
+            endTotal = endHour * 60 + endMinute
+            if startTotal <= endTotal
+                endTotal - startTotal
+            else
+                (24 * 60 - startTotal) + endTotal // Duration crossing midnight
+
+// @function Check if current time is within session
+// @param timeSpec Session time specification
+// @param timezone Timezone for the session
+// @returns True if current time is within session
+export isInSession(string timeSpec, string timezone = "America/New_York") =>
+    // Check for weekly sessions first with proper bounds checking
+    if str.startswith(timeSpec, "SUN") and str.contains(timeSpec, "-") and str.length(timeSpec) >= 17
+        // Additional checks only if we have confirmed it's a potential weekly format
+        if str.substring(timeSpec, 3, 8) == str.substring(timeSpec, 12, 17) and str.tonumber(str.substring(timeSpec, 3, 5)) == 18
+            true 
+        else
+            false
+    else if str.startswith(timeSpec, "MONTHLY") and str.contains(timeSpec, "18:00-MONTHLY18:00") // Monthly
+        // For conceptual window, a monthly session is always "candidate active".
+        // Actual start/end determined by state.startTime and state.endTime.
+        true
+    else if str.contains(timeSpec, ":") // Existing HH:MM-HH:MM logic (Daily/Regular)
+        startHour = str.tonumber(str.substring(timeSpec, 0, 2))
+        startMinute = str.tonumber(str.substring(timeSpec, 3, 5))
+        endHour = str.tonumber(str.substring(timeSpec, 6, 8))
+        endMinute = str.tonumber(str.substring(timeSpec, 9, 11))
+
+        // If start and end time are the same, it's a 24-hour conceptual window (Daily)
+        if startHour == endHour and startMinute == endMinute
+            true
+        else
+            startTotal = startHour * 60 + startMinute
+            endTotal = endHour * 60 + endMinute
+
+            if startTotal > endTotal // Crosses midnight
+                endTotal := endTotal == 0 ? 1440 : endTotal
+
+            currTotal = hour(time, timezone) * 60 + minute(time, timezone)
+
+            if startTotal <= endTotal
+                currTotal >= startTotal and currTotal < endTotal
+            else
+                currTotal >= startTotal or currTotal < endTotal
+    else
+        false // Unknown timeSpec format
+
+// @function Calculate absolute end timestamp for session
+// @param startTs Session start timestamp
+// @param endHour Session end hour (from config, may not be used for weekly/monthly)
+// @param endMinute Session end minute (from config, may not be used for weekly/monthly)
+// @param timeSpec The full timeSpec string to determine session type
+// @param timezone Session timezone
+// @returns Absolute end timestamp
+export getSessionEndTime(int startTs, int endHour, int endMinute, string timeSpec, string timezone = "America/New_York") =>
+    if str.startswith(timeSpec, "SUN") and str.contains(timeSpec, "18:00-SUN18:00") // Weekly
+        targetDayOfWeek = dayofweek.sunday
+        targetHour = 18
+        targetMinute = 0
+
+        // Calculate days until the next targetDayOfWeek from startTs's day
+        currentDayOfWeek = dayofweek(startTs, timezone)
+        daysToAdd = (targetDayOfWeek - currentDayOfWeek + 7) % 7
+        
+        // If it's already Sunday and past/at 18:00, we need to aim for *next* Sunday.
+        // Or if it's Sunday, 18:00 exactly, and this is the *start* of the session, endTime must be 7 days later.
+        if daysToAdd == 0 and (hour(startTs, timezone) * 60 + minute(startTs, timezone)) >= (targetHour * 60 + targetMinute)
+            daysToAdd := 7
+        else if daysToAdd == 0 and hour(startTs, timezone) == targetHour and minute(startTs, timezone) == targetMinute
+            // This condition implies startTs is exactly at the weekly boundary. End time is 7 days from this point.
+            daysToAdd := 7
+        
+        // If daysToAdd is 0 here, it means it's an earlier day of the week, or it's Sunday before 18:00.
+        // We still need to ensure we land on the correct Sunday if startTs is, say, a Saturday.
+        // The (targetDayOfWeek - currentDayOfWeek + 7) % 7 already handles finding the *next* occurrence.
+        // The special case is when startTs *is* Sunday 18:00, then we need 7 days.
+
+        // Get the date of startTs
+        y = year(startTs, timezone)
+        m = month(startTs, timezone)
+        d = dayofmonth(startTs, timezone)
+
+        // Timestamp of the beginning of the startTs day
+        startOfDayTs = timestamp(timezone, y, m, d, 0, 0, 0)
+        
+        // Timestamp for the target day and time
+        // Add daysToAdd to reach the correct Sunday, then set time to 18:00
+        targetTimestamp = startOfDayTs + daysToAdd * 24 * 60 * 60 * 1000
+        targetYear = year(targetTimestamp, timezone)
+        targetMonth = month(targetTimestamp, timezone)
+        targetDay = dayofmonth(targetTimestamp, timezone)
+        
+        timestamp(timezone, targetYear, targetMonth, targetDay, targetHour, targetMinute, 0)
+        
+    else if str.startswith(timeSpec, "MONTHLY") and str.contains(timeSpec, "18:00-MONTHLY18:00") // Monthly
+        // Calculate the start of the month for startTs
+        currentYear = year(startTs, timezone)
+        currentMonth = month(startTs, timezone)
+        
+        // Determine the year and month for the *next* month
+        nextMonthYear = currentMonth == 12 ? currentYear + 1 : currentYear
+        nextMonth = currentMonth == 12 ? 1 : currentMonth + 1
+        
+        // The end time is 18:00 on the 1st day of the next month.
+        // Pine Script's timestamp function handles day overflow correctly for month changes.
+        timestamp(timezone, nextMonthYear, nextMonth, 1, 18, 0, 0)
+        
+    else // Existing Daily/HH:MM-HH:MM logic
+        startH = hour(startTs, timezone)
+        startM = minute(startTs, timezone)
+
+        // If the target end H:M is the same as the start H:M of startTs, it's a 24h session (Daily)
+        if startH == endHour and startM == endMinute
+            startTs + 24 * 60 * 60 * 1000
+        else
+            startYear = year(startTs, timezone)
+            startMonth = month(startTs, timezone)
+            startDay = dayofmonth(startTs, timezone)
+            startMinutesLocal = startH * 60 + startM
+            endMinutesConst = endHour * 60 + endMinute
+
+            if endMinutesConst < startMinutesLocal or (endMinutesConst == 0 and startMinutesLocal > 0)
+                nextDayTs = startTs + 24 * 60 * 60 * 1000
+                endYear = year(nextDayTs, timezone)
+                endMonth = month(nextDayTs, timezone)
+                endDay = dayofmonth(nextDayTs, timezone)
+                timestamp(timezone, endYear, endMonth, endDay, endHour, endMinute, 0)
+            else
+                timestamp(timezone, startYear, startMonth, startDay, endHour, endMinute, 0)
+
+// ==========================================
+// HELPER FUNCTIONS
+// ==========================================
+
+// @function Calculate manipulation and distribution times for a session
+// @param open_ Session open price
+// @param high_ Session high price
+// @param low_ Session low price
+// @param close_ Session close price
+// @param highTime Session high time
+// @param lowTime Session low time
+// @param startTime Session start time
+// @returns [mt, dt] Manipulation and distribution times in milliseconds
+calculateManipulationDistributionTimes(float open_, float high_, float low_, float close_, int highTime, int lowTime, int startTime) =>
+    var int mt = na
+    var int dt = na
+    
+    if close_ >= open_ // Bullish session
+        mt := lowTime - startTime
+        dt := highTime - startTime
+    else // Bearish session
+        mt := highTime - startTime
+        dt := lowTime - startTime
+    
+    [mt, dt]
+
+// @function Calculate dynamic targets from historical data
+// @param state SessionState to update with targets
+// @param sessionName The name of the session (e.g., "Alpha", "Daily")
+calculateTargets(SessionState state, string sessionName) =>
+    // Logic from ghost lib v12.pine
+    if array.size(state.mHistory) > 0
+        state.avgM := array.avg(state.mHistory)
+        state.targetA1 := state.avgM
+    // If mHistory is empty, avgM and targetA1 will remain na (their default)
+    
+    if array.size(state.dHistory) > 0
+        state.avgD := array.avg(state.dHistory)
+    // If dHistory is empty, avgD will remain na (its default)
+    
+    if not na(state.avgM) and not na(state.avgD)
+        state.targetC2 := state.avgM + (state.avgD - state.avgM) / 2.0 // This is (avgM + avgD) / 2.0
+        state.targetC3 := state.avgM + state.avgD
+        state.targetC4 := 2 * state.avgD
+    else
+        // If avgM or avgD is na, C2, C3, C4 will not be calculated here
+        // and should retain their default 'na' values or become 'na' if dependent on na avgM/avgD.
+        // Explicitly set them to na if they might have old values from other paths (though not strictly needed if initialized to na)
+        state.targetC2 := na
+        state.targetC3 := na
+        state.targetC4 := na
+
+    // Calculate T1 and T2 targets (time-based averages) - This part seems consistent or can be kept as is if not specified by user
+    if array.size(state.mtHistory) > 0
+        state.targetT1 := array.avg(state.mtHistory)
+    else
+        state.targetT1 := na
+        
+    if array.size(state.dtHistory) > 0
+        state.targetT2 := array.avg(state.dtHistory)
+    else
+        state.targetT2 := na
+
+    // Calculate X value (A1 + C2) - This part seems consistent or can be kept as is if not specified by user
+    if not na(state.targetA1) and not na(state.targetC2)
+        state.targetX := state.targetA1 + state.targetC2
+    else
+        state.targetX := na
+
+// @function Store session data for future target calculations
+// @param state SessionState to update
+// @param closePrice Session close price
+storeSessionData(SessionState state, float closePrice) =>
+    if not na(state.openPrice)
+        float mVal = na
+        float dVal = na
+        
+        if closePrice >= state.openPrice // Bullish or doji
+            mVal := state.openPrice - state.lowPrice
+            dVal := state.highPrice - state.openPrice
+        else // Bearish
+            mVal := state.highPrice - state.openPrice
+            dVal := state.openPrice - state.lowPrice
+        
+        if not na(mVal)
+            array.push(state.mHistory, mVal)
+            array.push(state.dHistory, dVal)
+            
+            // Calculate and store manipulation and distribution times
+            [mt, dt] = calculateManipulationDistributionTimes(state.openPrice, state.highPrice, state.lowPrice, closePrice, state.highTime, state.lowTime, state.startTime)
+            if not na(mt) and not na(dt)
+                array.push(state.mtHistory, mt)
+                array.push(state.dtHistory, dt)
+            
+            // Maintain history size
+            maxHistory = 100
+            if array.size(state.mHistory) > maxHistory
+                array.shift(state.mHistory)
+            if array.size(state.dHistory) > maxHistory
+                array.shift(state.dHistory)
+            if array.size(state.mtHistory) > maxHistory
+                array.shift(state.mtHistory)
+            if array.size(state.dtHistory) > maxHistory
+                array.shift(state.dtHistory)
+
+// ==========================================
+// SESSION MANAGEMENT
+// ==========================================
+
+// @function Initialize a new session configuration
+// @param name Session name
+// @param timeSpec Time specification (e.g., "09:30-16:00")
+// @param enabled Whether session is enabled
+// @param endHour Session end hour
+// @param endMinute Session end minute
+// @param isMacroSession Whether this is a macro session
+// @returns SessionConfig object
+export newSessionConfig(string name, string timeSpec, bool enabled, int endHour, int endMinute, bool isMacroSession = false) =>
+    SessionConfig.new(name, timeSpec, enabled, endHour, endMinute, int(getSessionLength(timeSpec)), isMacroSession)
+
+// @function Initialize a new session state
+// @returns SessionState object
+export newSessionState() =>
+    SessionState.new(mHistory = array.new<float>(), dHistory = array.new<float>(), mtHistory = array.new<int>(), dtHistory = array.new<int>())
+
+// @function Update session state on each bar
+// @param state SessionState to update
+// @param config SessionConfig for the session
+// @param timezone Session timezone
+// @returns Updated SessionState
+export updateSession(SessionState state, SessionConfig config, string timezone = "America/New_York") =>
+    prevActive = state.isActive // State from the absolute end of the previous bar's processing
+    
+    // Determine if the current time conceptually falls within the session's HH:MM window
+    candidateActive = config.enabled and isInSession(config.timeSpec, timezone)
+    
+    // Don't start new sessions on Saturday if it wasn't already active
+    // (This might need adjustment for weekly sessions starting/ending on Saturday)
+    if config.timeSpec != "SUN18:00-SUN18:00" and dayofweek(time, timezone) == dayofweek.saturday and not prevActive
+        candidateActive := false
+    
+    // Additional check for monthly sessions: don't start on a weekend if it's the 1st day of the month.
+    // The main isInSession for monthly returns true to define the overall window.
+    // updateSession fine-tunes if the *very first bar* can start.
+    if str.startswith(config.timeSpec, "MONTHLY") and dayofmonth(time, timezone) == 1 and 
+       (dayofweek(time, timezone) == dayofweek.saturday or dayofweek(time, timezone) == dayofweek.sunday) and 
+       not prevActive
+        candidateActive := false
+    
+    state.wasActive := prevActive // Record state before current bar's logic might change it
+    
+    currentCalculatedIsActive = candidateActive // Tentative active state for this bar based on window
+
+    // If a previously active session instance's specific endTime is reached or passed, it must end.
+    if prevActive and not na(state.endTime) and time >= state.endTime
+        currentCalculatedIsActive := false // Force end of this specific session instance
+
+    state.isActive := currentCalculatedIsActive
+    state.isFirstBar := state.isActive and not state.wasActive
+    
+    // Initialize session on first bar of a new instance
+    if state.isFirstBar
+        state.startTime := time
+        // Pass timeSpec to getSessionEndTime for more robust type handling
+        state.endTime := getSessionEndTime(time, config.endHour, config.endMinute, config.timeSpec, timezone)
+        state.openPrice := open
+        state.highPrice := high
+        state.lowPrice := low
+        state.highTime := time
+        state.lowTime := time
+        
+        // Reset cycle states
+        state.a1_highWick := high
+        state.a1_lowWick := low
+        state.a1_highBody := math.max(open, close)
+        state.a1_lowBody := math.min(open, close)
+        state.a1_wickHit := false
+        state.a1_bodyHit := false
+        
+        // Reset chained cycles
+        state.a2_active := false
+        state.a2_hit := false
+        state.a3_active := false
+        state.a3_hit := false
+        state.a4_active := false
+        state.a4_hit := false
+        state.a5_active := false
+        state.a5_hit := false
+        
+        // Reset M2 cycle
+        state.m2_active := false
+        state.m2_hit := false
+        
+        // Reset C-cycles
+        state.c2_wickHit := false
+        state.c2_bodyHit := false
+        state.c3_wickHit := false
+        state.c3_bodyHit := false
+        state.c4_wickHit := false
+        state.c4_bodyHit := false
+        
+        // Reset X-cycles
+        state.x_wickHit := false
+        state.x_bodyHit := false
+        
+        // Reset C2 extensions
+        state.c2_boundTop := na
+        state.c2_boundBottom := na
+        state.c2_extLowerActive := false
+        state.c2_extUpperActive := false
+        state.c2_extLowerExtreme := na
+        state.c2_extUpperExtreme := na
+        state.c2_extLowerStartTime := na
+        state.c2_extUpperStartTime := na
+        
+        // Reset C2 body extensions
+        state.c2_bodyBoundTop := na
+        state.c2_bodyBoundBottom := na
+        state.c2_bodyExtLowerActive := false
+        state.c2_bodyExtUpperActive := false
+        state.c2_bodyExtLowerExtreme := na
+        state.c2_bodyExtUpperExtreme := na
+        state.c2_bodyExtLowerStartTime := na
+        state.c2_bodyExtUpperStartTime := na
+        
+        // Reset FVG states
+        state.fvg_firstBullPlottedInSession := false
+        state.fvg_firstBearPlottedInSession := false
+        state.c2_ext_firstFvgBullPlotted := false
+        state.c2_ext_firstFvgBearPlotted := false
+        state.session_bullFvgPlottedOverallContext := false
+        state.session_bearFvgPlottedOverallContext := false
+        state.c2ext_bullFvgPlottedOverallContext := false
+        state.c2ext_bearFvgPlottedOverallContext := false
+        
+        // Reset C2 extension boxes and ghost lines
+        box.delete(state.c2_extLowerBox)
+        box.delete(state.c2_extUpperBox)
+        state.c2_extLowerBox := na
+        state.c2_extUpperBox := na
+        
+        line.delete(state.c2_extLimitLowerGhost)
+        line.delete(state.c2_extLimitUpperGhost)
+        state.c2_extLimitLowerGhost := na
+        state.c2_extLimitUpperGhost := na
+        
+        // Reset ghost projection lines
+        line.delete(state.a1_ghostUp)
+        line.delete(state.a1_ghostDown)
+        line.delete(state.c2_ghostUp)
+        line.delete(state.c2_ghostDown)
+        line.delete(state.c3_ghostUp)
+        line.delete(state.c3_ghostDown)
+        line.delete(state.c4_ghostUp)
+        line.delete(state.c4_ghostDown)
+        state.a1_ghostUp := na
+        state.a1_ghostDown := na
+        state.c2_ghostUp := na
+        state.c2_ghostDown := na
+        state.c3_ghostUp := na
+        state.c3_ghostDown := na
+        state.c4_ghostUp := na
+        state.c4_ghostDown := na
+        
+        // Reset X ghost projection lines
+        line.delete(state.x_ghostUp)
+        line.delete(state.x_ghostDown)
+        state.x_ghostUp := na
+        state.x_ghostDown := na
+        
+        // Reset A2-A5 ghost projection lines
+        line.delete(state.a2_ghostUp)
+        line.delete(state.a2_ghostDown)
+        line.delete(state.a3_ghostUp)
+        line.delete(state.a3_ghostDown)
+        line.delete(state.a4_ghostUp)
+        line.delete(state.a4_ghostDown)
+        line.delete(state.a5_ghostUp)
+        line.delete(state.a5_ghostDown)
+        state.a2_ghostUp := na
+        state.a2_ghostDown := na
+        state.a3_ghostUp := na
+        state.a3_ghostDown := na
+        state.a4_ghostUp := na
+        state.a4_ghostDown := na
+        state.a5_ghostUp := na
+        state.a5_ghostDown := na
+        
+        // Reset M2 ghost projection lines
+        line.delete(state.m2_ghostUp)
+        line.delete(state.m2_ghostDown)
+        state.m2_ghostUp := na
+        state.m2_ghostDown := na
+        
+        // Reset ghost projection labels
+        label.delete(state.a1_ghostUpLabel)
+        label.delete(state.a1_ghostDownLabel)
+        label.delete(state.c2_ghostUpLabel)
+        label.delete(state.c2_ghostDownLabel)
+        label.delete(state.c3_ghostUpLabel)
+        label.delete(state.c3_ghostDownLabel)
+        label.delete(state.c4_ghostUpLabel)
+        label.delete(state.c4_ghostDownLabel)
+        label.delete(state.x_ghostUpLabel)
+        label.delete(state.x_ghostDownLabel)
+        label.delete(state.a2_ghostUpLabel)
+        label.delete(state.a2_ghostDownLabel)
+        label.delete(state.a3_ghostUpLabel)
+        label.delete(state.a3_ghostDownLabel)
+        label.delete(state.a4_ghostUpLabel)
+        label.delete(state.a4_ghostDownLabel)
+        label.delete(state.a5_ghostUpLabel)
+        label.delete(state.a5_ghostDownLabel)
+        label.delete(state.m2_ghostUpLabel)
+        label.delete(state.m2_ghostDownLabel)
+        label.delete(state.c2_extLimitUpperLabel)
+        label.delete(state.c2_extLimitLowerLabel)
+        
+        state.a1_ghostUpLabel := na
+        state.a1_ghostDownLabel := na
+        state.c2_ghostUpLabel := na
+        state.c2_ghostDownLabel := na
+        state.c3_ghostUpLabel := na
+        state.c3_ghostDownLabel := na
+        state.c4_ghostUpLabel := na
+        state.c4_ghostDownLabel := na
+        state.x_ghostUpLabel := na
+        state.x_ghostDownLabel := na
+        state.a2_ghostUpLabel := na
+        state.a2_ghostDownLabel := na
+        state.a3_ghostUpLabel := na
+        state.a3_ghostDownLabel := na
+        state.a4_ghostUpLabel := na
+        state.a4_ghostDownLabel := na
+        state.a5_ghostUpLabel := na
+        state.a5_ghostDownLabel := na
+        state.m2_ghostUpLabel := na
+        state.m2_ghostDownLabel := na
+        state.c2_extLimitUpperLabel := na
+        state.c2_extLimitLowerLabel := na
+        
+        // Calculate targets from historical data
+        calculateTargets(state, config.name)
+    
+    // Update extremes during active session
+    if state.isActive
+        if high >= state.highPrice or na(state.highPrice)
+            state.highPrice := high
+            state.highTime := time
+        if low <= state.lowPrice or na(state.lowPrice)
+            state.lowPrice := low
+            state.lowTime := time
+        
+        // Update A1 ranges
+        state.a1_highWick := math.max(state.a1_highWick, high)
+        state.a1_lowWick := math.min(state.a1_lowWick, low)
+        currBodyHigh = math.max(open, close)
+        currBodyLow = math.min(open, close)
+        state.a1_highBody := math.max(state.a1_highBody, currBodyHigh)
+        state.a1_lowBody := math.min(state.a1_lowBody, currBodyLow)
+    
+    // Store session data when session ends
+    if state.wasActive and not state.isActive
+        storeSessionData(state, close[1])
+    
+    state
+
+// ==========================================
+// CYCLE DETECTION
+// ==========================================
+
+// @function Detect A1 cycle hit
+// @param state SessionState to check
+// @returns CycleResult for A1 cycle
+export detectA1Cycle(SessionState state) =>
+    result = CycleResult.new()
+    
+    if not state.a1_wickHit and not na(state.targetA1)
+        wickRange = state.a1_highWick - state.a1_lowWick
+        if wickRange >= state.targetA1
+            result.hit := true
+            result.hitTime := time
+            
+            // Determine anchoring direction
+            if low < (state[1]).a1_lowWick and state.a1_highWick - low >= state.targetA1
+                result.anchorDirection := "down"
+                result.topPrice := state.a1_highWick
+                result.bottomPrice := state.a1_highWick - state.targetA1
+            else if high > (state[1]).a1_highWick and high - state.a1_lowWick >= state.targetA1
+                result.anchorDirection := "up"
+                result.bottomPrice := state.a1_lowWick
+                result.topPrice := state.a1_lowWick + state.targetA1
+            else
+                result.anchorDirection := "up"
+                result.bottomPrice := state.a1_lowWick
+                result.topPrice := state.a1_lowWick + state.targetA1
+    
+    result
+
+// @function Detect C2 cycle hit
+// @param state SessionState to check
+// @param prevA1High Previous A1 high wick value (before current bar update)
+// @param prevA1Low Previous A1 low wick value (before current bar update)
+// @returns CycleResult for C2 cycle
+export detectC2Cycle(SessionState state, float prevA1High = na, float prevA1Low = na) =>
+    result = CycleResult.new()
+    
+    if not state.c2_wickHit and not na(state.targetC2)
+        wickRange = state.a1_highWick - state.a1_lowWick
+        if wickRange >= state.targetC2
+            result.hit := true
+            result.hitTime := time
+            
+            // Default anchor from high (consistent with other cycles if no specific extension happens first)
+            float boxTopC2 = state.a1_highWick
+            float boxBottomC2 = state.a1_highWick - state.targetC2
+            
+            // Use previous A1 values for directional detection (like original)
+            float _prevHi = na(prevA1High) ? state.a1_highWick : prevA1High
+            float _prevLo = na(prevA1Low) ? state.a1_lowWick : prevA1Low
+            
+            // Check if range extended downward first
+            if low < _prevLo and state.a1_highWick - low >= state.targetC2
+                boxTopC2 := state.a1_highWick
+                boxBottomC2 := state.a1_highWick - state.targetC2
+            // Check if range extended upward first (else if to prioritize downward trigger)
+            else if high > _prevHi and high - state.a1_lowWick >= state.targetC2
+                boxBottomC2 := state.a1_lowWick
+                boxTopC2 := state.a1_lowWick + state.targetC2
+            
+            result.topPrice := boxTopC2
+            result.bottomPrice := boxBottomC2
+            
+            // Store C2 bounds for extension tracking
+            state.c2_boundTop := boxTopC2
+            state.c2_boundBottom := boxBottomC2
+    
+    result
+
+// @function Detect C3 cycle hit
+// @param state SessionState to check
+// @returns CycleResult for C3 cycle
+export detectC3Cycle(SessionState state) =>
+    result = CycleResult.new()
+    
+    if not state.c3_wickHit and not na(state.targetC3)
+        wickRange = state.a1_highWick - state.a1_lowWick
+        if wickRange >= state.targetC3
+            result.hit := true
+            result.hitTime := time
+            result.topPrice := state.a1_highWick
+            result.bottomPrice := state.a1_highWick - state.targetC3
+    
+    result
+
+// @function Detect C4 cycle hit
+// @param state SessionState to check
+// @returns CycleResult for C4 cycle
+export detectC4Cycle(SessionState state) =>
+    result = CycleResult.new()
+    
+    if not state.c4_wickHit and not na(state.targetC4)
+        wickRange = state.a1_highWick - state.a1_lowWick
+        if wickRange >= state.targetC4
+            result.hit := true
+            result.hitTime := time
+            result.topPrice := state.a1_highWick
+            result.bottomPrice := state.a1_highWick - state.targetC4
+    
+    result
+
+// @function Detect X cycle hit (A1 + C2)
+// @param state SessionState to check
+// @returns CycleResult for X cycle
+export detectXCycle(SessionState state) =>
+    result = CycleResult.new()
+    
+    if not state.x_wickHit and not na(state.targetX)
+        wickRange = state.a1_highWick - state.a1_lowWick
+        if wickRange >= state.targetX
+            result.hit := true
+            result.hitTime := time
+            result.topPrice := state.a1_highWick
+            result.bottomPrice := state.a1_highWick - state.targetX
+    
+    result
+
+// Helper functions for chained cycles
+updateA2Cycle(SessionState state, float targetSize) =>
+    // Activate A2 if A1 was hit
+    if not state.a2_active and state.a1_wickHit
+        state.a2_active := true
+        state.a2_startTime := time
+        state.a2_high := high
+        state.a2_low := low
+    
+    // Update A2 range while active
+    if state.a2_active and not state.a2_hit
+        state.a2_high := math.max(state.a2_high, high)
+        state.a2_low := math.min(state.a2_low, low)
+        
+        if state.a2_high - state.a2_low >= targetSize
+            state.a2_hit := true
+            state.a2_active := false
+            true
+        else
+            false
+    else
+        false
+
+updateA3Cycle(SessionState state, float targetSize) =>
+    // Activate A3 if A2 was hit
+    if not state.a3_active and state.a2_hit
+        state.a3_active := true
+        state.a3_startTime := time
+        state.a3_high := high
+        state.a3_low := low
+    
+    if state.a3_active and not state.a3_hit
+        state.a3_high := math.max(state.a3_high, high)
+        state.a3_low := math.min(state.a3_low, low)
+        
+        if state.a3_high - state.a3_low >= targetSize
+            state.a3_hit := true
+            state.a3_active := false
+            true
+        else
+            false
+    else
+        false
+
+updateA4Cycle(SessionState state, float targetSize) =>
+    // Activate A4 if A3 was hit
+    if not state.a4_active and state.a3_hit
+        state.a4_active := true
+        state.a4_startTime := time
+        state.a4_high := high
+        state.a4_low := low
+    
+    if state.a4_active and not state.a4_hit
+        state.a4_high := math.max(state.a4_high, high)
+        state.a4_low := math.min(state.a4_low, low)
+        
+        if state.a4_high - state.a4_low >= targetSize
+            state.a4_hit := true
+            state.a4_active := false
+            true
+        else
+            false
+    else
+        false
+
+updateA5Cycle(SessionState state, float targetSize) =>
+    // Activate A5 if A4 was hit
+    if not state.a5_active and state.a4_hit
+        state.a5_active := true
+        state.a5_startTime := time
+        state.a5_high := high
+        state.a5_low := low
+    
+    // Update A5 range while active
+    if state.a5_active and not state.a5_hit
+        state.a5_high := math.max(state.a5_high, high)
+        state.a5_low := math.min(state.a5_low, low)
+        
+        if state.a5_high - state.a5_low >= targetSize
+            state.a5_hit := true
+            state.a5_active := false
+            true
+        else
+            false
+    else
+        false
+
+updateM2Cycle(SessionState state, float targetSize) =>
+    // Activate M2 if C2 was hit
+    if not state.m2_active and state.c2_wickHit
+        state.m2_active := true
+        state.m2_startTime := time
+        state.m2_high := high
+        state.m2_low := low
+    
+    // Update M2 range while active
+    if state.m2_active and not state.m2_hit
+        state.m2_high := math.max(state.m2_high, high)
+        state.m2_low := math.min(state.m2_low, low)
+        
+        if state.m2_high - state.m2_low >= targetSize
+            state.m2_hit := true
+            state.m2_active := false
+            true
+        else
+            false
+    else
+        false
+
+// @function Update chained cycle (A2-A5)
+// @param state SessionState to update
+// @param cycleNum Cycle number (2-5)
+// @param targetSize Target size for the cycle
+// @returns True if cycle was hit on this bar
+export updateChainedCycle(SessionState state, int cycleNum, float targetSize) =>
+    switch cycleNum
+        2 => updateA2Cycle(state, targetSize)
+        3 => updateA3Cycle(state, targetSize)
+        4 => updateA4Cycle(state, targetSize)
+        5 => updateA5Cycle(state, targetSize)
+        => false
+
+// @function Update chained cycle (A2-A5) with proper state management
+// @param state SessionState to update
+// @param cycleNum Cycle number (2-5)
+// @param targetSize Target size for the cycle
+// @param multiplier Size multiplier (for A5)
+// @returns True if cycle was hit on this bar
+export updateChainedCycleWithMultiplier(SessionState state, int cycleNum, float targetSize, float multiplier = 1.0) =>
+    actualTargetSize = cycleNum == 5 ? targetSize * multiplier : targetSize
+    
+    switch cycleNum
+        2 => updateA2Cycle(state, actualTargetSize)
+        3 => updateA3Cycle(state, actualTargetSize)
+        4 => updateA4Cycle(state, actualTargetSize)
+        5 => updateA5Cycle(state, actualTargetSize)
+        => false
+
+// @function Update M2 cycle (chained from C2)
+// @param state SessionState to update
+// @param targetSize Target size for the cycle (typically C2 target)
+// @param multiplier Size multiplier for M2
+// @returns True if cycle was hit on this bar
+export updateM2CycleWithMultiplier(SessionState state, float targetSize, float multiplier = 1.0) =>
+    actualTargetSize = targetSize * multiplier
+    updateM2Cycle(state, actualTargetSize)
+
+// ==========================================
+// C2 EXTENSION TRACKING (DELTA PREMIUM/DISCOUNT)
+// ==========================================
+
+// @function Track C2 extensions (Delta Premium/Discount)
+// @param state SessionState to update
+// @param showExtensions Whether to show extension boxes
+// @returns ExtensionResult with extension data
+export trackC2Extensions(SessionState state, bool showExtensions = true) =>
+    result = ExtensionResult.new()
+    extensionUpdated = false
+    
+    if showExtensions and state.c2_wickHit and not na(state.c2_boundTop) and not na(state.c2_boundBottom)
+        // Track lower extension (Delta Discount)
+        if low < state.c2_boundBottom
+            if not state.c2_extLowerActive
+                state.c2_extLowerActive := true
+                state.c2_extLowerStartTime := time
+                state.c2_extLowerExtreme := low
+                extensionUpdated := true
+            else
+                state.c2_extLowerExtreme := math.min(state.c2_extLowerExtreme, low)
+                extensionUpdated := true
+        
+        // Track upper extension (Delta Premium)
+        if high > state.c2_boundTop
+            if not state.c2_extUpperActive
+                state.c2_extUpperActive := true
+                state.c2_extUpperStartTime := time
+                state.c2_extUpperExtreme := high
+                extensionUpdated := true
+            else
+                state.c2_extUpperExtreme := math.max(state.c2_extUpperExtreme, high)
+                extensionUpdated := true
+    
+    result.updated := extensionUpdated
+    result.lowerActive := state.c2_extLowerActive
+    result.upperActive := state.c2_extUpperActive
+    result.lowerExtreme := state.c2_extLowerExtreme
+    result.upperExtreme := state.c2_extUpperExtreme
+    
+    result
+
+// @function Track C2 body extensions
+// @param state SessionState to update
+// @param showExtensions Whether to show extension boxes
+// @returns ExtensionResult with body extension data
+export trackC2BodyExtensions(SessionState state, bool showExtensions = true) =>
+    result = ExtensionResult.new()
+    extensionUpdated = false
+    
+    if showExtensions and state.c2_bodyHit and not na(state.c2_bodyBoundTop) and not na(state.c2_bodyBoundBottom)
+        // Track lower body extension
+        if low < state.c2_bodyBoundBottom
+            if not state.c2_bodyExtLowerActive
+                state.c2_bodyExtLowerActive := true
+                state.c2_bodyExtLowerStartTime := time
+                state.c2_bodyExtLowerExtreme := low
+                extensionUpdated := true
+            else
+                state.c2_bodyExtLowerExtreme := math.min(state.c2_bodyExtLowerExtreme, low)
+                extensionUpdated := true
+        
+        // Track upper body extension
+        if high > state.c2_bodyBoundTop
+            if not state.c2_bodyExtUpperActive
+                state.c2_bodyExtUpperActive := true
+                state.c2_bodyExtUpperStartTime := time
+                state.c2_bodyExtUpperExtreme := high
+                extensionUpdated := true
+            else
+                state.c2_bodyExtUpperExtreme := math.max(state.c2_bodyExtUpperExtreme, high)
+                extensionUpdated := true
+    
+    result.updated := extensionUpdated
+    result.lowerActive := state.c2_bodyExtLowerActive
+    result.upperActive := state.c2_bodyExtUpperActive
+    result.lowerExtreme := state.c2_bodyExtLowerExtreme
+    result.upperExtreme := state.c2_bodyExtUpperExtreme
+    
+    result
+
+// ==========================================
+// FVG UTILITY FUNCTIONS  
+// ==========================================
+
+// @function Calculate candle duration in milliseconds (from original OG GHOST V1)
+// @param isLtf Whether using lower timeframe
+// @param ltfRes Lower timeframe resolution string  
+// @param chartTfPeriod Chart timeframe period
+// @returns Duration in milliseconds
+export getCandleDurationMs(bool isLtf, string ltfRes, string chartTfPeriod) =>
+    float durationMs = na
+    if isLtf
+        if ltfRes == "1"
+            durationMs := 60 * 1000
+        else if ltfRes == "15S"
+            durationMs := 15 * 1000
+        else if ltfRes != ""
+            durationMs := timeframe.in_seconds(ltfRes) * 1000
+            if durationMs == 0
+                durationMs := 60000
+        else
+            durationMs := timeframe.in_seconds(chartTfPeriod) * 1000
+    else
+        durationMs := timeframe.in_seconds(chartTfPeriod) * 1000
+    durationMs
+
+// ==========================================
+// FVG DETECTION
+// ==========================================
+
+// @function Detect Fair Value Gaps
+// @param minTickSize Minimum FVG size in ticks
+// @returns FVGResult with detection data
+export detectFVG(int minTickSize = 4) =>
+    result = FVGResult.new()
+    
+    if bar_index >= 2
+        minTickActualSize = syminfo.mintick * minTickSize
+        
+        // Bullish FVG (BISI - Buy Side Imbalance Sell Side Inefficiency)
+        if not na(high[2]) and low > high[2] and (low - high[2]) >= minTickActualSize
+            result.bullishDetected := true
+            result.bullTop := low
+            result.bullBottom := high[2]
+        
+        // Bearish FVG (SIBI - Sell Side Imbalance Buy Side Inefficiency)
+        if not na(low[2]) and high < low[2] and (low[2] - high) >= minTickActualSize
+            result.bearishDetected := true
+            result.bearTop := low[2]
+            result.bearBottom := high
+    
+    result
+
+// @function Check if FVG is within C2 extension
+// @param state SessionState to check
+// @param fvgTop FVG top price
+// @param fvgBottom FVG bottom price
+// @param isLowerExtension Whether to check lower extension
+// @returns True if FVG is within the specified C2 extension
+export isFVGInC2Extension(SessionState state, float fvgTop, float fvgBottom, bool isLowerExtension) =>
+    if isLowerExtension and state.c2_extLowerActive and not na(state.c2_extLowerExtreme) and not na(state.c2_boundBottom)
+        fvgBottom < state.c2_boundBottom and fvgTop > state.c2_extLowerExtreme
+    else if not isLowerExtension and state.c2_extUpperActive and not na(state.c2_extUpperExtreme) and not na(state.c2_boundTop)
+        fvgTop > state.c2_boundTop and fvgBottom < state.c2_extUpperExtreme
+    else
+        false
+
+// @function Enhanced FVG detection with session context and "Overall Type" logic
+// @param state SessionState for session-based tracking
+// @param minTickSize Minimum FVG size in ticks
+// @param showOnlyFirstInSession Only show first FVG in session
+// @param showOnlyFirstInC2Ext Only show first FVG in C2 extension
+// @param showFirstTypeOverall Overall type toggle (from original OG GHOST V1)
+// @returns FVGResult with enhanced detection data
+export detectSessionFVG(SessionState state, int minTickSize = 4, bool showOnlyFirstInSession = true, bool showOnlyFirstInC2Ext = true, bool showFirstTypeOverall = false) =>
+    result = FVGResult.new()
+    
+    if bar_index >= 2 and state.isActive
+        minTickActualSize = syminfo.mintick * minTickSize
+        
+        // Bullish FVG Detection (BISI - Buy Side Imbalance Sell Side Inefficiency)
+        if not na(high[2]) and low > high[2] and (low - high[2]) >= minTickActualSize
+            canPlotBullSession = false
+            canPlotBullC2Ext = false
+            
+            // Session FVG Logic (enhanced from original)
+            if showOnlyFirstInSession
+                if showFirstTypeOverall
+                    if not state.session_bearFvgPlottedOverallContext and not state.fvg_firstBullPlottedInSession
+                        canPlotBullSession := true
+                        state.fvg_firstBullPlottedInSession := true
+                        state.session_bullFvgPlottedOverallContext := true
+                else
+                    if not state.fvg_firstBullPlottedInSession
+                        canPlotBullSession := true
+                        state.fvg_firstBullPlottedInSession := true
+            
+            // C2 Extension FVG Logic
+            isInLowerExt = isFVGInC2Extension(state, low, high[2], true)
+            isInUpperExt = isFVGInC2Extension(state, low, high[2], false)
+            
+            if (isInLowerExt or isInUpperExt) and time > (isInLowerExt ? state.c2_extLowerStartTime : state.c2_extUpperStartTime)
+                if showOnlyFirstInC2Ext
+                    if showFirstTypeOverall
+                        if not state.c2ext_bearFvgPlottedOverallContext and not state.c2_ext_firstFvgBullPlotted
+                            canPlotBullC2Ext := true
+                    else
+                        if not state.c2_ext_firstFvgBullPlotted
+                            canPlotBullC2Ext := true
+                else
+                    if showFirstTypeOverall
+                        if not state.c2ext_bearFvgPlottedOverallContext
+                            canPlotBullC2Ext := true
+                    else
+                        canPlotBullC2Ext := true
+                
+                if canPlotBullC2Ext
+                    if showOnlyFirstInC2Ext
+                        state.c2_ext_firstFvgBullPlotted := true
+                    if showFirstTypeOverall
+                        state.c2ext_bullFvgPlottedOverallContext := true
+            
+            if canPlotBullSession or canPlotBullC2Ext
+                result.bullishDetected := true
+                result.bullTop := low
+                result.bullBottom := high[2]
+        
+        // Bearish FVG Detection (SIBI - Sell Side Imbalance Buy Side Inefficiency)
+        if not na(low[2]) and high < low[2] and (low[2] - high) >= minTickActualSize
+            canPlotBearSession = false
+            canPlotBearC2Ext = false
+            
+            // Session FVG Logic (enhanced from original)
+            if showOnlyFirstInSession
+                if showFirstTypeOverall
+                    if not state.session_bullFvgPlottedOverallContext and not state.fvg_firstBearPlottedInSession
+                        canPlotBearSession := true
+                        state.fvg_firstBearPlottedInSession := true
+                        state.session_bearFvgPlottedOverallContext := true
+                else
+                    if not state.fvg_firstBearPlottedInSession
+                        canPlotBearSession := true
+                        state.fvg_firstBearPlottedInSession := true
+            
+            // C2 Extension FVG Logic
+            isInLowerExt = isFVGInC2Extension(state, low[2], high, true)
+            isInUpperExt = isFVGInC2Extension(state, low[2], high, false)
+            
+            if (isInLowerExt or isInUpperExt) and time > (isInLowerExt ? state.c2_extLowerStartTime : state.c2_extUpperStartTime)
+                if showOnlyFirstInC2Ext
+                    if showFirstTypeOverall
+                        if not state.c2ext_bullFvgPlottedOverallContext and not state.c2_ext_firstFvgBearPlotted
+                            canPlotBearC2Ext := true
+                    else
+                        if not state.c2_ext_firstFvgBearPlotted
+                            canPlotBearC2Ext := true
+                else
+                    if showFirstTypeOverall
+                        if not state.c2ext_bullFvgPlottedOverallContext
+                            canPlotBearC2Ext := true
+                    else
+                        canPlotBearC2Ext := true
+                
+                if canPlotBearC2Ext
+                    if showOnlyFirstInC2Ext
+                        state.c2_ext_firstFvgBearPlotted := true
+                    if showFirstTypeOverall
+                        state.c2ext_bearFvgPlottedOverallContext := true
+            
+            if canPlotBearSession or canPlotBearC2Ext
+                result.bearishDetected := true
+                result.bearTop := low[2]
+                result.bearBottom := high
+    
+    result
+
+// @function Create FVG box with enhanced styling and coordinates (from original OG GHOST V1)
+// @param fvgResult FVGResult with FVG data
+// @param state SessionState for context
+// @param extendBoxes Whether to extend boxes
+// @param bullColor Bullish FVG color
+// @param bearColor Bearish FVG color
+// @param c2ExtBullFillColor C2 extension bullish fill color
+// @param c2ExtBullBorderColor C2 extension bullish border color
+// @param c2ExtBearFillColor C2 extension bearish fill color
+// @param c2ExtBearBorderColor C2 extension bearish border color
+// @param isLtf Whether using lower timeframe detection
+// @param ltfRes Lower timeframe resolution
+// @returns Array of created boxes [bullBox, bearBox]
+export createFVGBoxes(FVGResult fvgResult, SessionState state, bool extendBoxes = true, color bullColor = color.green, color bearColor = color.red, color c2ExtBullFillColor = color.blue, color c2ExtBullBorderColor = color.blue, color c2ExtBearFillColor = color.orange, color c2ExtBearBorderColor = color.orange, bool isLtf = false, string ltfRes = "") =>
+    var array<box> fvgBoxes = array.new<box>()
+    array.clear(fvgBoxes)
+    
+    // Enhanced coordinate calculation using candle duration utility
+    candleDurationMs = getCandleDurationMs(isLtf, ltfRes, timeframe.period)
+    defaultBoxEndTime = time + int(candleDurationMs)
+    
+    // Determine box coordinates (enhanced from original)
+    boxStartTime = time
+    boxEndTime = defaultBoxEndTime
+    extendType = extend.none
+    
+    if extendBoxes
+        extendType := extend.right
+    else
+        // Use session end time if available and in future
+        if not na(state.endTime) and state.endTime > time
+            boxEndTime := state.endTime
+    
+    // Create bullish FVG box
+    if fvgResult.bullishDetected
+        // Check if in C2 extension for special coloring and border width
+        isInLowerExt = isFVGInC2Extension(state, fvgResult.bullTop, fvgResult.bullBottom, true)
+        isInUpperExt = isFVGInC2Extension(state, fvgResult.bullTop, fvgResult.bullBottom, false)
+        
+        fillColor = bullColor
+        borderColor = bullColor
+        borderWidth = 1
+        
+        if isInLowerExt or isInUpperExt
+            fillColor := c2ExtBullFillColor
+            borderColor := c2ExtBullBorderColor
+            borderWidth := 2  // Enhanced border width for C2 extension FVGs
+        
+        bullBox = box.new(boxStartTime, fvgResult.bullTop, boxEndTime, fvgResult.bullBottom, 
+                         bgcolor = fillColor, border_color = borderColor, border_width = borderWidth,
+                         xloc = xloc.bar_time, extend = extendType)
+        array.push(fvgBoxes, bullBox)
+    
+    // Create bearish FVG box
+    if fvgResult.bearishDetected
+        // Check if in C2 extension for special coloring and border width
+        isInLowerExt = isFVGInC2Extension(state, fvgResult.bearTop, fvgResult.bearBottom, true)
+        isInUpperExt = isFVGInC2Extension(state, fvgResult.bearTop, fvgResult.bearBottom, false)
+        
+        fillColor = bearColor
+        borderColor = bearColor
+        borderWidth = 1
+        
+        if isInLowerExt or isInUpperExt
+            fillColor := c2ExtBearFillColor
+            borderColor := c2ExtBearBorderColor
+            borderWidth := 2  // Enhanced border width for C2 extension FVGs
+        
+        bearBox = box.new(boxStartTime, fvgResult.bearTop, boxEndTime, fvgResult.bearBottom, 
+                         bgcolor = fillColor, border_color = borderColor, border_width = borderWidth,
+                         xloc = xloc.bar_time, extend = extendType)
+        array.push(fvgBoxes, bearBox)
+    
+    fvgBoxes
+
+// @function Check if FVG is mitigated (price has filled the gap)
+// @param fvgTop FVG top price
+// @param fvgBottom FVG bottom price
+// @param isBullish Whether FVG is bullish
+// @returns True if FVG is mitigated
+export isFVGMitigated(float fvgTop, float fvgBottom, bool isBullish) =>
+    if isBullish
+        // Bullish FVG is mitigated when price goes back down into the gap
+        low <= fvgBottom
+    else
+        // Bearish FVG is mitigated when price goes back up into the gap
+        high >= fvgTop
+
+// @function Manage current session FVG boxes - age-based cleanup only (no mitigation)
+// @param fvgBoxes Array of current session FVG boxes to manage
+// @param fvgTops Array of current session FVG top prices
+// @param fvgBottoms Array of current session FVG bottom prices
+// @param fvgTypes Array of current session FVG types (true = bullish, false = bearish)
+// @param fvgTimes Array of current session FVG creation times
+// @param fvgSessionNames Array of current session FVG session names
+// @param fvgDays Array of current session FVG days
+// @param enableMitigation Whether to enable mitigation (optional)
+// @returns void (modifies arrays in place)
+export manageCurrentFVGBoxes(array<box> fvgBoxes, array<float> fvgTops, array<float> fvgBottoms, array<bool> fvgTypes, array<int> fvgTimes, array<string> fvgSessionNames, array<int> fvgDays, bool enableMitigation = false) =>
+    if array.size(fvgBoxes) > 0
+        currentTime = time
+        currentDay = math.floor(time / 86400000)
+        
+        // Check for mitigation and cleanup in reverse order
+        for i = array.size(fvgBoxes) - 1 to 0 by 1
+            if i < array.size(fvgBoxes) and i < array.size(fvgTops) and i < array.size(fvgBottoms) and i < array.size(fvgTypes) and i < array.size(fvgTimes)
+                fvgBox = array.get(fvgBoxes, i)
+                fvgTop = array.get(fvgTops, i)
+                fvgBottom = array.get(fvgBottoms, i)
+                isBullish = array.get(fvgTypes, i)
+                fvgTime = array.get(fvgTimes, i)
+                fvgDay = array.get(fvgDays, i)
+                
+                shouldRemove = false
+                
+                // Check for mitigation (optional)
+                if enableMitigation and isFVGMitigated(fvgTop, fvgBottom, isBullish)
+                    shouldRemove := true
+                
+                // Check if it's from a previous day (should be moved to historical)
+                if fvgDay < currentDay
+                    shouldRemove := true
+                
+                if shouldRemove
+                    if not na(fvgBox)
+                        box.delete(fvgBox)
+                    array.remove(fvgBoxes, i)
+                    array.remove(fvgTops, i)
+                    array.remove(fvgBottoms, i)
+                    array.remove(fvgTypes, i)
+                    array.remove(fvgTimes, i)
+                    if i < array.size(fvgSessionNames)
+                        array.remove(fvgSessionNames, i)
+                    if i < array.size(fvgDays)
+                        array.remove(fvgDays, i)
+
+// @function Manage historical FVG boxes - day-based cleanup
+// @param historicalFVGBoxes Array of historical FVG boxes
+// @param historicalFVGTops Array of historical FVG top prices  
+// @param historicalFVGBottoms Array of historical FVG bottom prices
+// @param historicalFVGTypes Array of historical FVG types
+// @param historicalFVGTimes Array of historical FVG creation times
+// @param historicalFVGSessionNames Array of historical FVG session names
+// @param historicalFVGDays Array of historical FVG days
+// @param historicalFVGOriginalColors Array of historical FVG original colors
+// @param maxDays Maximum days to keep historical FVGs
+// @param fadeByAge Whether to fade FVGs by age
+// @param keepOriginalColors Whether to keep original colors
+// @param historicalTransparency Base transparency for historical FVGs
+// @returns void (modifies arrays in place)
+export manageHistoricalFVGBoxes(array<box> historicalFVGBoxes, array<float> historicalFVGTops, array<float> historicalFVGBottoms, array<bool> historicalFVGTypes, array<int> historicalFVGTimes, array<string> historicalFVGSessionNames, array<int> historicalFVGDays, array<color> historicalFVGOriginalColors, int maxDays = 3, bool fadeByAge = true, bool keepOriginalColors = false, int historicalTransparency = 70) =>
+    if array.size(historicalFVGBoxes) > 0
+        currentDay = math.floor(time / 86400000)
+        
+        // Cleanup old historical FVGs
+        for i = array.size(historicalFVGBoxes) - 1 to 0 by 1
+            if i >= 0 and i < array.size(historicalFVGDays) and i < array.size(historicalFVGBoxes)
+                fvgDay = array.get(historicalFVGDays, i)
+                dayAge = currentDay - fvgDay
+                
+                // Remove if too old
+                if dayAge > maxDays
+                    fvgBox = array.get(historicalFVGBoxes, i)
+                    if not na(fvgBox)
+                        box.delete(fvgBox)
+                    array.remove(historicalFVGBoxes, i)
+                    array.remove(historicalFVGTops, i)
+                    array.remove(historicalFVGBottoms, i)
+                    array.remove(historicalFVGTypes, i)
+                    array.remove(historicalFVGTimes, i)
+                    array.remove(historicalFVGSessionNames, i)
+                    array.remove(historicalFVGDays, i)
+                    array.remove(historicalFVGOriginalColors, i)
+        
+        // Update colors based on age if fade enabled
+        if fadeByAge and array.size(historicalFVGBoxes) > 0
+            for i = 0 to array.size(historicalFVGBoxes) - 1 by 1
+                if i < array.size(historicalFVGBoxes) and i < array.size(historicalFVGDays) and i < array.size(historicalFVGOriginalColors)
+                    fvgBox = array.get(historicalFVGBoxes, i)
+                    fvgDay = array.get(historicalFVGDays, i)
+                    dayAge = currentDay - fvgDay
+                    
+                    if not na(fvgBox) and dayAge >= 0
+                        // Calculate fade transparency (older = more transparent)
+                        fadeAmount = math.min(95, historicalTransparency + dayAge * 15)
+                        // Use original color if keeping original colors, otherwise use gray
+                        baseColor = keepOriginalColors ? array.get(historicalFVGOriginalColors, i) : color.gray
+                        fadedColor = color.new(baseColor, fadeAmount)
+                        box.set_bgcolor(fvgBox, fadedColor)
+                        box.set_border_color(fvgBox, fadedColor)
+
+// @function Store current session FVGs as historical when session ends
+// @param currentFVGBoxes Array of current session FVG boxes
+// @param currentFVGTops Array of current session FVG top prices
+// @param currentFVGBottoms Array of current session FVG bottom prices
+// @param currentFVGTypes Array of current session FVG types
+// @param currentFVGTimes Array of current session FVG creation times
+// @param currentFVGSessionNames Array of current session FVG session names
+// @param currentFVGDays Array of current session FVG days
+// @param currentFVGOriginalColors Array of current session FVG original colors
+// @param historicalFVGBoxes Array to store historical FVG boxes
+// @param historicalFVGTops Array to store historical FVG top prices
+// @param historicalFVGBottoms Array to store historical FVG bottom prices
+// @param historicalFVGTypes Array to store historical FVG types
+// @param historicalFVGTimes Array to store historical FVG creation times
+// @param historicalFVGSessionNames Array to store historical FVG session names
+// @param historicalFVGDays Array to store historical FVG days
+// @param historicalFVGOriginalColors Array to store historical FVG original colors
+// @param sessionName Name of the session ending
+// @param extendBoxes Whether boxes should extend
+// @param historicalTransparency Transparency for historical boxes
+// @returns void (modifies historical arrays)
+export storeFVGsAsHistorical(array<box> currentFVGBoxes, array<float> currentFVGTops, array<float> currentFVGBottoms, array<bool> currentFVGTypes, array<int> currentFVGTimes, array<string> currentFVGSessionNames, array<int> currentFVGDays, array<color> currentFVGOriginalColors, array<box> historicalFVGBoxes, array<float> historicalFVGTops, array<float> historicalFVGBottoms, array<bool> historicalFVGTypes, array<int> historicalFVGTimes, array<string> historicalFVGSessionNames, array<int> historicalFVGDays, array<color> historicalFVGOriginalColors, string sessionName, bool extendBoxes = true, int historicalTransparency = 70) =>
+    
+    currentDay = math.floor(time / 86400000)
+    
+    // Move current session FVGs to historical arrays
+    for i = 0 to array.size(currentFVGBoxes) - 1
+        if i < array.size(currentFVGBoxes) and i < array.size(currentFVGTops) and i < array.size(currentFVGBottoms) and i < array.size(currentFVGTypes) and i < array.size(currentFVGTimes)
+            currentBox = array.get(currentFVGBoxes, i)
+            if not na(currentBox)
+                // Get original properties
+                boxLeft = box.get_left(currentBox)
+                boxTop = box.get_top(currentBox)
+                boxRight = box.get_right(currentBox)
+                boxBottom = box.get_bottom(currentBox)
+                originalColor = i < array.size(currentFVGOriginalColors) ? array.get(currentFVGOriginalColors, i) : color.green
+                
+                // Create historical box with updated properties
+                extendType = extendBoxes ? extend.right : extend.none
+                fadedColor = color.new(originalColor, historicalTransparency)
+                historicalBox = box.new(boxLeft, boxTop, boxRight, boxBottom, 
+                                       bgcolor = fadedColor, border_color = fadedColor, 
+                                       xloc = xloc.bar_time, extend = extendType)
+                
+                // Add to historical arrays
+                array.push(historicalFVGBoxes, historicalBox)
+                array.push(historicalFVGTops, array.get(currentFVGTops, i))
+                array.push(historicalFVGBottoms, array.get(currentFVGBottoms, i))
+                array.push(historicalFVGTypes, array.get(currentFVGTypes, i))
+                array.push(historicalFVGTimes, array.get(currentFVGTimes, i))
+                array.push(historicalFVGSessionNames, sessionName)
+                array.push(historicalFVGDays, currentDay)
+                array.push(historicalFVGOriginalColors, originalColor)
+                
+                // Delete current box
+                box.delete(currentBox)
+    
+    // Clear current arrays
+    array.clear(currentFVGBoxes)
+    array.clear(currentFVGTops)
+    array.clear(currentFVGBottoms)
+    array.clear(currentFVGTypes)
+    array.clear(currentFVGTimes)
+    array.clear(currentFVGSessionNames)
+    array.clear(currentFVGDays)
+    array.clear(currentFVGOriginalColors)
+
+// @function Enhanced FVG engine - detection and box creation with all original features
+// @param state SessionState for session context
+// @param minTickSize Minimum FVG size in ticks
+// @param showOnlyFirstInSession Only show first FVG in session
+// @param showOnlyFirstInC2Ext Only show first FVG in C2 extension
+// @param showFirstTypeOverall Overall type toggle (from original OG GHOST V1)
+// @param extendBoxes Whether to extend boxes
+// @param bullColor Bullish FVG color
+// @param bearColor Bearish FVG color
+// @param c2ExtBullFillColor C2 extension bullish fill color
+// @param c2ExtBullBorderColor C2 extension bullish border color
+// @param c2ExtBearFillColor C2 extension bearish fill color
+// @param c2ExtBearBorderColor C2 extension bearish border color
+// @param isLtf Whether using lower timeframe detection
+// @param ltfRes Lower timeframe resolution
+// @returns FVGResult with current bar detection and created boxes
+export processFVGEngine(SessionState state, int minTickSize = 4, bool showOnlyFirstInSession = true, bool showOnlyFirstInC2Ext = true, bool showFirstTypeOverall = false, bool extendBoxes = true, color bullColor = color.green, color bearColor = color.red, color c2ExtBullFillColor = color.blue, color c2ExtBullBorderColor = color.blue, color c2ExtBearFillColor = color.orange, color c2ExtBearBorderColor = color.orange, bool isLtf = false, string ltfRes = "") =>
+    
+    // Detect new FVGs with enhanced logic
+    fvgResult = detectSessionFVG(state, minTickSize, showOnlyFirstInSession, showOnlyFirstInC2Ext, showFirstTypeOverall)
+    
+    // Create boxes for detected FVGs with enhanced styling
+    if fvgResult.bullishDetected or fvgResult.bearishDetected
+        newBoxes = createFVGBoxes(fvgResult, state, extendBoxes, bullColor, bearColor, c2ExtBullFillColor, c2ExtBullBorderColor, c2ExtBearFillColor, c2ExtBearBorderColor, isLtf, ltfRes)
+    
+    fvgResult
+
+// ==========================================
+// DRAWING UTILITIES
+// ==========================================
+
+// @function Create or update a cycle box
+// @param existingBox Existing box to update (or na to create new)
+// @param left Left coordinate (time)
+// @param top Top price
+// @param right Right coordinate (time)
+// @param bottom Bottom price
+// @param boxColor Box color
+// @returns Box object
+export updateCycleBox(box existingBox, int left, float top, int right, float bottom, color boxColor) =>
+    if na(existingBox)
+        box.new(left, top, right, bottom, bgcolor = boxColor, border_color = boxColor, xloc = xloc.bar_time)
+    else
+        box.set_lefttop(existingBox, left, top)
+        box.set_rightbottom(existingBox, right, bottom)
+        box.set_bgcolor(existingBox, boxColor)
+        box.set_border_color(existingBox, boxColor)
+        existingBox
+
+// @function Create or update a ghost projection line
+// @param existingLine Existing line to update (or na to create new)
+// @param left Left coordinate (time)
+// @param price Price level
+// @param right Right coordinate (time)
+// @param lineColor Line color
+// @param lineStyle Line style
+// @param lineWidth Line width
+// @returns Line object
+export updateGhostLine(line existingLine, int left, float price, int right, color lineColor, string lineStyle = line.style_solid, int lineWidth = 2) =>
+    if na(existingLine)
+        line.new(left, price, right, price, xloc = xloc.bar_time, color = lineColor, style = lineStyle, width = lineWidth)
+    else
+        line.set_xy1(existingLine, left, price)
+        line.set_xy2(existingLine, right, price)
+        line.set_color(existingLine, lineColor)
+        line.set_style(existingLine, lineStyle)
+        line.set_width(existingLine, lineWidth)
+        existingLine
+
+// @function Create or update a ghost projection line with label
+// @param existingLine Existing line to update (or na to create new)
+// @param existingLabel Existing label to update (or na to create new)
+// @param left Left coordinate (time)
+// @param price Price level
+// @param right Right coordinate (time)
+// @param lineColor Line color
+// @param lineStyle Line style
+// @param lineWidth Line width
+// @param showLabel Whether to show the label
+// @param labelText Label text content
+// @param labelSize Label size ("tiny", "small", "normal", "large", "huge")
+// @param labelPosition Label position ("left", "right", "center", "up", "down")
+// @param labelOffset Label horizontal offset (0.0 = start, 0.5 = middle, 1.0 = end)
+// @param labelColor Label text color
+// @returns [line, label] tuple
+export updateGhostLineWithLabel(line existingLine, label existingLabel, int left, float price, int right, color lineColor, string lineStyle = line.style_solid, int lineWidth = 2, bool showLabel = true, string labelText = "", string labelSize = "small", string labelPosition = "right", float labelOffset = 0.2, color labelColor = color.white) =>
+    // Update or create the line
+    updatedLine = if na(existingLine)
+        line.new(left, price, right, price, xloc = xloc.bar_time, color = lineColor, style = lineStyle, width = lineWidth)
+    else
+        line.set_xy1(existingLine, left, price)
+        line.set_xy2(existingLine, right, price)
+        line.set_color(existingLine, lineColor)
+        line.set_style(existingLine, lineStyle)
+        line.set_width(existingLine, lineWidth)
+        existingLine
+
+    // Handle label
+    updatedLabel = label(na)
+    if showLabel and labelText != ""
+        // Delete existing label to avoid duplicates
+        if not na(existingLabel)
+            label.delete(existingLabel)
+        
+        // Calculate label position
+        labelX = math.round(left + (right - left) * labelOffset)
+        labelY = price
+        
+        // Convert position string to label style constant
+        labelStyle = switch labelPosition
+            "left" => label.style_label_left
+            "right" => label.style_label_right
+            "center" => label.style_label_center
+            "up" => label.style_label_up
+            "down" => label.style_label_down
+            => label.style_label_right
+        
+        // Convert size string to size constant
+        labelSizeConst = switch labelSize
+            "tiny" => size.tiny
+            "small" => size.small
+            "normal" => size.normal
+            "large" => size.large
+            "huge" => size.huge
+            => size.small
+        
+        // Create new label with transparent background
+        updatedLabel := label.new(x = labelX, y = labelY, text = labelText, xloc = xloc.bar_time, yloc = yloc.price, color = color.new(color.white, 100), style = labelStyle, textcolor = labelColor, size = labelSizeConst)
+    else if not na(existingLabel)
+        // Delete label if not showing
+        label.delete(existingLabel)
+    
+    [updatedLine, updatedLabel]
+
+// @function Create or update an FVG box
+// @param existingBox Existing box to update (or na to create new)
+// @param left Left coordinate (time)
+// @param top Top price
+// @param right Right coordinate (time)
+// @param bottom Bottom price
+// @param fillColor Fill color
+// @param borderColor Border color
+// @param extendType Extension type
+// @returns Box object
+export updateFVGBox(box existingBox, int left, float top, int right, float bottom, color fillColor, color borderColor, string extendType = extend.none) =>
+    if na(existingBox)
+        box.new(left, top, right, bottom, bgcolor = fillColor, border_color = borderColor, xloc = xloc.bar_time, extend = extendType)
+    else
+        box.set_lefttop(existingBox, left, top)
+        box.set_rightbottom(existingBox, right, bottom)
+        box.set_bgcolor(existingBox, fillColor)
+        box.set_border_color(existingBox, borderColor)
+        box.set_extend(existingBox, extendType)
+        existingBox
+
+// @function Clean up drawing objects
+// @param objects DrawingObjects to clean up
+export cleanupDrawingObjects(DrawingObjects objects) =>
+    box.delete(objects.wickBox)
+    box.delete(objects.bodyBox)
+    line.delete(objects.ghostUp)
+    line.delete(objects.ghostDown)
+    label.delete(objects.ghostUpLabel)
+    label.delete(objects.ghostDownLabel)
+    
+    objects.wickBox := na
+    objects.bodyBox := na
+    objects.ghostUp := na
+    objects.ghostDown := na
+    objects.ghostUpLabel := na
+    objects.ghostDownLabel := na
+
+// ==========================================
+// ADVANCED FEATURES
+// ==========================================
+
+// @function Calculate extension limit based on A1 target
+// @param state SessionState with target data
+// @param multiplier Multiplier for A1 target
+// @param fixedLimit Fixed limit value
+// @param useA1Target Whether to use A1 target or fixed limit
+// @returns Calculated limit value
+export calculateExtensionLimit(SessionState state, float multiplier, float fixedLimit, bool useA1Target) =>
+    if useA1Target and not na(state.targetA1) and state.targetA1 > 0 and multiplier > 0
+        state.targetA1 * multiplier
+    else
+        fixedLimit
+
+// @function Get session configuration by name
+// @param sessionConfigs Array of session configurations
+// @param sessionName Name of session to find
+// @returns SessionConfig or na if not found
+export getSessionByName(array<SessionConfig> sessionConfigs, string sessionName) =>
+    SessionConfig result = na
+    for i = 0 to array.size(sessionConfigs) - 1
+        cfg = array.get(sessionConfigs, i)
+        if cfg.name == sessionName
+            result := cfg
+            break
+    result
+
+// @function Check if session is a macro session (RTH, ETH, or Kitt's Macros)
+// @param sessionName Name of session to check
+// @returns True if session is a macro session
+export isMacroSession(string sessionName) =>
+    str.contains(sessionName, "RTH_") or str.contains(sessionName, "ETH_") or sessionName == "Yankee" or sessionName == "Zulu" or sessionName == "Mike" or sessionName == "November"
+
+// @function Format target value for display
+// @param value Target value
+// @param isActive Whether session is active
+// @returns Formatted string
+export formatTargetDisplay(float value, bool isActive) =>
+    na(value) ? (isActive ? "Pending" : "") : str.tostring(value, "#.##")
+
+// @function Calculate timeframe duration in milliseconds
+// @param timeframeString Timeframe string (e.g., "1", "5", "15")
+// @returns Duration in milliseconds
+export getTimeframeDuration(string timeframeString) =>
+    if timeframeString == "1"
+        60 * 1000
+    else if timeframeString == "5"
+        5 * 60 * 1000
+    else if timeframeString == "15"
+        15 * 60 * 1000
+    else if timeframeString == "15S"
+        15 * 1000
+    else
+        timeframe.in_seconds(timeframeString) * 1000
+
+// ==========================================
+// GHOST LINE MITIGATION FUNCTIONS
+// ==========================================
+
+// @function Comprehensive ghost line mitigation for all cycle types
+// @param state SessionState to update
+// @param idx Session index for array-based label access
+// @param ghostA1UpPrices Array of A1 up ghost prices
+// @param ghostA1DownPrices Array of A1 down ghost prices
+// @param ghostC2UpPrices Array of C2 up ghost prices
+// @param ghostC2DownPrices Array of C2 down ghost prices
+// @param ghostC3UpPrices Array of C3 up ghost prices
+// @param ghostC3DownPrices Array of C3 down ghost prices
+// @param ghostC4UpPrices Array of C4 up ghost prices
+// @param ghostC4DownPrices Array of C4 down ghost prices
+// @param ghostC2ExtLimitUpperPrices Array of C2 extension limit upper prices
+// @param ghostC2ExtLimitLowerPrices Array of C2 extension limit lower prices
+// @param ghostA1UpLabels Array of A1 up ghost labels
+// @param ghostA1DownLabels Array of A1 down ghost labels
+// @param ghostC2UpLabels Array of C2 up ghost labels
+// @param ghostC2DownLabels Array of C2 down ghost labels
+// @param ghostC3UpLabels Array of C3 up ghost labels
+// @param ghostC3DownLabels Array of C3 down ghost labels
+// @param ghostC4UpLabels Array of C4 up ghost labels
+// @param ghostC4DownLabels Array of C4 down ghost labels
+// @param ghostC2ExtLimitUpperLabels Array of C2 extension limit upper labels
+// @param ghostC2ExtLimitLowerLabels Array of C2 extension limit lower labels
+// @param ghostA2UpLabels Array of A2 up ghost labels
+// @param ghostA2DownLabels Array of A2 down ghost labels
+// @param ghostA3UpLabels Array of A3 up ghost labels
+// @param ghostA3DownLabels Array of A3 down ghost labels
+// @param ghostA4UpLabels Array of A4 up ghost labels
+// @param ghostA4DownLabels Array of A4 down ghost labels
+// @param ghostA5UpLabels Array of A5 up ghost labels
+// @param ghostA5DownLabels Array of A5 down ghost labels
+// @param ghostM2UpLabels Array of M2 up ghost labels
+// @param ghostM2DownLabels Array of M2 down ghost labels
+// @param mitigatedA1 Array of A1 mitigation flags
+// @param mitigatedC2 Array of C2 mitigation flags
+// @param mitigatedC3 Array of C3 mitigation flags
+// @param mitigatedC4 Array of C4 mitigation flags
+// @param mitigatedC2ExtLimits Array of C2 extension limit mitigation flags
+// @param mitigatedA2 Array of A2 mitigation flags
+// @param mitigatedA3 Array of A3 mitigation flags
+// @param mitigatedA4 Array of A4 mitigation flags
+// @param mitigatedA5 Array of A5 mitigation flags
+// @param mitigatedM2 Array of M2 mitigation flags
+// @param A5SizeMultiplier Size multiplier for A5 cycle
+// @param M2SizeMultiplier Size multiplier for M2 cycle
+// @returns Updated SessionState
+export mitigateAllGhostLines(SessionState state, int idx, array<float> ghostA1UpPrices, array<float> ghostA1DownPrices, array<float> ghostC2UpPrices, array<float> ghostC2DownPrices, array<float> ghostC3UpPrices, array<float> ghostC3DownPrices, array<float> ghostC4UpPrices, array<float> ghostC4DownPrices, array<float> ghostC2ExtLimitUpperPrices, array<float> ghostC2ExtLimitLowerPrices, array<label> ghostA1UpLabels, array<label> ghostA1DownLabels, array<label> ghostC2UpLabels, array<label> ghostC2DownLabels, array<label> ghostC3UpLabels, array<label> ghostC3DownLabels, array<label> ghostC4UpLabels, array<label> ghostC4DownLabels, array<label> ghostC2ExtLimitUpperLabels, array<label> ghostC2ExtLimitLowerLabels, array<label> ghostA2UpLabels, array<label> ghostA2DownLabels, array<label> ghostA3UpLabels, array<label> ghostA3DownLabels, array<label> ghostA4UpLabels, array<label> ghostA4DownLabels, array<label> ghostA5UpLabels, array<label> ghostA5DownLabels, array<label> ghostM2UpLabels, array<label> ghostM2DownLabels, array<bool> mitigatedA1, array<bool> mitigatedC2, array<bool> mitigatedC3, array<bool> mitigatedC4, array<bool> mitigatedC2ExtLimits, array<bool> mitigatedA2, array<bool> mitigatedA3, array<bool> mitigatedA4, array<bool> mitigatedA5, array<bool> mitigatedM2, float A5SizeMultiplier = 0.24, float M2SizeMultiplier = 1.0) =>
+    
+    // A1 Ghost Lines
+    if not na(state.a1_ghostUp) and not na(array.get(ghostA1UpPrices, idx)) and high >= array.get(ghostA1UpPrices, idx) or not na(state.a1_ghostDown) and not na(array.get(ghostA1DownPrices, idx)) and low <= array.get(ghostA1DownPrices, idx)
+        if not na(state.a1_ghostUp)
+            line.delete(state.a1_ghostUp)
+            state.a1_ghostUp := na
+        if not na(state.a1_ghostDown)
+            line.delete(state.a1_ghostDown)
+            state.a1_ghostDown := na
+        // Delete associated labels
+        if not na(array.get(ghostA1UpLabels, idx))
+            label.delete(array.get(ghostA1UpLabels, idx))
+            array.set(ghostA1UpLabels, idx, na)
+        if not na(array.get(ghostA1DownLabels, idx))
+            label.delete(array.get(ghostA1DownLabels, idx))
+            array.set(ghostA1DownLabels, idx, na)
+        array.set(ghostA1UpPrices, idx, na)
+        array.set(ghostA1DownPrices, idx, na)
+        array.set(mitigatedA1, idx, true)
+
+    // C2 Ghost Lines
+    if not na(state.c2_ghostUp) and not na(array.get(ghostC2UpPrices, idx)) and high >= array.get(ghostC2UpPrices, idx) or not na(state.c2_ghostDown) and not na(array.get(ghostC2DownPrices, idx)) and low <= array.get(ghostC2DownPrices, idx)
+        if not na(state.c2_ghostUp)
+            line.delete(state.c2_ghostUp)
+            state.c2_ghostUp := na
+        if not na(state.c2_ghostDown)
+            line.delete(state.c2_ghostDown)
+            state.c2_ghostDown := na
+        // Delete associated labels
+        if not na(array.get(ghostC2UpLabels, idx))
+            label.delete(array.get(ghostC2UpLabels, idx))
+            array.set(ghostC2UpLabels, idx, na)
+        if not na(array.get(ghostC2DownLabels, idx))
+            label.delete(array.get(ghostC2DownLabels, idx))
+            array.set(ghostC2DownLabels, idx, na)
+        array.set(ghostC2UpPrices, idx, na)
+        array.set(ghostC2DownPrices, idx, na)
+        array.set(mitigatedC2, idx, true)
+
+    // C3 Ghost Lines - FIXED with proper array-based labels
+    if not na(state.c3_ghostUp) and not na(array.get(ghostC3UpPrices, idx)) and high >= array.get(ghostC3UpPrices, idx) or not na(state.c3_ghostDown) and not na(array.get(ghostC3DownPrices, idx)) and low <= array.get(ghostC3DownPrices, idx)
+        if not na(state.c3_ghostUp)
+            line.delete(state.c3_ghostUp)
+            state.c3_ghostUp := na
+        if not na(state.c3_ghostDown)
+            line.delete(state.c3_ghostDown)
+            state.c3_ghostDown := na
+        // Delete associated labels - FIXED to use array-based labels
+        if not na(array.get(ghostC3UpLabels, idx))
+            label.delete(array.get(ghostC3UpLabels, idx))
+            array.set(ghostC3UpLabels, idx, na)
+        if not na(array.get(ghostC3DownLabels, idx))
+            label.delete(array.get(ghostC3DownLabels, idx))
+            array.set(ghostC3DownLabels, idx, na)
+        array.set(ghostC3UpPrices, idx, na)
+        array.set(ghostC3DownPrices, idx, na)
+        array.set(mitigatedC3, idx, true)
+
+    // C4 Ghost Lines - FIXED with proper array-based labels
+    if not na(state.c4_ghostUp) and not na(array.get(ghostC4UpPrices, idx)) and high >= array.get(ghostC4UpPrices, idx) or not na(state.c4_ghostDown) and not na(array.get(ghostC4DownPrices, idx)) and low <= array.get(ghostC4DownPrices, idx)
+        if not na(state.c4_ghostUp)
+            line.delete(state.c4_ghostUp)
+            state.c4_ghostUp := na
+        if not na(state.c4_ghostDown)
+            line.delete(state.c4_ghostDown)
+            state.c4_ghostDown := na
+        // Delete associated labels - FIXED to use array-based labels
+        if not na(array.get(ghostC4UpLabels, idx))
+            label.delete(array.get(ghostC4UpLabels, idx))
+            array.set(ghostC4UpLabels, idx, na)
+        if not na(array.get(ghostC4DownLabels, idx))
+            label.delete(array.get(ghostC4DownLabels, idx))
+            array.set(ghostC4DownLabels, idx, na)
+        array.set(ghostC4UpPrices, idx, na)
+        array.set(ghostC4DownPrices, idx, na)
+        array.set(mitigatedC4, idx, true)
+
+    // C2 Extension Limit Ghost Lines - FIXED with proper label cleanup
+    if not na(state.c2_extLimitUpperGhost) and not na(array.get(ghostC2ExtLimitUpperPrices, idx)) and high >= array.get(ghostC2ExtLimitUpperPrices, idx) or not na(state.c2_extLimitLowerGhost) and not na(array.get(ghostC2ExtLimitLowerPrices, idx)) and low <= array.get(ghostC2ExtLimitLowerPrices, idx)
+        if not na(state.c2_extLimitUpperGhost)
+            line.delete(state.c2_extLimitUpperGhost)
+            state.c2_extLimitUpperGhost := na
+        if not na(state.c2_extLimitLowerGhost)
+            line.delete(state.c2_extLimitLowerGhost)
+            state.c2_extLimitLowerGhost := na
+        // Delete associated labels - FIXED to add missing label cleanup
+        if not na(array.get(ghostC2ExtLimitUpperLabels, idx))
+            label.delete(array.get(ghostC2ExtLimitUpperLabels, idx))
+            array.set(ghostC2ExtLimitUpperLabels, idx, na)
+        if not na(array.get(ghostC2ExtLimitLowerLabels, idx))
+            label.delete(array.get(ghostC2ExtLimitLowerLabels, idx))
+            array.set(ghostC2ExtLimitLowerLabels, idx, na)
+        array.set(ghostC2ExtLimitUpperPrices, idx, na)
+        array.set(ghostC2ExtLimitLowerPrices, idx, na)
+        array.set(mitigatedC2ExtLimits, idx, true)
+
+    // A2 Ghost Lines
+    if state.a2_active and (not na(state.a2_ghostUp) and high >= state.a2_low + state.targetA1 or not na(state.a2_ghostDown) and low <= state.a2_high - state.targetA1)
+        if not na(state.a2_ghostUp)
+            line.delete(state.a2_ghostUp)
+            state.a2_ghostUp := na
+        if not na(state.a2_ghostDown)
+            line.delete(state.a2_ghostDown)
+            state.a2_ghostDown := na
+        if not na(array.get(ghostA2UpLabels, idx))
+            label.delete(array.get(ghostA2UpLabels, idx))
+            array.set(ghostA2UpLabels, idx, na)
+        if not na(array.get(ghostA2DownLabels, idx))
+            label.delete(array.get(ghostA2DownLabels, idx))
+            array.set(ghostA2DownLabels, idx, na)
+        array.set(mitigatedA2, idx, true)
+
+    // A3 Ghost Lines
+    if state.a3_active and (not na(state.a3_ghostUp) and high >= state.a3_low + state.targetA1 or not na(state.a3_ghostDown) and low <= state.a3_high - state.targetA1)
+        if not na(state.a3_ghostUp)
+            line.delete(state.a3_ghostUp)
+            state.a3_ghostUp := na
+        if not na(state.a3_ghostDown)
+            line.delete(state.a3_ghostDown)
+            state.a3_ghostDown := na
+        if not na(array.get(ghostA3UpLabels, idx))
+            label.delete(array.get(ghostA3UpLabels, idx))
+            array.set(ghostA3UpLabels, idx, na)
+        if not na(array.get(ghostA3DownLabels, idx))
+            label.delete(array.get(ghostA3DownLabels, idx))
+            array.set(ghostA3DownLabels, idx, na)
+        array.set(mitigatedA3, idx, true)
+
+    // A4 Ghost Lines
+    if state.a4_active and (not na(state.a4_ghostUp) and high >= state.a4_low + state.targetA1 or not na(state.a4_ghostDown) and low <= state.a4_high - state.targetA1)
+        if not na(state.a4_ghostUp)
+            line.delete(state.a4_ghostUp)
+            state.a4_ghostUp := na
+        if not na(state.a4_ghostDown)
+            line.delete(state.a4_ghostDown)
+            state.a4_ghostDown := na
+        if not na(array.get(ghostA4UpLabels, idx))
+            label.delete(array.get(ghostA4UpLabels, idx))
+            array.set(ghostA4UpLabels, idx, na)
+        if not na(array.get(ghostA4DownLabels, idx))
+            label.delete(array.get(ghostA4DownLabels, idx))
+            array.set(ghostA4DownLabels, idx, na)
+        array.set(mitigatedA4, idx, true)
+
+    // A5 Ghost Lines
+    if state.a5_active and (not na(state.a5_ghostUp) and high >= state.a5_low + state.targetA1 * A5SizeMultiplier or not na(state.a5_ghostDown) and low <= state.a5_high - state.targetA1 * A5SizeMultiplier)
+        if not na(state.a5_ghostUp)
+            line.delete(state.a5_ghostUp)
+            state.a5_ghostUp := na
+        if not na(state.a5_ghostDown)
+            line.delete(state.a5_ghostDown)
+            state.a5_ghostDown := na
+        if not na(array.get(ghostA5UpLabels, idx))
+            label.delete(array.get(ghostA5UpLabels, idx))
+            array.set(ghostA5UpLabels, idx, na)
+        if not na(array.get(ghostA5DownLabels, idx))
+            label.delete(array.get(ghostA5DownLabels, idx))
+            array.set(ghostA5DownLabels, idx, na)
+        array.set(mitigatedA5, idx, true)
+
+    // M2 Ghost Lines
+    if state.m2_active and (not na(state.m2_ghostUp) and high >= state.m2_low + state.targetC2 * M2SizeMultiplier or not na(state.m2_ghostDown) and low <= state.m2_high - state.targetC2 * M2SizeMultiplier)
+        if not na(state.m2_ghostUp)
+            line.delete(state.m2_ghostUp)
+            state.m2_ghostUp := na
+        if not na(state.m2_ghostDown)
+            line.delete(state.m2_ghostDown)
+            state.m2_ghostDown := na
+        if not na(array.get(ghostM2UpLabels, idx))
+            label.delete(array.get(ghostM2UpLabels, idx))
+            array.set(ghostM2UpLabels, idx, na)
+        if not na(array.get(ghostM2DownLabels, idx))
+            label.delete(array.get(ghostM2DownLabels, idx))
+            array.set(ghostM2DownLabels, idx, na)
+        array.set(mitigatedM2, idx, true)
+
+    // Return updated session state
+    state
+
+// @function Manage historical ghost line processing including mitigation and cleanup
+// @param historicalGhostLines Array of historical ghost lines
+// @param historicalGhostPrices Array of historical ghost prices
+// @param historicalGhostTypes Array of historical ghost types
+// @param historicalSessionNames Array of historical session names
+// @param historicalGhostTimes Array of historical ghost times
+// @param historicalGhostDays Array of historical ghost days
+// @param historicalGhostOriginalColors Array of historical ghost original colors
+// @param enableHistoricalGhosts Whether historical ghosts are enabled
+// @param historicalGhostDays Maximum days to keep historical lines
+// @param maxHistoricalGhosts Maximum number of historical lines
+// @param fadeHistoricalGhosts Whether to fade historical lines by age
+// @param keepOriginalColors Whether to keep original colors for historical lines
+// @param historicalTransparency Base transparency for historical lines
+// @param historicalGhostColor Default color for historical lines
+// @returns void (modifies arrays in place)
+export manageHistoricalGhosts(array<line> historicalGhostLines, array<float> historicalGhostPrices, array<string> historicalGhostTypes, array<string> historicalSessionNames, array<int> historicalGhostTimes, array<int> historicalGhostDays, array<color> historicalGhostOriginalColors, bool enableHistoricalGhosts = true, int historicalGhostDaysLimit = 3, int maxHistoricalGhosts = 100, bool fadeHistoricalGhosts = true, bool keepOriginalColors = false, int historicalTransparency = 60, color historicalGhostColor = color.gray) =>
+    if enableHistoricalGhosts and array.size(historicalGhostLines) > 0
+        currentDay = math.floor(time / 86400000)
+
+        // Check historical ghost lines for mitigation
+        for i = array.size(historicalGhostLines) - 1 to 0 by 1
+            if i >= 0 and i < array.size(historicalGhostLines) and i < array.size(historicalGhostPrices) and i < array.size(historicalGhostTypes)
+                ghostLine = array.get(historicalGhostLines, i)
+                ghostPrice = array.get(historicalGhostPrices, i)
+                ghostType = array.get(historicalGhostTypes, i)
+
+                // Check if price hit with more robust logic
+                priceHit = false
+                if (str.contains(ghostType, '_UP') or str.contains(ghostType, '_UPPER')) and high >= ghostPrice
+                    priceHit := true
+                else if (str.contains(ghostType, '_DOWN') or str.contains(ghostType, '_LOWER')) and low <= ghostPrice
+                    priceHit := true
+
+                // If this line was hit, mitigate both UP and DOWN lines of the same type from the same session
+                if priceHit
+                    sessionName = array.get(historicalSessionNames, i)
+                    baseGhostType = ''
+
+                    // Determine the base ghost type (without UP/DOWN/UPPER/LOWER suffix)
+                    if str.contains(ghostType, 'A1')
+                        baseGhostType := 'A1'
+                    else if str.contains(ghostType, 'C2_EXT')
+                        baseGhostType := 'C2_EXT'
+                    else if str.contains(ghostType, 'C2')
+                        baseGhostType := 'C2'
+                    else if str.contains(ghostType, 'C3')
+                        baseGhostType := 'C3'
+                    else if str.contains(ghostType, 'C4')
+                        baseGhostType := 'C4'
+
+                    // Mark all matching lines for removal (both UP and DOWN of same type from same session)
+                    var array<bool> linesToRemove = array.new<bool>()
+                    array.clear(linesToRemove)
+
+                    for j = 0 to array.size(historicalGhostLines) - 1 by 1
+                        if j < array.size(historicalGhostTypes) and j < array.size(historicalSessionNames)
+                            checkGhostType = array.get(historicalGhostTypes, j)
+                            checkSessionName = array.get(historicalSessionNames, j)
+
+                            // Check if this line matches the base type and session
+                            shouldRemovePair = false
+                            if checkSessionName == sessionName
+                                if baseGhostType == 'A1' and str.contains(checkGhostType, 'A1') and not str.contains(checkGhostType, 'C2_EXT')
+                                    shouldRemovePair := true
+                                else if baseGhostType == 'C2_EXT' and str.contains(checkGhostType, 'C2_EXT')
+                                    shouldRemovePair := true
+                                else if baseGhostType == 'C2' and str.contains(checkGhostType, 'C2') and not str.contains(checkGhostType, 'C2_EXT')
+                                    shouldRemovePair := true
+                                else if baseGhostType == 'C3' and str.contains(checkGhostType, 'C3')
+                                    shouldRemovePair := true
+                                else if baseGhostType == 'C4' and str.contains(checkGhostType, 'C4')
+                                    shouldRemovePair := true
+
+                            array.push(linesToRemove, shouldRemovePair)
+                        else
+                            array.push(linesToRemove, false)
+
+                    // Remove marked lines in reverse order to maintain indices
+                    for j = array.size(historicalGhostLines) - 1 to 0 by 1
+                        if j < array.size(linesToRemove) and array.get(linesToRemove, j)
+                            pairGhostLine = array.get(historicalGhostLines, j)
+                            if not na(pairGhostLine)
+                                line.delete(pairGhostLine)
+
+                            array.remove(historicalGhostLines, j)
+                            array.remove(historicalGhostPrices, j)
+                            array.remove(historicalGhostTypes, j)
+                            array.remove(historicalSessionNames, j)
+                            array.remove(historicalGhostTimes, j)
+                            array.remove(historicalGhostDays, j)
+                            array.remove(historicalGhostOriginalColors, j)
+
+                    // Break out of the main loop since we've already processed this hit
+                    break
+
+        // Cleanup old historical ghost lines
+        for i = array.size(historicalGhostLines) - 1 to 0 by 1
+            if i >= 0 and i < array.size(historicalGhostDays) and i < array.size(historicalGhostLines)
+                ghostDay = array.get(historicalGhostDays, i)
+                dayAge = currentDay - ghostDay
+
+                // Remove if too old or exceeding max count
+                shouldRemove = dayAge > historicalGhostDaysLimit or array.size(historicalGhostLines) > maxHistoricalGhosts
+
+                if shouldRemove
+                    ghostLine = array.get(historicalGhostLines, i)
+                    if not na(ghostLine)
+                        line.delete(ghostLine)
+                    array.remove(historicalGhostLines, i)
+                    array.remove(historicalGhostPrices, i)
+                    array.remove(historicalGhostTypes, i)
+                    array.remove(historicalSessionNames, i)
+                    array.remove(historicalGhostTimes, i)
+                    array.remove(historicalGhostDays, i)
+                    array.remove(historicalGhostOriginalColors, i)
+
+        // Update historical ghost line colors based on age (if fade enabled)
+        if fadeHistoricalGhosts and array.size(historicalGhostLines) > 0
+            for i = 0 to array.size(historicalGhostLines) - 1 by 1
+                if i < array.size(historicalGhostLines) and i < array.size(historicalGhostDays) and i < array.size(historicalGhostOriginalColors)
+                    ghostLine = array.get(historicalGhostLines, i)
+                    ghostDay = array.get(historicalGhostDays, i)
+                    dayAge = currentDay - ghostDay
+
+                    if not na(ghostLine) and dayAge >= 0
+                        // Calculate fade transparency (older = more transparent)
+                        baseFade = keepOriginalColors ? historicalTransparency : 60
+                        fadeAmount = math.min(95, baseFade + dayAge * 10)
+                        // Use original color if keeping original colors, otherwise use historical color
+                        baseColor = keepOriginalColors ? array.get(historicalGhostOriginalColors, i) : historicalGhostColor
+                        fadedColor = color.new(baseColor, fadeAmount)
+                        line.set_color(ghostLine, fadedColor)
+
+// @function Detect A1 body cycle hit
+// @param state SessionState to check
+// @returns CycleResult for A1 body cycle
+export detectA1BodyCycle(SessionState state) =>
+    result = CycleResult.new()
+    
+    if not state.a1_bodyHit and not na(state.targetA1)
+        bodyRange = state.a1_highBody - state.a1_lowBody
+        if bodyRange >= state.targetA1
+            result.hit := true
+            result.hitTime := time
+            
+            // Use body bounds for anchoring
+            result.anchorDirection := "up"
+            result.bottomPrice := state.a1_lowBody
+            result.topPrice := state.a1_lowBody + state.targetA1
+    
+    result
+
+// @function Detect C2 body cycle hit
+// @param state SessionState to check
+// @param prevA1BodyHigh Previous A1 body high value (before current bar update)
+// @param prevA1BodyLow Previous A1 body low value (before current bar update)
+// @returns CycleResult for C2 body cycle
+export detectC2BodyCycle(SessionState state, float prevA1BodyHigh = na, float prevA1BodyLow = na) =>
+    result = CycleResult.new()
+    
+    if not state.c2_bodyHit and not na(state.targetC2)
+        bodyRange = state.a1_highBody - state.a1_lowBody
+        if bodyRange >= state.targetC2
+            result.hit := true
+            result.hitTime := time
+            
+            // Default anchor from high (consistent with wick logic)
+            float boxTopC2 = state.a1_highBody
+            float boxBottomC2 = state.a1_highBody - state.targetC2
+            
+            // Use previous A1 body values for directional detection (like wick logic)
+            float _prevBodyHi = na(prevA1BodyHigh) ? state.a1_highBody : prevA1BodyHigh
+            float _prevBodyLo = na(prevA1BodyLow) ? state.a1_lowBody : prevA1BodyLow
+            
+            currBodyHigh = math.max(open, close)
+            currBodyLow = math.min(open, close)
+            
+            // Check if range extended downward first
+            if currBodyLow < _prevBodyLo and state.a1_highBody - currBodyLow >= state.targetC2
+                boxTopC2 := state.a1_highBody
+                boxBottomC2 := state.a1_highBody - state.targetC2
+            // Check if range extended upward first (else if to prioritize downward trigger)
+            else if currBodyHigh > _prevBodyHi and currBodyHigh - state.a1_lowBody >= state.targetC2
+                boxBottomC2 := state.a1_lowBody
+                boxTopC2 := state.a1_lowBody + state.targetC2
+            
+            result.topPrice := boxTopC2
+            result.bottomPrice := boxBottomC2
+            
+            // Store C2 body bounds for extension tracking
+            state.c2_bodyBoundTop := boxTopC2
+            state.c2_bodyBoundBottom := boxBottomC2
+    
+    result
+
+// @function Detect C3 body cycle hit
+// @param state SessionState to check
+// @returns CycleResult for C3 body cycle
+export detectC3BodyCycle(SessionState state) =>
+    result = CycleResult.new()
+    
+    if not state.c3_bodyHit and not na(state.targetC3)
+        bodyRange = state.a1_highBody - state.a1_lowBody
+        if bodyRange >= state.targetC3
+            result.hit := true
+            result.hitTime := time
+            result.topPrice := state.a1_highBody
+            result.bottomPrice := state.a1_highBody - state.targetC3
+    
+    result
+
+// @function Detect C4 body cycle hit
+// @param state SessionState to check
+// @returns CycleResult for C4 body cycle
+export detectC4BodyCycle(SessionState state) =>
+    result = CycleResult.new()
+    
+    if not state.c4_bodyHit and not na(state.targetC4)
+        bodyRange = state.a1_highBody - state.a1_lowBody
+        if bodyRange >= state.targetC4
+            result.hit := true
+            result.hitTime := time
+            result.topPrice := state.a1_highBody
+            result.bottomPrice := state.a1_highBody - state.targetC4
+    
+    result
+
+// Helper functions for chained body cycles
+updateA2BodyCycle(SessionState state, float targetSize) =>
+    // Activate A2 body if A1 body was hit
+    if not state.a2_active and state.a1_bodyHit
+        state.a2_active := true
+        state.a2_startTime := time
+        currBodyHigh = math.max(open, close)
+        currBodyLow = math.min(open, close)
+        state.a2_high := currBodyHigh
+        state.a2_low := currBodyLow
+    
+    // Update A2 body range while active
+    if state.a2_active and not state.a2_hit
+        currBodyHigh = math.max(open, close)
+        currBodyLow = math.min(open, close)
+        state.a2_high := math.max(state.a2_high, currBodyHigh)
+        state.a2_low := math.min(state.a2_low, currBodyLow)
+        
+        if state.a2_high - state.a2_low >= targetSize
+            state.a2_hit := true
+            state.a2_active := false
+            true
+        else
+            false
+    else
+        false
+
+updateA3BodyCycle(SessionState state, float targetSize) =>
+    // Activate A3 body if A2 body was hit
+    if not state.a3_active and state.a2_hit
+        state.a3_active := true
+        state.a3_startTime := time
+        currBodyHigh = math.max(open, close)
+        currBodyLow = math.min(open, close)
+        state.a3_high := currBodyHigh
+        state.a3_low := currBodyLow
+    
+    if state.a3_active and not state.a3_hit
+        currBodyHigh = math.max(open, close)
+        currBodyLow = math.min(open, close)
+        state.a3_high := math.max(state.a3_high, currBodyHigh)
+        state.a3_low := math.min(state.a3_low, currBodyLow)
+        
+        if state.a3_high - state.a3_low >= targetSize
+            state.a3_hit := true
+            state.a3_active := false
+            true
+        else
+            false
+    else
+        false
+
+updateA4BodyCycle(SessionState state, float targetSize) =>
+    // Activate A4 body if A3 body was hit
+    if not state.a4_active and state.a3_hit
+        state.a4_active := true
+        state.a4_startTime := time
+        currBodyHigh = math.max(open, close)
+        currBodyLow = math.min(open, close)
+        state.a4_high := currBodyHigh
+        state.a4_low := currBodyLow
+    
+    if state.a4_active and not state.a4_hit
+        currBodyHigh = math.max(open, close)
+        currBodyLow = math.min(open, close)
+        state.a4_high := math.max(state.a4_high, currBodyHigh)
+        state.a4_low := math.min(state.a4_low, currBodyLow)
+        
+        if state.a4_high - state.a4_low >= targetSize
+            state.a4_hit := true
+            state.a4_active := false
+            true
+        else
+            false
+    else
+        false
+
+updateA5BodyCycle(SessionState state, float targetSize) =>
+    // Activate A5 body if A4 body was hit
+    if not state.a5_active and state.a4_hit
+        state.a5_active := true
+        state.a5_startTime := time
+        currBodyHigh = math.max(open, close)
+        currBodyLow = math.min(open, close)
+        state.a5_high := currBodyHigh
+        state.a5_low := currBodyLow
+    
+    // Update A5 body range while active
+    if state.a5_active and not state.a5_hit
+        currBodyHigh = math.max(open, close)
+        currBodyLow = math.min(open, close)
+        state.a5_high := math.max(state.a5_high, currBodyHigh)
+        state.a5_low := math.min(state.a5_low, currBodyLow)
+        
+        if state.a5_high - state.a5_low >= targetSize
+            state.a5_hit := true
+            state.a5_active := false
+            true
+        else
+            false
+    else
+        false
+
+updateM2BodyCycle(SessionState state, float targetSize) =>
+    // Activate M2 body if C2 body was hit
+    if not state.m2_active and state.c2_bodyHit
+        state.m2_active := true
+        state.m2_startTime := time
+        currBodyHigh = math.max(open, close)
+        currBodyLow = math.min(open, close)
+        state.m2_high := currBodyHigh
+        state.m2_low := currBodyLow
+    
+    // Update M2 body range while active
+    if state.m2_active and not state.m2_hit
+        currBodyHigh = math.max(open, close)
+        currBodyLow = math.min(open, close)
+        state.m2_high := math.max(state.m2_high, currBodyHigh)
+        state.m2_low := math.min(state.m2_low, currBodyLow)
+        
+        if state.m2_high - state.m2_low >= targetSize
+            state.m2_hit := true
+            state.m2_active := false
+            true
+        else
+            false
+    else
+        false
+
+// @function Update chained body cycle (A2-A5) with proper state management
+// @param state SessionState to update
+// @param cycleNum Cycle number (2-5)
+// @param targetSize Target size for the cycle
+// @param multiplier Size multiplier (for A5)
+// @returns True if cycle was hit on this bar
+export updateChainedBodyCycleWithMultiplier(SessionState state, int cycleNum, float targetSize, float multiplier = 1.0) =>
+    actualTargetSize = cycleNum == 5 ? targetSize * multiplier : targetSize
+    
+    switch cycleNum
+        2 => updateA2BodyCycle(state, actualTargetSize)
+        3 => updateA3BodyCycle(state, actualTargetSize)
+        4 => updateA4BodyCycle(state, actualTargetSize)
+        5 => updateA5BodyCycle(state, actualTargetSize)
+        => false
+
+// @function Update M2 body cycle (chained from C2 body)
+// @param state SessionState to update
+// @param targetSize Target size for the cycle (typically C2 target)
+// @param multiplier Size multiplier for M2
+// @returns True if cycle was hit on this bar
+export updateM2BodyCycleWithMultiplier(SessionState state, float targetSize, float multiplier = 1.0) =>
+    actualTargetSize = targetSize * multiplier
+    updateM2BodyCycle(state, actualTargetSize)
+

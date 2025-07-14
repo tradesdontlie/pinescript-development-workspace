@@ -1,0 +1,29 @@
+{
+  "error_patterns": {
+    "series_simple_mismatch": {
+      "pattern": "Cannot use series form with TA function length parameters",
+      "solution": "Use 'simple int' instead of 'series int' for TA function parameters",
+      "example": "ta.ema(close, simple int length)"
+    },
+    "array_bounds": {
+      "pattern": "Array index out of bounds",
+      "solution": "Always check array.size() before accessing elements",
+      "example": "if array.size(myArray) > index\n    value = array.get(myArray, index)"
+    },
+    "type_consistency": {
+      "pattern": "Cannot mix different type forms in expression",
+      "solution": "Ensure both branches of conditional return same type",
+      "example": "condition ? 1 : 1  // Both int, not 1 : 1.0"
+    },
+    "version_declaration": {
+      "pattern": "Missing version declaration",
+      "solution": "Always start with //@version=6",
+      "example": "//@version=6\nindicator(\"My Indicator\", overlay=true)"
+    },
+    "multiline_function": {
+      "pattern": "Multi-line function call detected",
+      "solution": "All function calls must be on single lines",
+      "example": "box.new(left=bar_index-2, top=high, right=bar_index+10, bottom=low, bgcolor=color.blue)"
+    }
+  }
+}

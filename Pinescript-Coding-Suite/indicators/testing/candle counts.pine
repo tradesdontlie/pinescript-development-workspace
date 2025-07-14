@@ -1,0 +1,265 @@
+//@version=5
+indicator("time machine", overlay=true)
+
+// === USER INPUTS ===
+// === MULTI-SET CONFIGURATION ===
+// Each set has its own group for core parameters (enable, time, offsets)
+// Colors and toggles are grouped separately for compact UI.
+
+// ----- CORE PER-SET GROUPS -----
+enable1       = input.bool(true,  "Enable",          group="Set 1")
+startTimeStr1 = input.string("09:30", "Start time (HH:MM)", group="Set 1")
+offsetsStr1   = input.string("5",     "Candle numbers",     group="Set 1")
+
+enable2       = input.bool(true,  "Enable",          group="Set 2")
+startTimeStr2 = input.string("10:00", "Start time (HH:MM)", group="Set 2")
+offsetsStr2   = input.string("3",     "Candle numbers",     group="Set 2")
+
+enable3       = input.bool(true, "Enable",          group="Set 3")
+startTimeStr3 = input.string("11:00", "Start time (HH:MM)", group="Set 3")
+offsetsStr3   = input.string("1,8",   "Candle numbers",     group="Set 3")
+
+enable4       = input.bool(true, "Enable",          group="Set 4")
+startTimeStr4 = input.string("12:00", "Start time (HH:MM)", group="Set 4")
+offsetsStr4   = input.string("2",     "Candle numbers",     group="Set 4")
+
+enable5       = input.bool(true, "Enable",          group="Set 5")
+startTimeStr5 = input.string("13:00", "Start time (HH:MM)", group="Set 5")
+offsetsStr5   = input.string("4",     "Candle numbers",     group="Set 5")
+
+enable6       = input.bool(true, "Enable",          group="Set 6")
+startTimeStr6 = input.string("14:00", "Start time (HH:MM)", group="Set 6")
+offsetsStr6   = input.string("6",     "Candle numbers",     group="Set 6")
+
+enable7       = input.bool(true, "Enable",          group="Set 7")
+startTimeStr7 = input.string("15:00", "Start time (HH:MM)", group="Set 7")
+offsetsStr7   = input.string("2,7",   "Candle numbers",     group="Set 7")
+
+enable8       = input.bool(true, "Enable",          group="Set 8")
+startTimeStr8 = input.string("16:00", "Start time (HH:MM)", group="Set 8")
+offsetsStr8   = input.string("5",     "Candle numbers",     group="Set 8")
+
+enable9       = input.bool(true, "Enable",          group="Set 9")
+startTimeStr9 = input.string("17:00", "Start time (HH:MM)", group="Set 9")
+offsetsStr9   = input.string("1",     "Candle numbers",     group="Set 9")
+
+// ----- COLORS (all together) -----
+hlColor1 = input.color(color.new(color.orange,0),  "Color 1", group="Highlight Colors")
+hlColor2 = input.color(color.new(color.blue,0),    "Color 2", group="Highlight Colors")
+hlColor3 = input.color(color.new(color.fuchsia,0), "Color 3", group="Highlight Colors")
+hlColor4 = input.color(color.new(color.green,0),   "Color 4", group="Highlight Colors")
+hlColor5 = input.color(color.new(color.red,0),     "Color 5", group="Highlight Colors")
+hlColor6 = input.color(color.new(color.yellow,0),  "Color 6", group="Highlight Colors")
+hlColor7 = input.color(color.new(color.aqua,0),    "Color 7", group="Highlight Colors")
+hlColor8 = input.color(color.new(color.navy,0),    "Color 8", group="Highlight Colors")
+hlColor9 = input.color(color.new(color.maroon,0),  "Color 9", group="Highlight Colors")
+
+// ----- CANDLE COLORING TOGGLES -----
+colorCandles1 = input.bool(true,  "Color candles", group="Set 1", inline="tog1")
+showLabels1   = input.bool(true,  "Labels",        group="Set 1", inline="tog1")
+
+colorCandles2 = input.bool(true,  "Color candles", group="Set 2", inline="tog2")
+showLabels2   = input.bool(true,  "Labels",        group="Set 2", inline="tog2")
+
+colorCandles3 = input.bool(true,  "Color candles", group="Set 3", inline="tog3")
+showLabels3   = input.bool(true,  "Labels",        group="Set 3", inline="tog3")
+
+colorCandles4 = input.bool(true,  "Color candles", group="Set 4", inline="tog4")
+showLabels4   = input.bool(true,  "Labels",        group="Set 4", inline="tog4")
+
+colorCandles5 = input.bool(true,  "Color candles", group="Set 5", inline="tog5")
+showLabels5   = input.bool(true,  "Labels",        group="Set 5", inline="tog5")
+
+colorCandles6 = input.bool(true,  "Color candles", group="Set 6", inline="tog6")
+showLabels6   = input.bool(true,  "Labels",        group="Set 6", inline="tog6")
+
+colorCandles7 = input.bool(true,  "Color candles", group="Set 7", inline="tog7")
+showLabels7   = input.bool(true,  "Labels",        group="Set 7", inline="tog7")
+
+colorCandles8 = input.bool(true,  "Color candles", group="Set 8", inline="tog8")
+showLabels8   = input.bool(true,  "Labels",        group="Set 8", inline="tog8")
+
+colorCandles9 = input.bool(true,  "Color candles", group="Set 9", inline="tog9")
+showLabels9   = input.bool(true,  "Labels",        group="Set 9", inline="tog9")
+
+lblTextColor   = input.color(defval = color.rgb(0, 0, 0), title = "Label text color")
+lblSizeStr     = input.string(defval = "small", title = "Label size", options = ["tiny", "small", "normal", "large", "huge"])
+lblPosStr      = input.string(defval = "center", title = "Label position", options = ["left", "right", "center"])
+lblOffsetTicks = input.int(defval = 50, title = "Label vertical offset (ticks)", minval = 0)
+
+// ----- CONFIRMATION BOX SETTINGS -----
+showConfBoxes   = input.bool(true, "Show confirmation boxes", group="Confirmation Boxes")
+confFillTransp  = input.int(90, "Box transparency (0-100)", minval=0, maxval=100, group="Confirmation Boxes")
+
+// ----- OVERLAP MARKER SETTINGS -----
+showOverlapMark = input.bool(true, "Show marker when multiple sets overlap", group="Overlap Marker")
+overlapColor    = input.color(color.rgb(0, 0, 0), "Marker color", group="Overlap Marker")
+overlapShapeStr = input.string("x", "Shape", options=["x","flag","circle"], group="Overlap Marker")
+
+overlapShape = overlapShapeStr == "flag" ? shape.flag : overlapShapeStr == "circle" ? shape.circle : shape.xcross
+
+// ----- ADVANCED COUNTING -----
+accumulateDays = input.bool(false, "Accumulate counts across days", group="Advanced")
+
+// === HELPER FUNCTIONS ===
+_trim(string s) =>
+    // removes spaces from a string
+    string out = ""
+    for i = 0 to str.length(s) - 1
+        ch = str.substring(s, i, i + 1)
+        if ch != " "
+            out := out + ch
+    out
+
+// Parse comma-separated list of integers into array<int>
+parseOffsets(string s) =>
+    string txt = _trim(s)
+    array<int> arr = array.new_int()
+    string buff = ""
+    for i = 0 to str.length(txt) - 1
+        ch = str.substring(txt, i, i + 1)
+        if ch == "," or i == str.length(txt) - 1
+            // push last char if at end
+            if ch != ","
+                buff := buff + ch
+            if str.length(buff) > 0
+                array.push(arr, int(str.tonumber(buff)))
+            buff := ""
+        else
+            buff := buff + ch
+    arr
+
+// Convert HH:MM string to hour & minute ints
+getHourMin(string hhmm) =>
+    [int(str.tonumber(str.substring(hhmm, 0, 2))), int(str.tonumber(str.substring(hhmm, 3, 5)))]
+
+// === PRE-CALCULATIONS (run once) ===
+const string TZ = "America/New_York"
+
+// === MAIN LOGIC (per-bar) ===
+
+// Duration of timeframe in ms (constant per bar)
+tfMs = timeframe.in_seconds(timeframe.period) * 1000
+
+// Get NY date components once per bar
+nyYear  = year(time, TZ)
+nyMonth = month(time, TZ)
+nyDay   = dayofmonth(time, TZ)
+
+// Variable to accumulate final bar color
+color finalBarCol = na
+
+// Pack inputs into arrays for easier handling
+const int SETS = 9
+
+var array<string> startArr  = array.from(startTimeStr1, startTimeStr2, startTimeStr3, startTimeStr4, startTimeStr5, startTimeStr6, startTimeStr7, startTimeStr8, startTimeStr9)
+var array<string> offArr    = array.from(offsetsStr1,  offsetsStr2,  offsetsStr3,  offsetsStr4,  offsetsStr5,  offsetsStr6,  offsetsStr7,  offsetsStr8,  offsetsStr9)
+var array<color>  colorArr  = array.from(hlColor1,     hlColor2,     hlColor3,     hlColor4,     hlColor5,     hlColor6,     hlColor7,     hlColor8,     hlColor9)
+var array<bool>  enableArr      = array.from(enable1, enable2, enable3, enable4, enable5, enable6, enable7, enable8, enable9)
+var array<bool>  colorToggleArr = array.from(colorCandles1, colorCandles2, colorCandles3, colorCandles4, colorCandles5, colorCandles6, colorCandles7, colorCandles8, colorCandles9)
+var array<bool>  labelToggleArr = array.from(showLabels1,  showLabels2,  showLabels3,  showLabels4,  showLabels5,  showLabels6,  showLabels7,  showLabels8,  showLabels9)
+
+// === SHARED LABEL CONSTANTS ===
+labelSizeConst = switch lblSizeStr
+    "tiny"   => size.tiny
+    "small"  => size.small
+    "normal" => size.normal
+    "large"  => size.large
+    "huge"   => size.huge
+    => size.small
+
+labelStyleConst = switch lblPosStr
+    "up"     => label.style_label_up
+    "down"   => label.style_label_down
+    "left"   => label.style_label_left
+    "right"  => label.style_label_right
+    "center" => label.style_label_center
+    => label.style_label_up
+
+// Price offset per bar (ticks to price)
+priceOffset = lblOffsetTicks * syminfo.mintick
+
+// Counter for overlaps on this bar
+int overlapCnt = 0
+
+// Container to track generated confirmation boxes so we can purge old ones
+var array<box> _confBoxes = array.new<box>()
+// Keep memory footprint reasonable
+MAX_CONF_BOXES = 500
+
+for i = 0 to SETS - 1
+    // Retrieve config
+    string tStr   = array.get(startArr, i)
+    string offStr = array.get(offArr,   i)
+    color  col    = array.get(colorArr, i)
+
+    // Skip if disabled
+    if not array.get(enableArr, i)
+        continue
+
+    // Parse hour/minute
+    [h_, m_] = getHourMin(tStr)
+
+    // Anchor timestamp
+    anchorToday = timestamp(TZ, nyYear, nyMonth, nyDay, h_, m_)
+    // Ensure anchorBase is the latest start that is <= current bar time
+    anchorBase = anchorToday
+    if time < anchorToday
+        anchorBase -= 86400000  // use yesterday's anchor if current time earlier than today start
+
+    bool active = time >= anchorBase
+
+    int cnt = na
+    if active
+        cnt := int((time - anchorBase) / tfMs)
+
+    // Convert to cumulative if accumulateDays OFF we keep daily counts
+    int countToCompare = cnt
+    if not accumulateDays and not na(cnt)
+        countToCompare := cnt % int(math.round(86400000 / tfMs))
+
+    // Check if this candle is in offsets list
+    bool doHighlight = false
+    if not na(cnt)
+        arrInts = parseOffsets(offStr)
+        for k = 0 to array.size(arrInts) - 1
+            if countToCompare == array.get(arrInts, k)
+                doHighlight := true
+
+    // Handle colouring
+    if doHighlight and array.get(colorToggleArr,i)
+        finalBarCol := col
+
+    // Tally overlap count (regardless of colour/label toggles)
+    if doHighlight
+        overlapCnt += 1
+
+    // Label plotting (reuse existing offset/label position logic)
+    if doHighlight and array.get(labelToggleArr,i)
+        // Determine yloc
+        string ylocC = yloc.price // left/right/center rely on price coordinate
+        float yVal = na
+        if ylocC == yloc.price
+            yVal := high + priceOffset
+        label.new(bar_index, yVal, text = str.tostring(cnt), style = labelStyleConst, color = color.new(col, 100), textcolor = lblTextColor, size = labelSizeConst, yloc = ylocC)
+
+    // -- Confirmation box drawing --
+    if doHighlight and showConfBoxes and barstate.isconfirmed
+        int barsToExtend = math.max(1, cnt)  // in cumulative mode cnt already cumulative
+        int endBar = bar_index + barsToExtend
+        // Create semi-transparent box covering high/low extended right by barsToExtend bars
+        boxId = box.new(bar_index, high, endBar, low, xloc = xloc.bar_index, bgcolor = color.new(col, confFillTransp), border_color = col, border_width = 1)
+        array.push(_confBoxes, boxId)
+        if array.size(_confBoxes) > MAX_CONF_BOXES
+            box.delete(array.shift(_confBoxes))
+
+// Apply final color once
+barcolor(finalBarCol)
+
+// ---- Plot overlap marker ----
+bool overlapFlag = overlapCnt >= 2
+plotshape(showOverlapMark and overlapFlag ? true : na, title="Overlap", style=overlapShape, location=location.abovebar, color=overlapColor, size=size.tiny)
+
+// === PLOTTING ===
+
+// (Obsolete plotting block removed; all drawing handled inside loop) 
