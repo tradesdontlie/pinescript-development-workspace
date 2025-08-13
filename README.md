@@ -55,7 +55,7 @@ cd pinescript-development-workspace
 code --install-extension ./Pinescript-Coding-Suite/pine-script-v6-extension/pinescript-v6-vscode-0.1.0.vsix
 
 # Or from marketplace (alternative):
-code --install-extension tradesdontlie.pinescript-helper
+code --install-extension TradesDontLie.pinescript-v6-vscode
 ```
 
 ## 📝 Development Workflow
