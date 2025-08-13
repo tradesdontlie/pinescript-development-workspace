@@ -47,12 +47,14 @@ pinescript-codebase/
 
 ```bash
 # Clone the repository
-git clone https://github.com/tradesdontlie/pinescript-codebase.git
-cd pinescript-codebase
+git clone https://github.com/tradesdontlie/pinescript-development-workspace.git
+cd pinescript-development-workspace
 
 # Install Pine Script VS Code Extension (if using VS Code/Cursor)
-code --install-extension Pinescript-Coding-Suite/pine-script-v6-extension/pinescript-v6-vscode-0.1.0.vsix
-# Or from marketplace
+# Using the included extension file:
+code --install-extension ./Pinescript-Coding-Suite/pine-script-v6-extension/pinescript-v6-vscode-0.1.0.vsix
+
+# Or from marketplace (alternative):
 code --install-extension salbert11.pinescript-helper
 ```
 
