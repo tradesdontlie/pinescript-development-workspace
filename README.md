@@ -5,7 +5,7 @@ A professional Pine Script development environment for creating TradingView indi
 ## 📁 Repository Structure
 
 ```
-pinescript-codebase/
+pinescript-development-workspace/
 │
 ├── 🚧 development/              # ACTIVE DEVELOPMENT AREA
 │   ├── indicators/              # Work-in-progress indicators
@@ -23,7 +23,6 @@ pinescript-codebase/
 │   └── pine-script-v6-extension/ # VS Code extension
 │
 ├── 📚 docs/                     # Documentation
-├── 🔧 scripts/                  # Setup scripts
 └── 📋 project-requests/         # Feature planning
 ```
 
@@ -60,74 +59,111 @@ code --install-extension TradesDontLie.pinescript-v6-vscode
 
 ## 📝 Development Workflow
 
-### Step 1: Start New Development
+### Step 1: Create Your Project Structure
 
 ```bash
-# Create new indicator in development
-mkdir -p development/indicators/my_new_indicator
-touch development/indicators/my_new_indicator/indicator.pine
+# For a new indicator
+mkdir -p development/indicators/my_indicator
+touch development/indicators/my_indicator/indicator.pine
 
-# Or use Makefile to create from template
-make new-indicator
-# Choose location: development/indicators/
+# For a new strategy
+mkdir -p development/strategies/my_strategy
+touch development/strategies/my_strategy/strategy.pine
+
+# For a new library
+mkdir -p development/libraries/my_library
+touch development/libraries/my_library/library.pine
 ```
 
-### Step 2: Development Process
+### Step 2: Basic Pine Script Template
 
-1. **Write code** in `development/` area
-2. **Test locally** in TradingView Pine Editor
-3. **Validate** with repository tools:
-   ```bash
-   make validate-dev  # Validates development folder
-   make check-memory  # Check for memory leaks
-   make lint         # Full quality check
-   ```
-4. **Iterate** until all tests pass
+#### Indicator Template
+```pine
+//@version=6
+indicator("My Indicator", overlay=true)
 
-### Step 3: Promote to Production
+// Input parameters
+length = input.int(20, "Length", minval=1)
+source = input.source(close, "Source")
 
+// Calculations
+signal = ta.ema(source, length)
+
+// Plotting
+plot(signal, "Signal", color=color.blue, linewidth=2)
+
+// Alerts (optional)
+alertcondition(ta.crossover(close, signal), "Bullish Cross", "Price crossed above signal")
+```
+
+#### Strategy Template
+```pine
+//@version=6
+strategy("My Strategy", overlay=true, initial_capital=10000)
+
+// Inputs
+length = input.int(20, "MA Length")
+
+// Calculations
+ma = ta.sma(close, length)
+
+// Entry conditions
+longCondition = ta.crossover(close, ma)
+shortCondition = ta.crossunder(close, ma)
+
+// Execute trades
+if longCondition
+    strategy.entry("Long", strategy.long)
+if shortCondition
+    strategy.entry("Short", strategy.short)
+
+// Plotting
+plot(ma, "MA", color=color.blue)
+```
+
+#### Library Template
+```pine
+//@version=6
+library("MyLibrary")
+
+// Export a function
+export calculateMA(series float source, simple int length) =>
+    ta.sma(source, length)
+
+// Export another function
+export detectCrossover(series float source, series float target) =>
+    ta.crossover(source, target)
+```
+
+### Step 3: Development Process
+
+1. **Write your code** in the appropriate `development/` folder
+2. **Test in TradingView**: Copy your code to Pine Editor and test
+3. **Validate syntax**: Ensure no compilation errors
+4. **Test thoroughly**: Multiple timeframes and symbols
+5. **Document your work**: Add README.md with explanation
+
+### Step 4: Promote to Production
+
+When your code is fully tested and ready:
+
+1. **Final testing checklist**:
+   - ✅ No compilation errors
+   - ✅ Tested on multiple timeframes (1m, 5m, 15m, 1H, 4H, 1D)
+   - ✅ Tested on multiple symbols
+   - ✅ No repainting issues
+   - ✅ Memory management implemented (if using drawing objects)
+   - ✅ Documentation complete
+
+2. **Move to production**:
 ```bash
-# When code is fully tested and validated
-make promote-to-production FILE=development/indicators/my_indicator/indicator.pine
-
-# This will:
-# 1. Run final validation
-# 2. Create versioned backup
-# 3. Move to production/indicators/
-# 4. Update documentation
+# Copy your tested code to production
+cp -r development/indicators/my_indicator production/indicators/
 ```
 
-## 🛠️ Makefile Commands
+## 📊 Pine Script v6 Essential Rules
 
-### Development Commands
-```bash
-make dev                 # Setup development environment
-make new-indicator       # Create new indicator from template
-make new-strategy       # Create new strategy from template
-make new-library        # Create new library from template
-make validate-dev       # Validate all development files
-```
-
-### Production Commands
-```bash
-make validate-prod      # Validate production files
-make promote-to-production FILE=path/to/file.pine
-make version-file FILE=path TYPE=major|minor|patch
-```
-
-### Quality Assurance
-```bash
-make lint              # Complete code quality check
-make check-memory      # Memory management validation
-make validate-all      # Validate entire repository
-make pre-commit        # Pre-commit validation
-```
-
-## 📊 Pine Script Development Guide
-
-### Core Pine Script v6 Rules
-
-#### 1. **Mandatory Syntax**
+### 1. **Mandatory Syntax**
 ```pine
 //@version=6                    // Always first line
 indicator("Name", overlay=true)  // Required declaration
@@ -135,99 +171,65 @@ indicator("Name", overlay=true)  // Required declaration
 // ✅ Correct: Single line function calls
 box.new(left=bar_index-2, top=high, right=bar_index+10, bottom=low)
 
-// ❌ Wrong: Multi-line function calls
+// ❌ Wrong: Multi-line function calls - NOT ALLOWED
 box.new(
     left=bar_index-2,
     top=high
 )
 ```
 
-#### 2. **Type Safety**
+### 2. **Variable Assignment**
 ```pine
-// Consistent types required
-result = condition ? 1 : 0      // ✅ Both int
-result = condition ? 1 : 0.0    // ❌ Mixed types
-
-// Explicit NA typing
-int myVar = na                   // Required
+myVar = 10        // Initial declaration uses =
+myVar := 20       // Reassignment uses :=
 ```
 
-#### 3. **Memory Management**
+### 3. **Type Safety**
 ```pine
-// Clean up drawing objects
+// Both branches must return same type
+result = condition ? 1 : 0      // ✅ Both int
+result = condition ? 1 : 0.0    // ❌ Mixed types - ERROR
+
+// Explicit NA typing required
+int myVar = na                   // ✅ Correct
+myVar = na                       // ❌ Wrong
+```
+
+### 4. **Array Safety**
+```pine
+// ALWAYS check bounds before access
+if array.size(myArray) > index
+    value = array.get(myArray, index)
+
+// Pine v6 feature: negative indices
+lastElement = array.get(myArray, -1)  // Last element
+```
+
+### 5. **Memory Management (Critical)**
+```pine
+// Drawing objects MUST be cleaned up
 var line myLine = na
 if condition
     myLine := line.new(x1=bar_index, y1=high, x2=bar_index+1, y2=low)
     
-// Required cleanup
+// Required cleanup to prevent memory leaks
 if barstate.islastconfirmedhistory and not na(myLine)
     myLine.delete()
 ```
 
-## 🎯 Project Organization
+## 🎯 Common Pine Script Patterns
 
-### Indicator Development Structure
-```
-development/indicators/
-└── my_indicator/
-    ├── indicator.pine          # Main indicator file
-    ├── README.md              # Documentation
-    ├── test_results.md        # Testing documentation
-    └── versions/              # Version history
-        ├── v0.1.0.pine
-        └── VERSION_HISTORY.md
-```
-
-### Strategy Development Structure
-```
-development/strategies/
-└── my_strategy/
-    ├── strategy.pine          # Main strategy file
-    ├── README.md             # Strategy documentation
-    ├── backtest_results.md   # Backtesting data
-    └── risk_params.md        # Risk management settings
-```
-
-### Library Development Structure
-```
-development/libraries/
-└── my_library/
-    ├── library.pine          # Library code
-    ├── README.md            # API documentation
-    ├── examples/            # Usage examples
-    └── tests/               # Test cases
-```
-
-## 📈 Quality Standards
-
-### Development Phase Requirements
-- [ ] Pine Script v6 syntax compliance
-- [ ] No compilation errors in TradingView
-- [ ] Basic functionality working
-- [ ] Initial testing on primary timeframe
-
-### Production Promotion Requirements
-- [ ] All development requirements met
-- [ ] Multi-timeframe testing (1m, 5m, 15m, 1H, 4H, 1D)
-- [ ] Symbol testing (minimum 3 different markets)
-- [ ] Memory management validated
-- [ ] Documentation complete
-- [ ] Version tagged appropriately
-- [ ] No repainting issues
-- [ ] Alert conditions tested (if applicable)
-
-## 🔧 Common Pine Script Patterns
-
-### Signal Generation (TTS Standard)
+### TTS Signal Standard
 ```pine
 //@version=6
 indicator("Signal Generator")
 
 // TTS Standard: 1=Long, -1=Short, 2=Exit Long, -2=Exit Short, 0=No Signal
 signal = 0
-signal := bullishCross ? 1 : signal
-signal := bearishCross ? -1 : signal
-signal := exitCondition ? 2 : signal
+signal := bullishCondition ? 1 : signal
+signal := bearishCondition ? -1 : signal
+signal := exitLong ? 2 : signal
+signal := exitShort ? -2 : signal
 
 plot(signal, "TTS Signal", display=display.data_window)
 ```
@@ -262,79 +264,100 @@ plot(inSession ? sessionHigh : na, "Session High", color=color.green)
 plot(inSession ? sessionLow : na, "Session Low", color=color.red)
 ```
 
-## 🐛 Troubleshooting
+## 🐛 Troubleshooting Common Errors
 
-### Common Pine Script Errors
+### "Mismatched input"
+**Problem**: Multi-line function calls
+**Solution**: Put entire function call on one line
 
-#### "Mismatched input"
-- Check for multi-line function calls (not allowed)
-- Ensure parentheses close on same line
+### "Cannot use series"
+**Problem**: Using `series int` for TA function length parameter
+**Solution**: Use `simple int` instead
 
-#### "Cannot use series"
-- Use `simple int` for TA function length parameters
-- Not `series int length`
+### "Type mismatch"
+**Problem**: Ternary operator branches return different types
+**Solution**: Ensure both branches return same type
 
-#### "Type mismatch"
-- Both branches of ternary must return same type
-- Use explicit typing for NA values
+### "Array index out of bounds"
+**Problem**: Accessing array without checking size
+**Solution**: Always check `array.size()` first
 
-#### Memory Issues
-- Implement cleanup for all drawing objects
-- Use `barstate.islastconfirmedhistory` guard
+### Memory Issues
+**Problem**: Too many drawing objects
+**Solution**: Implement cleanup with `barstate.islastconfirmedhistory`
+
+## 📈 Quality Standards
+
+### Development Phase
+- Pine Script v6 syntax compliance
+- No compilation errors
+- Basic functionality working
+- Initial testing on primary timeframe
+
+### Production Requirements
+- All development standards met
+- Multi-timeframe testing complete
+- Multiple symbol testing complete
+- Memory management verified
+- Documentation complete
+- No repainting issues
+- Performance optimized
+
+## 🔧 Optional Validation Tools
+
+If you want to validate your Pine Script files, you can use the included Python validator:
+
+```bash
+# Validate a specific file
+python Pinescript-Coding-Suite/scripts/validate_pine_script.py development/indicators/my_indicator/indicator.pine
+
+# Check memory management
+bash Pinescript-Coding-Suite/scripts/check_file_memory.sh development/indicators/my_indicator/indicator.pine
+```
 
 ## 📚 Best Practices
 
-### Development Phase
-1. **Start small**: Build core functionality first
-2. **Test frequently**: Validate in TradingView often
-3. **Document as you go**: Update README with logic
-4. **Version control**: Create versions at milestones
-5. **Use validation tools**: Run `make validate-dev` regularly
+### Code Organization
+1. **One indicator per folder** - Keep related files together
+2. **Clear naming** - Use descriptive names for variables and functions
+3. **Comment complex logic** - Explain the "why", not the "what"
+4. **Version your work** - Keep copies of major versions
 
-### Production Standards
-1. **No debug code**: Remove all print statements
-2. **Optimized performance**: Minimize calculations
-3. **Clear documentation**: Complete README and examples
-4. **Proper versioning**: Semantic versioning (major.minor.patch)
-5. **Comprehensive testing**: All timeframes and markets
+### Performance Tips
+1. **Minimize calculations** - Store results in variables
+2. **Use `var` for persistence** - Maintain state across bars
+3. **Limit drawing objects** - Use `max_lines_count`, `max_labels_count`
+4. **Avoid repainting** - Use confirmed bar data
 
-## 🤝 Contributing
-
-### Workflow
-1. Create feature in `development/`
-2. Test thoroughly
-3. Document completely
-4. Pass all validation checks
-5. Submit for review
-6. Promote to `production/` when approved
-
-### Code Review Checklist
-- [ ] Pine Script v6 compliance
-- [ ] Memory management implemented
-- [ ] Documentation complete
-- [ ] Testing results included
+### Testing Checklist
+- [ ] Compiles without errors
+- [ ] Works on 1-minute timeframe
+- [ ] Works on daily timeframe
+- [ ] Tested on forex pairs
+- [ ] Tested on stocks
+- [ ] Tested on crypto
+- [ ] Alerts work correctly (if applicable)
 - [ ] No repainting issues
-- [ ] Performance optimized
 
 ## 📖 Resources
 
-### Documentation
+### Official Documentation
 - [Pine Script v6 Reference](https://www.tradingview.com/pine-script-reference/v6/)
 - [TradingView Pine Script Docs](https://www.tradingview.com/pine-script-docs/)
 - [Community Scripts](https://www.tradingview.com/scripts/)
 
-### Repository Tools
-- **Validation Scripts**: `Pinescript-Coding-Suite/scripts/`
-- **Rule Database**: `Pinescript-Coding-Suite/extracted_rules/`
-- **VS Code Extension**: `Pinescript-Coding-Suite/pine-script-v6-extension/`
+### Repository Resources
+- **Rule Database**: `Pinescript-Coding-Suite/extracted_rules/` - Common patterns and solutions
+- **VS Code Extension**: Included for enhanced development experience
+- **Validation Scripts**: Optional tools for code quality checking
 
 ## 🚨 Important Notes
 
-- **Development first**: All new code starts in `development/`
-- **Quality gates**: Must pass all checks before production
-- **No shortcuts**: Production code must be thoroughly tested
-- **Documentation required**: No undocumented production code
-- **Version everything**: Track changes systematically
+- **Start in development**: All new code begins in the `development/` folder
+- **Test thoroughly**: Never skip testing before moving to production
+- **Document your code**: Others (including future you) need to understand it
+- **Follow v6 syntax**: Pine Script v6 has strict rules that must be followed
+- **Memory matters**: Always clean up drawing objects to prevent issues
 
 ---
 

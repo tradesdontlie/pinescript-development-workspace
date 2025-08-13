@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This is a Pine Script development workspace for creating professional TradingView indicators, strategies, and libraries. The repository provides comprehensive tooling, validation scripts, and extracted Pine Script v6 rules to ensure high-quality development.
+This is a Pine Script development workspace for creating professional TradingView indicators, strategies, and libraries. The repository provides comprehensive Pine Script v6 rules and validation scripts to ensure high-quality development.
 
 ## Repository Structure
 
@@ -29,34 +29,29 @@ Pinescript-Coding-Suite/
 └── pine-script-v6-extension/   # VS Code extension (.vsix)
 ```
 
-## Common Development Commands
+## Development Commands
 
-### Makefile Commands
+### Creating New Files
 ```bash
-# Core development
-make dev                        # Setup development environment
-make new-indicator             # Create new indicator with template
-make new-strategy              # Create new strategy with template
-make new-library               # Create new library with template
-make validate-dev              # Validate files in development directory
-make lint                      # Full validation + memory checks
+# Create new indicator
+mkdir -p development/indicators/my_indicator
+touch development/indicators/my_indicator/indicator.pine
 
-# Version management
-make version-file FILE=development/indicators/my_indicator.pine TYPE=minor
-make promote-to-production FILE=development/indicators/my_indicator.pine
+# Create new strategy
+mkdir -p development/strategies/my_strategy
+touch development/strategies/my_strategy/strategy.pine
 
-# Validation
-make check-memory              # Check for drawing object cleanup
-make validate-all              # Validate entire repository
-make validate-prod             # Validate production files only
+# Create new library
+mkdir -p development/libraries/my_library
+touch development/libraries/my_library/library.pine
 ```
 
-### Pine Script Validation
+### Optional Validation Tools
 ```bash
-# Python validator with rule integration
+# Validate Pine Script syntax
 python Pinescript-Coding-Suite/scripts/validate_pine_script.py <file.pine>
 
-# Memory management checker
+# Check memory management
 bash Pinescript-Coding-Suite/scripts/check_file_memory.sh <file.pine>
 ```
 
@@ -175,11 +170,11 @@ The repository includes a Pine Script v6 extension (`pine-script-v6-extension/pi
 ## Development Workflow
 
 1. **Create new file**: Always use `.pine` extension in `development/` directory
-2. **Use templates**: `make new-indicator/strategy/library` provides proper v6 structure
-3. **Validate continuously**: `make validate-dev` during development
-4. **Check memory**: `make check-memory` for indicators with drawing objects
-5. **Version appropriately**: `make version-file` at milestones
-6. **Promote when ready**: `make promote-to-production` after full validation to move to `production/`
+2. **Follow templates**: Use the templates provided in README for proper structure
+3. **Test in TradingView**: Copy code to Pine Editor for testing
+4. **Validate syntax**: Ensure no compilation errors
+5. **Test thoroughly**: Multiple timeframes and symbols
+6. **Promote when ready**: Move to `production/` after full validation
 
 ## Critical Pine Script Patterns
 
