@@ -44,17 +44,46 @@ pinescript-development-workspace/
 
 ### Environment Setup
 
+#### 1. Install Claude Code Extension (Recommended)
+
+Claude Code provides AI-powered assistance for Pine Script development:
+
+```bash
+# Install Claude Code extension for VS Code/Cursor
+code --install-extension Anthropic.claude-code
+
+# Or search "Claude Code" in VS Code Extensions marketplace
+```
+
+**Setting up Claude Code:**
+1. Open VS Code/Cursor
+2. Click the Claude icon in the sidebar (or press `Cmd+Shift+P` and search "Claude")
+3. Click "Sign in with Claude.ai"
+4. Log in with your Claude account (or create one at claude.ai)
+5. Once authenticated, you can use `Cmd+L` (Mac) or `Ctrl+L` (Windows/Linux) to chat with Claude
+
+**Claude Code Features for Pine Script:**
+- Instant Pine Script v6 syntax help
+- Error debugging and solutions
+- Code generation from descriptions
+- Pattern suggestions and optimizations
+
+#### 2. Install Pine Script Extension
+
+```bash
+# Using the included extension file:
+code --install-extension ./Pinescript-Coding-Suite/pine-script-v6-extension/pinescript-v6-vscode-0.1.0.vsix
+
+# Or from marketplace:
+code --install-extension TradesDontLie.pinescript-v6-vscode
+```
+
+#### 3. Clone and Setup Repository
+
 ```bash
 # Clone the repository
 git clone https://github.com/tradesdontlie/pinescript-development-workspace.git
 cd pinescript-development-workspace
-
-# Install Pine Script VS Code Extension (if using VS Code/Cursor)
-# Using the included extension file:
-code --install-extension ./Pinescript-Coding-Suite/pine-script-v6-extension/pinescript-v6-vscode-0.1.0.vsix
-
-# Or from marketplace (alternative):
-code --install-extension TradesDontLie.pinescript-v6-vscode
 ```
 
 ## 📝 Development Workflow
